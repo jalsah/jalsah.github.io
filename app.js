@@ -9,10 +9,10 @@ import {
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
   getCountFromServer, Timestamp, orderBy, limit, addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, authUrl } from "./firebase-config.js?v=16";
-import { WORDS, MOST, FIVE, LETTERS, HCATS } from "./content.js?v=16";
-import { ICONS } from "./icons.js?v=16";
-import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=16";
+import { firebaseConfig, authUrl } from "./firebase-config.js?v=17";
+import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=17";
+import { ICONS } from "./icons.js?v=17";
+import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=17";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -62,10 +62,13 @@ function avatar(name, photo, size = 40, label) {
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const ONLINE_MS = 150000;
 const INVITE_MS = 15 * 60 * 1000;
-const GAMES = { imp: "الدخيل", most: "مين أكثر واحد", hhnj: "إنسان حيوان نبات جماد", uno: "أونو" };
+const GAMES = { draw: "ارسم وخمّن", who: "مين قالها؟", tf: "صح ولا خطأ", uno: "أونو", imp: "الدخيل", most: "مين أكثر واحد", hhnj: "إنسان حيوان نبات جماد" };
 // كل ألعاب جلسة: وين تنلعب (أونلاين، بجوال واحد)
 const CATALOG = [
-  { id: "uno", icon: "uno", title: "أونو جلسة", desc: "الأونو اللي تعرفه، بأوراق وطاولة جلسة. من ٢ إلى ٨ لاعبين، كل واحد من جواله.", online: true, local: null, min: 2, hot: true },
+  { id: "draw", icon: "draw", title: "ارسم وخمّن", desc: "واحد يرسم كلمة سرية، والباقين يخمّنونها بأسرع وقت. كل جولة يرسم واحد.", online: true, local: null, min: 2, hot: true },
+  { id: "who", icon: "who", title: "مين قالها؟", desc: "سؤال، وكل واحد يكتب جوابه بالسر. بعدها تطلع الأجوبة وتخمّنون مين كاتب كل جواب.", online: true, local: null, min: 3, hot: true },
+  { id: "tf", icon: "tf", title: "صح ولا خطأ", desc: "كل جولة واحد يكتب شي عن نفسه، والباقين يخمّنون: صح ولا كذب؟", online: true, local: null, min: 3, hot: true },
+  { id: "uno", icon: "uno", title: "أونو جلسة", desc: "الأونو اللي تعرفه، بأوراق وطاولة جلسة. من ٢ إلى ٨ لاعبين، كل واحد من جواله.", online: true, local: null, min: 2 },
   { id: "imp", icon: "imp", title: "الدخيل", desc: "الكل يعرف الكلمة إلا واحد. اكشفوه قبل ما يكشف الكلمة.", online: true, local: "l-imp", min: 3 },
   { id: "most", icon: "most", title: "مين أكثر واحد؟", desc: "سؤال، وكل واحد يصوّت على واحد من الشلة.", online: true, local: "l-most", min: 3 },
   { id: "hhnj", icon: "hhnj", title: "إنسان حيوان نبات جماد", desc: "حرف عشوائي، واكتب أربع كلمات تبدأ فيه قبل يخلص الوقت.", online: true, local: "l-hhnj", min: 2 },
@@ -365,6 +368,7 @@ const roomRef = () => doc(db, "rooms", roomCode);
 const isHost = () => room?.host === me?.uid;
 const order = () => Object.entries(room?.players || {}).sort((a, b) => a[1].at - b[1].at).map(([u]) => u);
 const pname = u => room?.players?.[u]?.name || room?.names?.[u] || "—";
+const atL = u => `<span dir="ltr">${at(pname(u))}</span>`;
 const roundPlayers = () => (room?.roundPlayers || order()).filter(u => room.players[u]);
 
 async function createRoom(game = "imp") {
@@ -418,7 +422,7 @@ function enterRoom(code) {
   go("room");
 }
 function exitRoomLocal(msg) {
-  off("room"); off("secret"); off("votes"); off("rchat"); off("hdone"); off("umoves"); UNO.st = null; UNO.processed = {}; clearInterval(ui.hTimer); ui.hTimer = null;
+  off("room"); off("secret"); off("votes"); off("rchat"); off("hdone"); off("umoves"); off("priv"); off("dguess"); off("dcanvas"); DRAWS.strokes = []; DRAWS.sRound = 0; UNO.st = null; UNO.processed = {}; clearInterval(ui.hTimer); ui.hTimer = null;
   roomChat = []; closeChatPanel(); ui.chatSeen = 0;
   room = null; roomCode = null; votes = {}; secret = null;
   if (msg) toast(msg);
@@ -731,9 +735,416 @@ function unoPickColor(card) {
 }
 
 async function vote(target) {
-  try { await setDoc(doc(db, "rooms", roomCode, "votes", me.uid), { round: room.round, target }); }
+  const v = { round: room.round, target };
+  if (room.phase === "wv") v.i = room.wi || 0;
+  try { await setDoc(doc(db, "rooms", roomCode, "votes", me.uid), v); }
   catch (e) { console.error(e); toast("ما انحسب صوتك، جرّب مرة ثانية"); }
 }
+
+// ---- الأجوبة السرية (مين قالها؟ و صح ولا خطأ): كل لاعب يكتب في priv، والمضيف بس يقراها ----
+async function submitPriv(data) {
+  try { await setDoc(doc(db, "rooms", roomCode, "priv", me.uid), { round: room.round, ...data }); return true; }
+  catch (e) { console.error(e); toast("ما انرسل، جرّب مرة ثانية"); return false; }
+}
+function watchPriv() {
+  sub("priv", onSnapshot(collection(db, "rooms", roomCode, "priv"), q => {
+    if (!room || !isHost()) return;
+    const ps = roundPlayers(), got = {};
+    q.forEach(d => { const v = d.data(); if (v.round === room.round && ps.includes(d.id) && String(v.text || "").trim()) got[d.id] = v; });
+    if (room.phase === "wq") {
+      const n = Object.keys(got).length;
+      if (n >= ps.length && n >= 2) whoReveal();
+      else if (n !== (room.wDone || 0)) setRoom({ wDone: n });
+    } else if (room.phase === "tw" && got[room.teller] && ui.tAdv !== room.round) {
+      ui.tAdv = room.round;
+      setRoom({ phase: "tv", tText: String(got[room.teller].text).trim().slice(0, 120) });
+    }
+  }, err));
+}
+
+// ---- مين قالها؟ (المضيف) ----
+const WHOS = { deck: [], authors: null, round: 0 };
+async function startWho() {
+  const ps = order();
+  if (ps.length < 3) return toast("تحتاجون ٣ لاعبين على الأقل");
+  if (!WHOS.deck.length) WHOS.deck = shuffle(WHO);
+  const names = {}; ps.forEach(u => names[u] = pname(u));
+  WHOS.authors = null;
+  await setRoom({ game: "who", phase: "wq", round: (room.round || 0) + 1, prompt: WHOS.deck.pop(), wDone: 0, wlist: [], wi: 0, wshow: false, wrev: [], roundPlayers: ps, names, result: null });
+}
+async function whoReveal() {
+  if (ui.wBusy || room?.phase !== "wq") return; ui.wBusy = true;
+  try {
+    const snap = await getDocs(collection(db, "rooms", roomCode, "priv"));
+    const ps = roundPlayers(), items = [];
+    snap.forEach(d => { const v = d.data(), t = String(v.text || "").trim().slice(0, 100); if (v.round === room.round && ps.includes(d.id) && t) items.push({ u: d.id, t }); });
+    if (items.length < 2) { toast("نحتاج جوابين على الأقل"); ui.wBusy = false; return; }
+    const mixed = shuffle(items);
+    WHOS.authors = mixed.map(x => x.u); WHOS.round = room.round;
+    const b = writeBatch(db);
+    b.set(doc(db, "rooms", roomCode, "hidden", "who"), { round: room.round, authors: WHOS.authors });
+    b.update(roomRef(), { phase: "wv", wlist: mixed.map(x => x.t), wi: 0, wshow: false, wrev: [] });
+    await b.commit();
+  } catch (e) { console.error(e); toast("ما قدرنا نجيب الأجوبة"); }
+  ui.wBusy = false;
+}
+async function whoAuthors() {
+  if (WHOS.authors && WHOS.round === room.round) return WHOS.authors;
+  const h = await getDoc(doc(db, "rooms", roomCode, "hidden", "who")).catch(() => null);
+  if (h?.exists() && h.data().round === room.round) { WHOS.authors = h.data().authors; WHOS.round = room.round; return WHOS.authors; }
+  return null;
+}
+function whoVotes() {
+  const ps = roundPlayers(), out = {};
+  Object.entries(votes).forEach(([u, v]) => { if (v.round === room.round && (v.i || 0) === (room.wi || 0) && ps.includes(u) && ps.includes(v.target)) out[u] = v.target; });
+  return out;
+}
+async function whoShow() {
+  if (ui.wBusy) return; ui.wBusy = true;
+  try {
+    const authors = await whoAuthors();
+    if (!authors) { toast("ما قدرنا نكشف"); return; }
+    const i = room.wi || 0, a = authors[i], vs = whoVotes();
+    const right = [], tally = {}; let fooled = 0;
+    Object.entries(vs).forEach(([u, t]) => { if (u === a) return; tally[t] = (tally[t] || 0) + 1; if (t === a) right.push(u); else fooled++; });
+    const scores = { ...(room.scores || {}) };
+    right.forEach(u => scores[u] = (scores[u] || 0) + 1);
+    if (fooled) scores[a] = (scores[a] || 0) + fooled;
+    const wrev = [...(room.wrev || [])];
+    while (wrev.length < i) wrev.push(null);
+    wrev[i] = { a, right, fooled, tally };
+    await setRoom({ wshow: true, wrev, scores });
+  } finally { ui.wBusy = false; }
+}
+async function whoNext() {
+  const i = (room.wi || 0) + 1;
+  if (i >= (room.wlist || []).length) await setRoom({ phase: "wres" });
+  else await setRoom({ wi: i, wshow: false });
+}
+
+// ---- صح ولا خطأ (المضيف) ----
+async function startTf() {
+  const ps = order();
+  if (ps.length < 3) return toast("تحتاجون ٣ لاعبين على الأقل");
+  const t = ((room.tTurn ?? -1) + 1) % ps.length;
+  const names = {}; ps.forEach(u => names[u] = pname(u));
+  await setRoom({ game: "tf", phase: "tw", round: (room.round || 0) + 1, teller: ps[t], tTurn: t, tText: "", roundPlayers: ps, names, result: null });
+}
+async function tfReveal() {
+  try {
+    const d = await getDoc(doc(db, "rooms", roomCode, "priv", room.teller));
+    const v = d.exists() ? d.data() : null;
+    if (!v || v.round !== room.round) return toast("ما لقينا الجملة");
+    const truth = !!v.truth, ps = roundPlayers(), right = [], wrong = [];
+    Object.entries(votes).forEach(([u, x]) => {
+      if (x.round !== room.round || u === room.teller || !ps.includes(u) || (x.target !== "t" && x.target !== "f")) return;
+      ((x.target === "t") === truth ? right : wrong).push(u);
+    });
+    const scores = { ...(room.scores || {}) };
+    right.forEach(u => scores[u] = (scores[u] || 0) + 1);
+    if (wrong.length) scores[room.teller] = (scores[room.teller] || 0) + wrong.length;
+    await setRoom({ phase: "tres", result: { truth, right, wrong }, scores });
+  } catch (e) { console.error(e); toast("ما قدرنا نكشف"); }
+}
+
+// ---- ارسم وخمّن ----
+const DRAW_SECS = 80;
+const DCOLORS = ["#1c1530", "#ef6f6c", "#f2b134", "#3fbf9a", "#5fb0f0", "#8f7bea", "#8a5a2b", "#ffffff"];
+const DSIZES = [6, 14, 32];
+const DRAWS = { deck: [], word: null, wRound: 0, seen: {}, queue: [], busy: false, ending: 0, strokes: [], sRound: 0, c: 0, w: 1, pushT: null, dirty: false, tick: null };
+const drawKey = t => stripAl(normAr(t)).replace(/\s+/g, "");
+const encStrokes = st => st.map(k => `${k.c}.${k.w};${k.p.join(",")}`).join("|");
+function decStrokes(s) {
+  if (!s || typeof s !== "string") return [];
+  return s.split("|").map(part => {
+    const [h, pts] = part.split(";"); const [c, w] = (h || "").split(".").map(Number);
+    const p = (pts || "").split(",").map(Number).filter(n => Number.isFinite(n)).map(n => Math.max(0, Math.min(1000, Math.round(n))));
+    return { c: DCOLORS[c] ? c : 0, w: DSIZES[w] ? w : 1, p: p.length % 2 ? p.slice(0, -1) : p };
+  }).filter(k => k.p.length >= 2);
+}
+function paintCanvas(cv = document.getElementById("dCanvas"), strokes = DRAWS.strokes) {
+  if (!cv) return;
+  const W = Math.max(1, Math.round(cv.clientWidth * (window.devicePixelRatio || 1)));
+  if (cv.width !== W || cv.height !== W) { cv.width = W; cv.height = W; }
+  const g = cv.getContext("2d"), k = W / 1000;
+  g.fillStyle = "#fffaf0"; g.fillRect(0, 0, W, W);
+  g.lineCap = "round"; g.lineJoin = "round";
+  strokes.forEach(s => {
+    g.strokeStyle = DCOLORS[s.c]; g.fillStyle = DCOLORS[s.c]; g.lineWidth = DSIZES[s.w] * k;
+    const p = s.p;
+    if (p.length === 2) { g.beginPath(); g.arc(p[0] * k, p[1] * k, DSIZES[s.w] * k / 2, 0, Math.PI * 2); g.fill(); return; }
+    g.beginPath(); g.moveTo(p[0] * k, p[1] * k);
+    for (let i = 2; i < p.length; i += 2) g.lineTo(p[i] * k, p[i + 1] * k);
+    g.stroke();
+  });
+}
+function pushCanvas() {
+  if (DRAWS.pushT) { DRAWS.dirty = true; return; }
+  const s = encStrokes(DRAWS.strokes);
+  if (s.length > 250000) { toast("اللوحة امتلت، امسح شوي"); return; }
+  DRAWS.dirty = false;
+  setDoc(doc(db, "rooms", roomCode, "canvas", "live"), { round: room.round, s }).catch(e => console.error(e));
+  DRAWS.pushT = setTimeout(() => { DRAWS.pushT = null; if (DRAWS.dirty) pushCanvas(); }, 600);
+}
+function watchCanvas() {
+  sub("dcanvas", onSnapshot(doc(db, "rooms", roomCode, "canvas", "live"), d => {
+    const v = d.exists() ? d.data() : null;
+    if (!v || !room || v.round !== room.round) return;
+    const amDrawer = room.drawer === me.uid && room.phase === "dq";
+    if (amDrawer && DRAWS.sRound === room.round) return; // الرسام عنده النسخة الأحدث
+    DRAWS.strokes = decStrokes(v.s); DRAWS.sRound = room.round;
+    paintCanvas();
+  }, err));
+}
+function bindDrawPad() {
+  const cv = document.getElementById("dCanvas"); if (!cv) return;
+  let cur = null, raf = 0;
+  const pt = e => { const r = cv.getBoundingClientRect(); return [Math.round(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * 1000), Math.round(Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)) * 1000)]; };
+  const repaint = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; paintCanvas(cv); }); };
+  cv.addEventListener("pointerdown", e => {
+    if (room?.phase !== "dq" || room.drawer !== me.uid) return;
+    e.preventDefault(); cv.setPointerCapture?.(e.pointerId);
+    if (DRAWS.sRound !== room.round) { DRAWS.strokes = []; DRAWS.sRound = room.round; }
+    cur = { c: DRAWS.c, w: DRAWS.w, p: pt(e) };
+    DRAWS.strokes.push(cur); repaint(); pushCanvas();
+  });
+  cv.addEventListener("pointermove", e => {
+    if (!cur) return; e.preventDefault();
+    const [x, y] = pt(e), p = cur.p, lx = p[p.length - 2], ly = p[p.length - 1];
+    if (Math.abs(x - lx) + Math.abs(y - ly) < 6) return;
+    p.push(x, y); repaint(); pushCanvas();
+  });
+  const end = () => { if (cur) { cur = null; pushCanvas(); } };
+  cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end); cv.addEventListener("pointerleave", end);
+}
+async function startDraw() {
+  const ps = order();
+  if (ps.length < 2) return toast("تحتاجون لاعبين على الأقل");
+  const t = ((room.dTurn ?? -1) + 1) % ps.length, drawer = ps[t];
+  if (!DRAWS.deck.length) DRAWS.deck = shuffle([...new Set(DRAW)]);
+  const word = DRAWS.deck.pop(), round = (room.round || 0) + 1;
+  const names = {}; ps.forEach(u => names[u] = pname(u));
+  DRAWS.word = word; DRAWS.wRound = round; DRAWS.seen = {}; DRAWS.queue = [];
+  const b = writeBatch(db);
+  b.set(doc(db, "rooms", roomCode, "secrets", drawer), { round, role: "draw", word });
+  b.set(doc(db, "rooms", roomCode, "hidden", "draw"), { round, word });
+  b.set(doc(db, "rooms", roomCode, "canvas", "live"), { round, s: "" });
+  b.update(roomRef(), { game: "draw", phase: "dq", round, drawer, dTurn: t, deadline: Date.now() + DRAW_SECS * 1000, dMask: word.split(" ").map(x => x.length), dgot: {}, dfeed: [], roundPlayers: ps, names, result: null });
+  try { await b.commit(); } catch (e) { console.error(e); toast("ما قدرنا نبدأ الجولة"); }
+}
+async function drawWord() {
+  if (DRAWS.word && DRAWS.wRound === room.round) return DRAWS.word;
+  const h = await getDoc(doc(db, "rooms", roomCode, "hidden", "draw")).catch(() => null);
+  if (h?.exists() && h.data().round === room.round) { DRAWS.word = h.data().word; DRAWS.wRound = room.round; return DRAWS.word; }
+  return null;
+}
+function watchGuesses() {
+  sub("dguess", onSnapshot(collection(db, "rooms", roomCode, "guesses"), q => {
+    const list = [];
+    q.forEach(d => { const g = d.data(); if (g.round === room?.round && (DRAWS.seen[d.id] || 0) < g.seq) list.push({ u: d.id, g }); });
+    if (list.length) drawProcess(list);
+  }, err));
+}
+async function drawProcess(list) {
+  if (!isHost() || room?.phase !== "dq") return;
+  DRAWS.queue.push(...list);
+  if (DRAWS.busy) return;
+  DRAWS.busy = true;
+  try {
+    const word = await drawWord();
+    while (word && DRAWS.queue.length && room?.phase === "dq") {
+      const batch = DRAWS.queue.splice(0).sort((a, b) => a.g.seq - b.g.seq);
+      const dgot = { ...(room.dgot || {}) }, ps = roundPlayers();
+      let feed = [...(room.dfeed || [])], changed = false;
+      batch.forEach(({ u, g }) => {
+        if ((DRAWS.seen[u] || 0) >= g.seq) return;
+        DRAWS.seen[u] = g.seq;
+        if (u === room.drawer || dgot[u] || !ps.includes(u)) return;
+        const t = cleanMsg(g.text).slice(0, 30); if (!t) return;
+        if (drawKey(t) === drawKey(word)) { dgot[u] = Object.keys(dgot).length + 1; feed.push({ u, ok: true }); }
+        else feed.push({ u, t });
+        changed = true;
+      });
+      if (!changed) continue;
+      feed = feed.slice(-8);
+      room.dgot = dgot; room.dfeed = feed;
+      if (ps.filter(u => u !== room.drawer).every(u => dgot[u])) { await drawEnd(); break; }
+      await updateDoc(roomRef(), { dgot, dfeed: feed });
+    }
+  } catch (e) { console.error(e); }
+  DRAWS.busy = false;
+}
+async function drawEnd() {
+  if (!isHost() || room?.phase !== "dq" || DRAWS.ending === room.round) return;
+  DRAWS.ending = room.round;
+  try {
+    const word = await drawWord() || "؟";
+    const dgot = room.dgot || {}, scores = { ...(room.scores || {}) };
+    Object.entries(dgot).forEach(([u, r]) => scores[u] = (scores[u] || 0) + (r === 1 ? 3 : r === 2 ? 2 : 1));
+    const n = Object.keys(dgot).length;
+    if (n && room.drawer) scores[room.drawer] = (scores[room.drawer] || 0) + n;
+    await updateDoc(roomRef(), { phase: "dres", dgot, dfeed: room.dfeed || [], result: { word, got: dgot }, scores });
+  } catch (e) { console.error(e); DRAWS.ending = 0; toast("ما زبط، جرّب مرة ثانية"); }
+}
+async function sendGuess(text) {
+  const t = cleanMsg(text).slice(0, 30); if (!t) return;
+  ui.gSeq = Math.max(Date.now(), (ui.gSeq || 0) + 1);
+  try { await setDoc(doc(db, "rooms", roomCode, "guesses", me.uid), { round: room.round, text: t, seq: ui.gSeq }); }
+  catch (e) { console.error(e); toast("ما انرسل تخمينك"); }
+}
+function drawTick() {
+  if (screen !== "room" || room?.phase !== "dq") { clearInterval(DRAWS.tick); DRAWS.tick = null; return; }
+  const ms = room.deadline - Date.now(), left = Math.max(0, Math.ceil(ms / 1000));
+  const bar = document.getElementById("dBar"), lt = document.getElementById("dLeft");
+  if (bar) bar.style.transform = `scaleX(${Math.max(0, Math.min(1, ms / (DRAW_SECS * 1000)))})`;
+  if (lt) { lt.textContent = ar(left); lt.classList.toggle("low", left <= 10); }
+  if (isHost() && ms < -1200) drawEnd();
+}
+
+/* ================= شارك النتيجة (صورة) ================= */
+const appLink = () => location.origin + location.pathname.replace(/index\.html$/, "");
+const waLink = () => "https://wa.me/?text=" + encodeURIComponent(`تعال العب معنا ${GAMES[room?.game] || ""} في جلسة 🎉\nادخل من هنا: ${appLink()}?r=${roomCode}\nأو اكتب كود الغرفة: ${roomCode}`);
+function topOf(map, ids) {
+  const max = Math.max(0, ...ids.map(u => map[u] || 0));
+  return max > 0 ? ids.filter(u => (map[u] || 0) === max) : [];
+}
+function shareData() {
+  const ps = order(), r = room.result || {};
+  const d = { game: GAMES[room.game] || "جلسة", head: "", quote: "", names: [], sub: "", img: null };
+  if (room.phase === "result") {
+    d.head = r.caught ? "مسكنا الدخيل 🕵️" : "الدخيل نجا منّا 😈";
+    d.names = (r.imps || []).map(pname); d.sub = r.wordShown ? "الكلمة كانت: " + r.word : "";
+  } else if (room.phase === "mresult") {
+    d.head = "مين أكثر واحد…"; d.quote = room.prompt + "؟";
+    d.names = topOf(r.tally || {}, roundPlayers()).map(pname); if (!d.names.length) d.sub = "محد 😅";
+  } else if (room.phase === "hres") {
+    const rows = r.rows || {}, best = Object.keys(rows).sort((a, b) => rows[b].total - rows[a].total)[0];
+    d.head = "إنسان حيوان نبات جماد · حرف " + room.letter; d.names = best ? [pname(best)] : []; d.sub = best ? `أعلى نقاط بالجولة: ${ar(rows[best].total)}` : "";
+  } else if (room.phase === "unoend") {
+    d.head = "فاز بأونو جلسة 🏆"; d.names = room.uno?.winner ? [pname(room.uno.winner)] : [];
+  } else if (room.phase === "wres") {
+    d.head = "مين قالها؟ 🤫"; d.quote = room.prompt;
+    const best = topOf(room.scores || {}, ps); d.names = best.map(pname); d.sub = best.length ? "متصدّر الجلسة" : "";
+  } else if (room.phase === "tres") {
+    d.head = r.truth ? "طلعت صح ✅" : "طلعت كذبة ❌"; d.quote = room.tText; d.names = [pname(room.teller)];
+    d.sub = r.right?.length ? `عرفها ${ar(r.right.length)} من ${ar((r.right?.length || 0) + (r.wrong?.length || 0))}` : "ما أحد عرفها 😏";
+  } else if (room.phase === "dres") {
+    d.names = [pname(room.drawer)]; d.sub = "الكلمة كانت: " + (r.word || "؟");
+    d.head = "شوفوا وش رسم 🎨";
+    const c = document.createElement("canvas"); c.style.width = "800px"; c.width = c.height = 800;
+    const g = c.getContext("2d"); const k = 0.8; g.fillStyle = "#fffaf0"; g.fillRect(0, 0, 800, 800); g.lineCap = g.lineJoin = "round";
+    DRAWS.strokes.forEach(s => { g.strokeStyle = g.fillStyle = DCOLORS[s.c]; g.lineWidth = DSIZES[s.w] * k; const p = s.p;
+      if (p.length === 2) { g.beginPath(); g.arc(p[0] * k, p[1] * k, DSIZES[s.w] * k / 2, 0, 7); g.fill(); return; }
+      g.beginPath(); g.moveTo(p[0] * k, p[1] * k); for (let i = 2; i < p.length; i += 2) g.lineTo(p[i] * k, p[i + 1] * k); g.stroke(); });
+    d.img = c;
+  }
+  d.board = ps.map(u => ({ n: pname(u), p: room.scores?.[u] || 0 })).sort((a, b) => b.p - a.p).slice(0, 5);
+  return d;
+}
+function wrapLines(g, text, maxW) {
+  const words = String(text || "").split(/\s+/).filter(Boolean), lines = [];
+  let line = "";
+  words.forEach(w => { const t = line ? line + " " + w : w; if (g.measureText(t).width > maxW && line) { lines.push(line); line = w; } else line = t; });
+  if (line) lines.push(line);
+  return lines;
+}
+function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+async function makeShareImage(d) {
+  const DISP = "Lalezar, Tahoma, sans-serif", BODY = "'IBM Plex Sans Arabic', Tahoma, sans-serif";
+  try { await Promise.all([document.fonts.load("80px Lalezar"), document.fonts.load("700 40px 'IBM Plex Sans Arabic'")]); } catch (e) {}
+  const W = 1080, H = 1920, c = document.createElement("canvas"); c.width = W; c.height = H;
+  const g = c.getContext("2d");
+  g.direction = "rtl"; g.textAlign = "center"; g.textBaseline = "alphabetic";
+  // الخلفية
+  const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, "#2b1f4d"); bg.addColorStop(1, "#140f24");
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  const glow = g.createRadialGradient(W / 2, 520, 40, W / 2, 520, 700); glow.addColorStop(0, "rgba(242,177,52,.18)"); glow.addColorStop(1, "rgba(242,177,52,0)");
+  g.fillStyle = glow; g.fillRect(0, 0, W, H);
+  const sadu = (y, col) => { g.fillStyle = col; for (let x = 0; x < W; x += 40) { g.beginPath(); g.moveTo(x, y + 28); g.lineTo(x + 20, y); g.lineTo(x + 40, y + 28); g.fill(); } };
+  sadu(36, "rgba(239,111,108,.85)"); sadu(72, "rgba(242,177,52,.6)"); sadu(H - 100, "rgba(242,177,52,.6)"); sadu(H - 64, "rgba(239,111,108,.85)");
+  // الشعار
+  g.fillStyle = "#f2b134"; g.font = `150px ${DISP}`; g.fillText("جلسة", W / 2, 270);
+  g.font = `600 40px ${BODY}`; const pillW = Math.min(W - 160, g.measureText(d.game).width + 90);
+  g.fillStyle = "rgba(255,255,255,.08)"; rr(g, (W - pillW) / 2, 312, pillW, 76, 38); g.fill();
+  g.fillStyle = "#f7f0e3"; g.fillText(d.game, W / 2, 364);
+  // البطاقة: نقيس أول وبعدين نرسم
+  const CW = 920, CX = (W - CW) / 2, inner = CW - 110;
+  const items = [];
+  if (d.head) { g.font = `66px ${DISP}`; wrapLines(g, d.head, inner).forEach(t => items.push({ t, font: `66px ${DISP}`, col: "#f7f0e3", h: 86 })); items.push({ gap: 14 }); }
+  if (d.quote) { g.font = `600 50px ${BODY}`; wrapLines(g, "«" + d.quote + "»", inner).slice(0, 5).forEach(t => items.push({ t, font: `600 50px ${BODY}`, col: "#f2b134", h: 74 })); items.push({ gap: 18 }); }
+  if (d.img) items.push({ img: d.img, h: 640 + 26 });
+  d.names.slice(0, 3).forEach(n => { const s = "@" + n; let fs = 100; g.font = `${fs}px ${DISP}`; while (g.measureText(s).width > inner && fs > 50) { fs -= 6; g.font = `${fs}px ${DISP}`; } items.push({ t: s, font: `${fs}px ${DISP}`, col: "#74d6b8", h: fs + 20, ltr: true }); });
+  if (d.sub) { items.push({ gap: 8 }); g.font = `500 42px ${BODY}`; wrapLines(g, d.sub, inner).forEach(t => items.push({ t, font: `500 42px ${BODY}`, col: "#b8adcf", h: 60 })); }
+  const ch = items.reduce((s, it) => s + (it.gap || it.h), 0) + 120, CY = 450;
+  g.fillStyle = "#2a2146"; rr(g, CX, CY, CW, ch, 56); g.fill();
+  g.strokeStyle = "#3d3263"; g.lineWidth = 4; g.stroke();
+  let y = CY + 60;
+  items.forEach(it => {
+    if (it.gap) { y += it.gap; return; }
+    if (it.img) { const s = 640, x = (W - s) / 2; g.save(); rr(g, x, y, s, s, 30); g.clip(); g.drawImage(it.img, x, y, s, s); g.restore(); y += it.h; return; }
+    g.font = it.font; g.fillStyle = it.col; g.direction = it.ltr ? "ltr" : "rtl";
+    g.fillText(it.t, W / 2, y + it.h * .78); y += it.h;
+  });
+  g.direction = "rtl";
+  y = CY + ch + 70;
+  // النقاط
+  const board = (d.board || []).filter(b => b.p > 0);
+  if (board.length && y < H - 560) {
+    g.font = `600 38px ${BODY}`; g.fillStyle = "#b8adcf"; g.fillText("النقاط", W / 2, y); y += 30;
+    board.slice(0, Math.max(1, Math.floor((H - 470 - y) / 92))).forEach((b, i) => {
+      g.fillStyle = i === 0 ? "rgba(242,177,52,.16)" : "rgba(255,255,255,.05)"; rr(g, CX, y, CW, 78, 26); g.fill();
+      g.textAlign = "right"; g.fillStyle = "#f2b134"; g.font = `52px ${DISP}`; g.fillText(ar(i + 1), CX + CW - 34, y + 57);
+      g.direction = "ltr"; g.textAlign = "right"; g.fillStyle = "#f7f0e3"; g.font = `700 42px ${BODY}`;
+      let nm = "@" + b.n; while (g.measureText(nm).width > CW - 260 && nm.length > 4) nm = nm.slice(0, -2) + "…";
+      g.fillText(nm, CX + CW - 100, y + 54);
+      g.direction = "rtl"; g.textAlign = "left"; g.fillStyle = "#74d6b8"; g.font = `52px ${DISP}`; g.fillText(ar(b.p), CX + 36, y + 57);
+      g.textAlign = "center"; y += 92;
+    });
+  }
+  // الرابط
+  g.textAlign = "center"; g.direction = "rtl";
+  g.fillStyle = "#f7f0e3"; g.font = `600 44px ${BODY}`; g.fillText("تعالوا العبوا معنا 👇", W / 2, H - 290);
+  const link = appLink().replace(/^https?:\/\//, "").replace(/\/$/, "");
+  g.direction = "ltr"; let fs = 54; g.font = `${fs}px ${DISP}`; while (g.measureText(link).width > W - 140 && fs > 30) { fs -= 4; g.font = `${fs}px ${DISP}`; }
+  const lw = g.measureText(link).width + 80;
+  g.fillStyle = "#f2b134"; rr(g, (W - lw) / 2, H - 250, lw, fs + 46, (fs + 46) / 2); g.fill();
+  g.fillStyle = "#1c1530"; g.fillText(link, W / 2, H - 250 + fs + 10);
+  return await new Promise(ok => c.toBlob(ok, "image/jpeg", .9));
+}
+async function openShare() {
+  if (!room) return;
+  document.getElementById("shareSheet")?.remove();
+  const el = document.createElement("div");
+  el.id = "shareSheet"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "شارك النتيجة");
+  el.innerHTML = `<div class="sheet share-sheet"><b class="pf-name">شارك النتيجة 📸</b>
+    <div class="share-prev" id="shPrev"><div class="spinner" aria-label="نجهز الصورة"></div></div>
+    <button class="btn" id="shGo" disabled>شارك 📤</button>
+    <p class="hint" id="shHint">نجهز الصورة…</p>
+    <button class="btn ghost" id="shX">إغلاق</button></div>`;
+  document.body.appendChild(el);
+  const close = () => { el.remove(); if (url) URL.revokeObjectURL(url); };
+  let url = null;
+  el.addEventListener("click", e => { if (e.target === el) close(); });
+  el.querySelector("#shX").addEventListener("click", close);
+  try {
+    const blob = await makeShareImage(shareData());
+    if (!el.isConnected) return;
+    url = URL.createObjectURL(blob);
+    el.querySelector("#shPrev").innerHTML = `<img class="share-img" src="${url}" alt="صورة النتيجة">`;
+    const file = new File([blob], "jalsa.jpg", { type: "image/jpeg" });
+    const can = !!navigator.canShare?.({ files: [file] });
+    const go = el.querySelector("#shGo"), hint = el.querySelector("#shHint");
+    hint.textContent = can ? "نزّلها ستوري بالسناب أو الانستا، أو أرسلها للقروب." : "اضغط مطوّل على الصورة واحفظها، ونزّلها ستوري بالسناب أو الانستا.";
+    if (can) {
+      go.disabled = false;
+      go.addEventListener("click", async () => {
+        try { await navigator.share({ files: [file], text: `العبوا معنا جلسة 🎉 ${appLink()}` }); }
+        catch (e) { if (e?.name !== "AbortError") toast("ما قدرنا نفتح المشاركة، احفظ الصورة"); }
+      });
+    } else go.remove();
+  } catch (e) { console.error(e); el.querySelector("#shHint").textContent = "ما قدرنا نسوي الصورة"; }
+}
+const shareBtn = () => `<button class="btn ghost share" data-share>📸 شارك النتيجة</button>`;
 
 /* ================= views ================= */
 /* ================= owner tools ================= */
@@ -1614,9 +2025,14 @@ VIEWS.room = () => {
   if (room.phase === "hq") { if (!subs.has("hdone")) watchHhnjDone(); } else if (subs.has("hdone")) { off("hdone"); ui.hDoneCount = 0; }
   if (room.phase === "uno" && isHost()) { if (!subs.has("umoves")) watchUnoMoves(); unoCleanup(); } else if (subs.has("umoves")) off("umoves");
   if (room.phase !== "uno" && room.phase !== "unoend") { UNO.st = null; UNO.processed = {}; }
+  const host = isHost();
+  if (host && (room.phase === "wq" || room.phase === "tw")) { if (!subs.has("priv")) watchPriv(); } else if (subs.has("priv")) off("priv");
+  if (host && room.phase === "dq") { if (!subs.has("dguess")) watchGuesses(); } else if (subs.has("dguess")) off("dguess");
+  if (room.phase === "dq" || room.phase === "dres") { if (!subs.has("dcanvas")) watchCanvas(); } else if (subs.has("dcanvas")) off("dcanvas");
   const view = ROOM_VIEWS[room.phase] || ROOM_VIEWS.lobby;
-  view();
+  if (view() === "kept") return; // شاشة الرسم ما تنعاد عشان ما ينقطع الرسم
   showChatFab();
+  onAll("[data-share]", () => openShare());
   bindLeave();
   onAll("[data-vote]", b => vote(b.dataset.vote));
 };
@@ -1637,6 +2053,35 @@ function watchHhnjDone() {
   }, () => {}));
 }
 
+// تحديث أجزاء شاشة الرسم بدون ما نعيد رسم اللوحة
+function drawParts() {
+  const amDrawer = room.drawer === me.uid, mine = secret?.round === room.round && secret.role === "draw" ? secret.word : null;
+  const w = document.getElementById("dWord");
+  if (w) w.innerHTML = amDrawer
+    ? `<span class="hint">ارسم:</span> <b>${mine ? esc(mine) : "…"}</b>`
+    : `<span class="hint">${atL(room.drawer)} يرسم</span> <span class="dmask" aria-label="عدد الحروف">${(room.dMask || []).map(n => `<span>${"<i></i>".repeat(n)}</span>`).join("")}</span>`;
+  const got = room.dgot || {};
+  const box = document.getElementById("dGuessBox");
+  if (box) {
+    const inRound = roundPlayers().includes(me.uid);
+    const st = !inRound ? "out" : got[me.uid] ? "got" : "guess";
+    if (ui.dGuessState !== st) {
+      ui.dGuessState = st;
+      box.innerHTML = st === "guess" ? `<form class="dguess" id="dGF" autocomplete="off"><input class="txt" id="dGuess" maxlength="30" dir="auto" placeholder="وش يرسم؟ اكتب تخمينك" enterkeyhint="send"><button class="btn small">خمّن</button></form>`
+        : st === "got" ? `<div class="dgot-me pop">عرفتها ✅ انتظر الباقين</div>` : `<p class="hint">انتظر الجولة الجاية.</p>`;
+      document.getElementById("dGF")?.addEventListener("submit", e => {
+        e.preventDefault(); const inp = document.getElementById("dGuess"); const t = inp.value; inp.value = ""; sendGuess(t); inp.focus();
+      });
+    }
+  }
+  const f = document.getElementById("dFeed");
+  if (f) {
+    const n = Object.keys(got).length, total = roundPlayers().filter(u => u !== room.drawer).length;
+    f.innerHTML = `<span class="hint">عرفها ${ar(n)} من ${ar(total)}</span>` + (room.dfeed || []).slice().reverse().map(x =>
+      x.ok ? `<span class="dfi ok">${atL(x.u)} <b>عرفها ✅</b></span>` : `<span class="dfi"><b dir="ltr">${esc(pname(x.u))}</b>: <span dir="auto">${esc(x.t)}</span></span>`).join("");
+  }
+}
+
 const ROOM_VIEWS = {
   lobby() {
     const ps = order(), host = isHost(), n = ps.length;
@@ -1644,11 +2089,12 @@ const ROOM_VIEWS = {
     const hasScores = ps.some(u => room.scores?.[u]);
     V.innerHTML = `<section>
       <div class="codebox"><span class="label">كود الغرفة</span><span class="code" dir="ltr">${esc(roomCode)}</span>
-        <button class="btn small ghost" id="copyLink">انسخ رابط الدعوة</button></div>
+        <div class="row inv-row"><a class="btn small wa" id="waInv" href="${esc(waLink())}" target="_blank" rel="noopener">${ICONS.wa} ادعُ بالواتساب</a>
+        <button class="btn small ghost" id="copyLink">انسخ الرابط</button></div></div>
       <div class="field"><span class="label">اللاعبين (${ar(n)} من ١٢)</span><div class="list">${ps.map(u => `
         <div class="li"><button class="li-who" data-pf="${esc(u)}">${avatar(pname(u), prof(u)?.photo, 36)}<span class="nm" dir="ltr">${at(pname(u))}</span></button>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}</div>`).join("")}</div></div>
       ${host ? `
-        <div class="field"><span class="label">اللعبة</span><div class="chips">${Object.entries(GAMES).map(([k, t]) => `<button class="chip" data-game="${k}" aria-pressed="${room.game === k}" ${k === "uno" && n > 8 ? "disabled" : ""}>${t}</button>`).join("")}</div>${room.game === "uno" ? `<p class="hint">أونو من ٢ إلى ٨ لاعبين.</p>` : ""}</div>
+        <div class="field"><span class="label">اللعبة</span><div class="chips">${Object.entries(GAMES).map(([k, t]) => `<button class="chip" data-game="${k}" aria-pressed="${room.game === k}" ${k === "uno" && n > 8 ? "disabled" : ""}>${t}</button>`).join("")}</div>${room.game === "uno" ? `<p class="hint">أونو من ٢ إلى ٨ لاعبين.</p>` : ""}${CATALOG.find(c => c.id === room.game)?.desc ? `<p class="hint">${CATALOG.find(c => c.id === room.game).desc}</p>` : ""}</div>
         ${room.game === "imp" ? `
         <div class="field"><span class="label">الفئة</span><div class="chips">${["عشوائي", ...Object.keys(WORDS)].map(c => `<button class="chip" data-cat="${esc(c)}" aria-pressed="${room.cat === c}">${esc(c)}</button>`).join("")}</div></div>
         <div class="field"><span class="label">عدد الدخلاء</span><div class="chips">
@@ -1669,7 +2115,7 @@ const ROOM_VIEWS = {
     onAll("[data-game]", b => setRoom({ game: b.dataset.game }));
     onAll("[data-cat]", b => setRoom({ cat: b.dataset.cat }));
     onAll("[data-imps]", b => setRoom({ imps: Number(b.dataset.imps) }));
-    on("start", "click", () => ({ most: startMost, hhnj: startHhnj, uno: startUno }[room.game] || startImp)());
+    on("start", "click", () => ({ most: startMost, hhnj: startHhnj, uno: startUno, who: startWho, tf: startTf, draw: startDraw }[room.game] || startImp)());
   },
 
   reveal() {
@@ -1718,7 +2164,7 @@ const ROOM_VIEWS = {
         <span class="hint">${r.wordShown ? `الكلمة كانت: <b>${esc(r.word)}</b>${r.guessed ? " · الدخيل خمّنها ✓" : " · ما خمّنها"}` : "الدخيل يحاول يخمّن الكلمة… 🤔"}</span></div>
       <div class="field"><span class="label">الأصوات</span>${tallyList(r.tally || {}, ps)}</div>
       <div class="field"><span class="label">النقاط</span>${scoreBoard(order())}</div>
-      <div class="foot">${isHost() ? `
+      <div class="foot">${r.wordShown ? shareBtn() : ""}${isHost() ? `
         ${r.wordShown ? "" : `<p class="hint center">خلّوا الدخيل يقول وش يتوقع الكلمة، وبعدها:</p>
         <div class="row"><button class="btn good" id="guessed">خمّن صح (+١)</button><button class="btn danger" id="notGuessed">خمّن غلط</button></div>`}
         <button class="btn" id="again">جولة جديدة</button>
@@ -1768,7 +2214,7 @@ const ROOM_VIEWS = {
         }).join("")}</div></div>`).join("")}</div>
       <p class="hint">١٠ = جواب صح ومحد كتبه غيرك · ٥ = صح بس فيه أحد كاتبه · ٠ = فاضي أو ما يبدأ بالحرف</p>
       <div class="field"><span class="label">النقاط</span>${scoreBoard(order())}</div>
-      <div class="foot">${isHost() ? `<button class="btn" id="again">حرف جديد</button><button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يبدأ الجولة الجاية.</p>`}${leaveBtn()}</div></section>`;
+      <div class="foot">${shareBtn()}${isHost() ? `<button class="btn" id="again">حرف جديد</button><button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يبدأ الجولة الجاية.</p>`}${leaveBtn()}</div></section>`;
     onAll("[data-rej]", b => { const [u, i] = b.dataset.rej.split("|"); toggleReject(u, Number(i)); });
     on("again", "click", startHhnj);
     on("lobby", "click", () => setRoom({ phase: "lobby" }));
@@ -1831,7 +2277,7 @@ const ROOM_VIEWS = {
         ${w ? `${avatar(pname(w), prof(w)?.photo, 84)}<span class="big" dir="ltr">${at(pname(w))}</span><span class="hint">فاز بأونو جلسة 🏆</span>` : `<span class="big">انتهت</span>`}</div>
       <div class="field"><span class="label">الأوراق اللي بقت</span><div class="list">${(uno.order || []).filter(u => u !== w).map(u => `<div class="li">${avatar(pname(u), prof(u)?.photo, 32)}<span class="nm" dir="ltr">${at(pname(u))}</span><span class="tag">${ar(uno.counts?.[u] || 0)} ورقة</span></div>`).join("")}</div></div>
       <div class="field"><span class="label">النقاط</span>${scoreBoard(order())}</div>
-      <div class="foot">${isHost() ? `<button class="btn" id="again">جولة جديدة</button><button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يبدأ الجولة الجاية.</p>`}${leaveBtn()}</div></section>`;
+      <div class="foot">${shareBtn()}${isHost() ? `<button class="btn" id="again">جولة جديدة</button><button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يبدأ الجولة الجاية.</p>`}${leaveBtn()}</div></section>`;
     on("again", "click", startUno);
     on("lobby", "click", () => setRoom({ phase: "lobby" }));
   },
@@ -1854,11 +2300,164 @@ const ROOM_VIEWS = {
       <div class="card prompt pop" style="min-height:180px"><span class="eyebrow">${esc(room.prompt)}؟</span>
       <span class="big" dir="ltr">${tops.length ? tops.map(u => at(pname(u))).join(" و ") : "محد"}</span></div>
       ${tallyList(tally, ps)}
-      <div class="foot">${isHost() ? `<button class="btn" id="again">سؤال ثاني</button><button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يجيب السؤال الجاي.</p>`}
+      <div class="foot">${shareBtn()}${isHost() ? `<button class="btn" id="again">سؤال ثاني</button><button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يجيب السؤال الجاي.</p>`}
       ${leaveBtn()}</div></section>`;
     on("again", "click", startMost);
     on("lobby", "click", () => setRoom({ phase: "lobby" }));
-  }
+  },
+
+  // ---------- مين قالها؟ ----------
+  wq() {
+    const ps = roundPlayers(), inRound = ps.includes(me.uid), sent = ui.wSent === room.round;
+    V.innerHTML = `<section>${statusBar()}
+      <div class="card prompt pop" style="min-height:170px"><span class="eyebrow">مين قالها؟ · اكتب جوابك بالسر 🤫</span><span class="mid">${esc(room.prompt)}</span></div>
+      ${inRound ? (sent ? `<div class="card safe" style="min-height:120px"><span class="mid">انرسل جوابك ✓</span><span class="hint">لا تقول لأحد وش كتبت 😏</span></div>
+        <button class="btn ghost" id="wEdit">عدّل جوابي</button>`
+        : `<form class="wform" id="wF" autocomplete="off"><textarea class="txt" id="wIn" rows="3" maxlength="100" dir="auto" placeholder="اكتب جوابك هنا…"></textarea>
+          <button class="btn">أرسل جوابي</button></form><p class="hint">اكتب بأسلوب ما يفضحك، أو قلّد أسلوب واحد ثاني 😉</p>`)
+        : `<p class="hint">دخلت بعد بداية الجولة، انتظر الجولة الجاية.</p>`}
+      <p class="hint center">كتب ${ar(room.wDone || 0)} من ${ar(ps.length)}</p>
+      <div class="foot">${isHost() ? `<button class="btn ghost" id="wNow">اكشف الأجوبة الحين</button>` : ""}${leaveBtn()}</div></section>`;
+    if (ui.wDraft && ui.wDraft.round === room.round) { const t = document.getElementById("wIn"); if (t && !t.value) t.value = ui.wDraft.t; }
+    on("wIn", "input", e => ui.wDraft = { round: room.round, t: e.target.value });
+    on("wF", "submit", async e => {
+      e.preventDefault();
+      const t = cleanMsg(document.getElementById("wIn").value).slice(0, 100);
+      if (!t) return toast("اكتب جوابك أول");
+      if (await submitPriv({ text: t })) { ui.wSent = room.round; render(false); }
+    });
+    on("wEdit", "click", () => { ui.wSent = 0; render(false); });
+    on("wNow", "click", e => { if ((room.wDone || 0) < ps.length && !confirmTap(e.currentTarget, "باقي ناس ما كتبوا، اكشف؟")) return; whoReveal(); });
+  },
+
+  wv() {
+    const ps = roundPlayers(), list = room.wlist || [], i = room.wi || 0, inRound = ps.includes(me.uid);
+    const vs = whoVotes(), mine = vs[me.uid] || null, rev = room.wshow ? (room.wrev || [])[i] : null;
+    V.innerHTML = `<section>${statusBar()}
+      <div class="who-n">${list.map((_, k) => `<i class="${k < i ? "done" : k === i ? "cur" : ""}"></i>`).join("")}</div>
+      <div class="card prompt who-card pop" style="min-height:200px"><span class="eyebrow">${esc(room.prompt)}</span>
+        <span class="mid">«${esc(list[i] || "")}»</span>
+        <span class="hint">جواب ${ar(i + 1)} من ${ar(list.length)}</span></div>
+      ${rev ? `<div class="card safe pop who-rev" style="min-height:120px"><span class="eyebrow">كتبها</span>
+          <span class="big" dir="ltr">${at(pname(rev.a))}</span>
+          <span class="hint">${rev.right.length ? `عرفوها: ${rev.right.map(atL).join("، ")} (+١)` : "ما أحد عرفها!"}${rev.fooled ? ` · وقّع ${ar(rev.fooled)} (+${ar(rev.fooled)} له)` : ""}</span></div>`
+        : `<div><h2>مين كتب هالجواب؟</h2><p class="lead">صوّتوا ${ar(Object.keys(vs).length)} من ${ar(ps.length)}</p></div>
+          ${inRound ? voteList(ps.filter(u => u !== me.uid), mine) : `<p class="hint">انتظر الجولة الجاية.</p>`}`}
+      <div class="foot">${isHost() ? (rev ? `<button class="btn" id="wNext">${i + 1 >= list.length ? "النتيجة النهائية" : "الجواب الجاي"}</button>` : `<button class="btn danger" id="wShow">اكشف مين كتبها</button>`) : ""}${leaveBtn()}</div></section>`;
+    on("wShow", "click", e => { if (Object.keys(vs).length < ps.length && !confirmTap(e.currentTarget, "باقي ناس ما صوتوا، اكشف؟")) return; whoShow(); });
+    on("wNext", "click", whoNext);
+  },
+
+  wres() {
+    const list = room.wlist || [], rev = room.wrev || [];
+    V.innerHTML = `<section>${statusBar()}
+      <div class="row-h"><h2>مين قالها؟ النتيجة</h2></div>
+      <p class="lead">${esc(room.prompt)}</p>
+      <div class="list">${list.map((t, k) => `<div class="li who-li"><span class="who-t2" dir="auto">«${esc(t)}»</span><span class="nm" dir="ltr">${rev[k] ? at(pname(rev[k].a)) : "؟"}</span></div>`).join("")}</div>
+      <div class="field"><span class="label">النقاط</span>${scoreBoard(order())}</div>
+      <div class="foot">${shareBtn()}${isHost() ? `<button class="btn" id="again">سؤال جديد</button><button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يبدأ الجولة الجاية.</p>`}${leaveBtn()}</div></section>`;
+    on("again", "click", startWho);
+    on("lobby", "click", () => setRoom({ phase: "lobby" }));
+  },
+
+  // ---------- صح ولا خطأ ----------
+  tw() {
+    const teller = room.teller, mineTurn = teller === me.uid, sent = ui.tSent === room.round;
+    V.innerHTML = `<section>${statusBar()}
+      ${mineTurn ? (sent ? `<div class="card safe pop"><span class="mid">انرسلت ✓</span><span class="hint">ننتظر تطلع للكل…</span></div>`
+        : `<div><h2>دورك! 🎤</h2><p class="lead">اكتب شي عن نفسك، صح أو كذب، وخلهم يخمّنون.</p></div>
+        <form class="wform" id="tF" autocomplete="off">
+          <textarea class="txt" id="tIn" rows="3" maxlength="120" dir="auto" placeholder="مثال: مرة نمت بالمطار يومين"></textarea>
+          <p class="hint">وش الصدق؟ اختر عشان ترسل:</p>
+          <div class="row"><button type="button" class="btn good" data-truth="1">صح ✅</button><button type="button" class="btn danger" data-truth="0">كذب ❌</button></div>
+        </form>`)
+      : `<div class="card prompt pop"><span class="eyebrow">صح ولا خطأ</span><span class="big" dir="ltr">${at(pname(teller))}</span><span class="hint">يكتب شي عن نفسه الحين… ✍️</span></div>`}
+      <div class="foot">${isHost() && !mineTurn ? `<button class="btn ghost" id="tSkip">${atL(teller)} تأخر؟ اللي بعده</button>` : ""}${leaveBtn()}</div></section>`;
+    if (ui.tDraft && ui.tDraft.round === room.round) { const t = document.getElementById("tIn"); if (t && !t.value) t.value = ui.tDraft.t; }
+    on("tIn", "input", e => ui.tDraft = { round: room.round, t: e.target.value });
+    onAll("[data-truth]", async b => {
+      const t = cleanMsg(document.getElementById("tIn").value).slice(0, 120);
+      if (!t) return toast("اكتب الجملة أول");
+      b.disabled = true;
+      if (await submitPriv({ text: t, truth: b.dataset.truth === "1" })) { ui.tSent = room.round; render(false); } else b.disabled = false;
+    });
+    on("tSkip", "click", e => { if (confirmTap(e.currentTarget, "متأكد؟")) startTf(); });
+  },
+
+  tv() {
+    const ps = roundPlayers(), teller = room.teller, voters = ps.filter(u => u !== teller);
+    const my = votes[me.uid]?.round === room.round ? votes[me.uid].target : null;
+    const n = voters.filter(u => votes[u]?.round === room.round).length;
+    V.innerHTML = `<section>${statusBar()}
+      <div class="card prompt pop tf-card"><span class="eyebrow">${atL(teller)} يقول:</span><span class="mid">«${esc(room.tText)}»</span></div>
+      ${teller === me.uid ? `<p class="hint center">خلهم يصوتون 😏 لا تفضح نفسك بوجهك</p>`
+        : ps.includes(me.uid) ? `<div class="tf-btns"><button class="tfb t" data-tv="t" aria-pressed="${my === "t"}">صح ✅</button><button class="tfb f" data-tv="f" aria-pressed="${my === "f"}">كذب ❌</button></div>`
+        : `<p class="hint">انتظر الجولة الجاية.</p>`}
+      <p class="hint center">صوّت ${ar(n)} من ${ar(voters.length)}</p>
+      <div class="foot">${isHost() ? `<button class="btn danger" id="tShow">اكشف</button>` : ""}${leaveBtn()}</div></section>`;
+    onAll("[data-tv]", b => vote(b.dataset.tv));
+    on("tShow", "click", e => { if (n < voters.length && !confirmTap(e.currentTarget, "باقي ناس ما صوتوا، اكشف؟")) return; tfReveal(); });
+  },
+
+  tres() {
+    const r = room.result || {};
+    V.innerHTML = `<section>${statusBar()}
+      <div class="card ${r.truth ? "safe" : "imposter"} pop tf-card"><span class="eyebrow">${atL(room.teller)} قال:</span>
+        <span class="mid">«${esc(room.tText)}»</span><span class="big">${r.truth ? "صح ✅" : "كذب ❌"}</span></div>
+      <div class="field"><span class="label">عرفوها (+١)</span><p class="lead">${r.right?.length ? r.right.map(atL).join("، ") : "ولا أحد 😅"}</p></div>
+      ${r.wrong?.length ? `<div class="field"><span class="label">انخدعوا (+${ar(r.wrong.length)} لـ ${atL(room.teller)})</span><p class="lead">${r.wrong.map(atL).join("، ")}</p></div>` : ""}
+      <div class="field"><span class="label">النقاط</span>${scoreBoard(order())}</div>
+      <div class="foot">${shareBtn()}${isHost() ? `<button class="btn" id="again">دور اللي بعده</button><button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يبدأ الدور الجاي.</p>`}${leaveBtn()}</div></section>`;
+    on("again", "click", startTf);
+    on("lobby", "click", () => setRoom({ phase: "lobby" }));
+  },
+
+  // ---------- ارسم وخمّن ----------
+  dq() {
+    const key = room.round + ":" + room.drawer, wrap = document.getElementById("dWrap");
+    const amDrawer = room.drawer === me.uid;
+    if (wrap && wrap.dataset.key === key) { drawParts(); return "kept"; }
+    V.innerHTML = `<section class="drawv">${statusBar()}
+      <div id="dWrap" data-key="${esc(key)}">
+        <div class="dtop"><div class="dword" id="dWord"></div><span class="dleft" id="dLeft"></span></div>
+        <div class="timer"><i id="dBar"></i></div>
+        <div class="dpad ${amDrawer ? "mine" : ""}"><canvas id="dCanvas" aria-label="${amDrawer ? "لوحة الرسم" : "رسمة"}"></canvas></div>
+        ${amDrawer ? `<div class="dtools">
+          <div class="dcols">${DCOLORS.map((c, i) => `<button class="dcol" data-dc="${i}" style="--c:${c}" aria-label="لون" aria-pressed="${DRAWS.c === i}"></button>`).join("")}</div>
+          <div class="drow">${DSIZES.map((s, i) => `<button class="dsz" data-ds="${i}" aria-label="حجم ${i + 1}" aria-pressed="${DRAWS.w === i}"><i style="width:${6 + i * 7}px;height:${6 + i * 7}px"></i></button>`).join("")}
+            <button class="btn small ghost" id="dUndo">↩︎ تراجع</button><button class="btn small ghost" id="dClear">مسح</button></div></div>`
+        : `<div id="dGuessBox"></div>`}
+        <div class="dfeed" id="dFeed" aria-live="polite"></div>
+      </div>
+      <div class="foot">${isHost() ? `<button class="btn ghost" id="dEnd">إنهاء الجولة</button>` : ""}${leaveBtn()}</div></section>`;
+    if (DRAWS.sRound !== room.round) { DRAWS.strokes = []; }
+    paintCanvas();
+    bindDrawPad();
+    onAll("[data-dc]", b => { DRAWS.c = Number(b.dataset.dc); V.querySelectorAll("[data-dc]").forEach(x => x.setAttribute("aria-pressed", x === b)); });
+    onAll("[data-ds]", b => { DRAWS.w = Number(b.dataset.ds); V.querySelectorAll("[data-ds]").forEach(x => x.setAttribute("aria-pressed", x === b)); });
+    on("dUndo", "click", () => { DRAWS.strokes.pop(); paintCanvas(); pushCanvas(); });
+    on("dClear", "click", e => { if (!confirmTap(e.currentTarget, "أكيد؟")) return; DRAWS.strokes = []; DRAWS.sRound = room.round; paintCanvas(); pushCanvas(); });
+    on("dEnd", "click", e => { if (confirmTap(e.currentTarget, "تنهي الجولة؟")) drawEnd(); });
+    ui.dGuessState = null;
+    drawParts();
+    if (!DRAWS.tick) DRAWS.tick = setInterval(drawTick, 300);
+    drawTick();
+  },
+
+  dres() {
+    const r = room.result || {}, got = r.got || {};
+    const ids = Object.keys(got).sort((a, b) => got[a] - got[b]);
+    V.innerHTML = `<section>${statusBar()}
+      <div class="card prompt pop" style="min-height:120px"><span class="eyebrow">الكلمة كانت</span><span class="big">${esc(r.word || "؟")}</span>
+        <span class="hint">رسمها ${atL(room.drawer)}${ids.length ? ` (+${ar(ids.length)})` : ""}</span></div>
+      <div class="dpad"><canvas id="dCanvas" aria-label="الرسمة"></canvas></div>
+      <div class="field"><span class="label">عرفوها</span>${ids.length ? `<div class="list">${ids.map(u => `<div class="li">${avatar(pname(u), prof(u)?.photo, 32)}<span class="nm" dir="ltr">${at(pname(u))}</span><span class="tag">+${ar(got[u] === 1 ? 3 : got[u] === 2 ? 2 : 1)}</span></div>`).join("")}</div>` : `<p class="lead">ولا أحد 😅</p>`}</div>
+      <div class="field"><span class="label">النقاط</span>${scoreBoard(order())}</div>
+      <div class="foot">${shareBtn()}${isHost() ? `<button class="btn" id="again">اللي بعده يرسم</button><button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يبدأ الجولة الجاية.</p>`}${leaveBtn()}</div></section>`;
+    paintCanvas();
+    on("again", "click", startDraw);
+    on("lobby", "click", () => setRoom({ phase: "lobby" }));
+  },
 };
 
 /* ================= بجوال واحد (offline) ================= */

@@ -14,6 +14,41 @@ export const ICONS = {
     <rect x="12" y="46" width="40" height="10" rx="5" fill="#1c1530"/>
     <text x="32" y="54.5" text-anchor="middle" font-family="Lalezar,Tahoma,sans-serif" font-size="9" fill="#f2b134">أونو</text>`),
 
+  // ارسم وخمّن: لوحة وقلم
+  draw: wrap(bg("gDraw", "#7fd3ff", "#3a7bd5") + shine + `
+    <g transform="rotate(-6 32 34)">
+      <rect x="9" y="12" width="38" height="36" rx="5" fill="#fff8ec"/>
+      <path d="M15 38 q6 -14 12 -4 t12 -8" stroke="#ef6f6c" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+      <circle cx="37" cy="21" r="4.5" fill="#f2b134"/>
+    </g>
+    <g transform="rotate(40 46 40)">
+      <rect x="41" y="20" width="9" height="30" rx="2" fill="#1c1530"/>
+      <rect x="41" y="20" width="9" height="6" rx="2" fill="#ef6f6c"/>
+      <path d="M41 50 h9 l-4.5 8z" fill="#ffd36b"/>
+    </g>`),
+
+  // مين قالها؟: فقاعة كلام وقناع
+  who: wrap(bg("gWho", "#ffb3d1", "#d6457f") + shine + `
+    <path d="M10 14 h36 a6 6 0 0 1 6 6 v18 a6 6 0 0 1 -6 6 h-20 l-9 8 v-8 h-7 a6 6 0 0 1 -6 -6 v-18 a6 6 0 0 1 6 -6z" fill="#fff8ec"/>
+    <path d="M16 24 h24 M16 32 h16" stroke="#d6457f" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="48" cy="46" r="11" fill="#1c1530"/>
+    <text x="48" y="52" text-anchor="middle" font-family="Lalezar,Tahoma,sans-serif" font-size="16" fill="#ffd36b">؟</text>`),
+
+  // صح ولا خطأ: نص صح ونص خطأ
+  tf: wrap(bg("gTf", "#ffe08a", "#f08a24") + shine + `
+    <g transform="rotate(-10 32 32)">
+      <rect x="8" y="16" width="24" height="32" rx="7" fill="#3fbf9a"/>
+      <path d="M14 32 l5 5 l9 -11" stroke="#fff8ec" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <g transform="rotate(10 32 32)">
+      <rect x="32" y="16" width="24" height="32" rx="7" fill="#ef6f6c"/>
+      <path d="M39 26 l10 12 M49 26 l-10 12" stroke="#fff8ec" stroke-width="4" stroke-linecap="round"/>
+    </g>
+    <circle cx="32" cy="50" r="7" fill="#1c1530"/><text x="32" y="54" text-anchor="middle" font-family="Lalezar,Tahoma,sans-serif" font-size="10" fill="#ffd36b">؟</text>`),
+
+  // واتساب
+  wa: `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.8-1.4.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.3 2.2 2.2 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3z"/></svg>`,
+
   // إنسان حيوان نبات جماد: بلاطات حروف
   hhnj: wrap(bg("gHh", "#c9b8ff", "#6b4fd8") + shine + `
     <g transform="rotate(-8 32 32)">

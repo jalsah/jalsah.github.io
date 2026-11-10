@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>جلسة | ألعاب الجلسات مع أصحابك</title>
-<meta name="description" content="جلسة: ألعاب جلسات عربية تلعبها مع أصحابك أونلاين أو بجوال واحد. لعبة الدخيل، مين أكثر واحد، وخمسة بعشر.">
+<meta name="description" content="جلسة: ألعاب جلسات عربية تلعبها مع أصحابك أونلاين أو بجوال واحد. ارسم وخمّن، مين قالها، صح ولا خطأ، أونو، الدخيل، ومين أكثر واحد.">
 <meta name="theme-color" content="#1c1530">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lalezar&family=IBM+Plex+Sans+Arabic:wght@400;500;700&display=swap">
@@ -415,6 +415,60 @@ body:has(#chatFab) main{padding-bottom:78px}
 .ucol{min-height:72px;border:none;border-radius:18px;background:var(--c);color:#1c1530;font:inherit;font-family:var(--display);font-size:22px;cursor:pointer;box-shadow:inset 0 -6px 0 rgba(0,0,0,.18)}
 .uwin{gap:10px}
 .uwin .av{box-shadow:0 0 0 4px var(--bg)}
+/* ===== دفعة ٢: واتساب، مشاركة، مين قالها، صح ولا خطأ، ارسم وخمّن ===== */
+.inv-row{justify-content:center;flex-wrap:wrap;margin-top:6px}
+.btn.wa{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:#25d366;color:#0b2e17;text-decoration:none;font-weight:700}
+.btn.wa svg{width:20px;height:20px;flex:none}
+.btn.share{border-color:color-mix(in srgb,var(--saffron) 60%,var(--line));color:var(--saffron);font-weight:700}
+.share-sheet{max-height:92vh;overflow:auto}
+.share-prev{width:100%;display:grid;place-items:center;min-height:200px}
+.share-img{display:block;max-height:52vh;max-width:100%;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.4);-webkit-touch-callout:default;user-select:auto}
+.wform{display:flex;flex-direction:column;gap:10px}
+.who-n{display:flex;justify-content:center;gap:6px;flex-wrap:wrap}
+.who-n i{width:9px;height:9px;border-radius:50%;background:var(--line)}
+.who-n i.done{background:var(--mint)}
+.who-n i.cur{background:var(--saffron);transform:scale(1.3)}
+.who-card .mid{color:var(--ink)!important;overflow-wrap:anywhere}
+.who-rev{flex:none}
+.who-li{align-items:flex-start;flex-wrap:wrap}
+.who-t2{flex:1 1 60%;min-width:0;font-weight:500;overflow-wrap:anywhere;line-height:1.6}
+.who-li .nm{flex:none;color:var(--mint)}
+.tf-card .mid{overflow-wrap:anywhere}
+.tf-btns{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tfb{min-height:110px;border-radius:22px;border:3px solid transparent;font-family:var(--display);font-size:32px;cursor:pointer;color:var(--bg)}
+.tfb.t{background:var(--mint)}
+.tfb.f{background:var(--rose)}
+.tfb[aria-pressed="false"]{opacity:.55}
+.tfb[aria-pressed="true"]{border-color:var(--ink);transform:scale(1.03);opacity:1}
+.tf-btns:not(:has([aria-pressed="true"])) .tfb{opacity:1}
+.tfb:focus-visible{outline:3px solid var(--saffron);outline-offset:2px}
+#dWrap{display:flex;flex-direction:column;gap:10px}
+.dtop{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:40px}
+.dword{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.dword b{font-family:var(--display);font-weight:400;font-size:28px;color:var(--saffron)}
+.dmask{display:inline-flex;gap:12px;direction:rtl}
+.dmask span{display:inline-flex;gap:4px}
+.dmask i{width:14px;height:4px;border-radius:2px;background:var(--ink);display:block;margin-top:14px}
+.dleft{font-family:var(--display);font-size:30px;min-width:48px;text-align:center;color:var(--mint);font-variant-numeric:tabular-nums}
+.dleft.low{color:var(--rose)}
+.dpad{width:min(100%,56vh);margin-inline:auto;aspect-ratio:1/1;border-radius:20px;overflow:hidden;border:3px solid var(--line);background:#fffaf0}
+.dpad.mine{border-color:var(--saffron)}
+.dpad canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.dtools{display:flex;flex-direction:column;gap:8px}
+.dcols{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
+.dcol{width:34px;height:34px;border-radius:50%;background:var(--c);border:2px solid var(--line);cursor:pointer;padding:0}
+.dcol[aria-pressed="true"]{outline:3px solid var(--saffron);outline-offset:2px}
+.drow{display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap}
+.dsz{width:44px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;cursor:pointer}
+.dsz i{display:block;border-radius:50%;background:var(--ink)}
+.dsz[aria-pressed="true"]{border-color:var(--saffron);background:color-mix(in srgb,var(--saffron) 20%,var(--surface))}
+.dguess{display:flex;gap:8px}
+.dguess .txt{flex:1;min-width:0}
+.dgot-me{background:var(--mint);color:var(--bg);font-weight:700;border-radius:14px;padding:12px;text-align:center}
+.dfeed{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow:auto}
+.dfi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:6px 12px;font-size:15px;overflow-wrap:anywhere}
+.dfi.ok{border-color:var(--mint);color:var(--mint)}
+:is(.dcol,.dsz):focus-visible{outline:3px solid var(--mint);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -427,6 +481,6 @@ body:has(#chatFab) main{padding-bottom:78px}
   <div id="banner"></div>
   <main id="view"><div class="spinner" aria-label="جاري التحميل"></div></main>
 </div>
-<script type="module" src="./app.js?v=16"></script>
+<script type="module" src="./app.js?v=17"></script>
 </body>
 </html>
