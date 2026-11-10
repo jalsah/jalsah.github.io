@@ -2,17 +2,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
   onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  sendPasswordResetEmail, signInAnonymously
+  sendPasswordResetEmail, signInAnonymously, deleteUser, reauthenticateWithPopup,
+  reauthenticateWithCredential, EmailAuthProvider
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot,
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
   getCountFromServer, Timestamp, orderBy, limit, addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, authUrl } from "./firebase-config.js?v=22";
-import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=22";
-import { ICONS } from "./icons.js?v=22";
-import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=22";
+import { firebaseConfig, authUrl } from "./firebase-config.js?v=25";
+import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=25";
+import { ICONS } from "./icons.js?v=25";
+import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=25";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -86,6 +87,7 @@ let auth = null, db = null;
 if (configured) {
   const fb = initializeApp(firebaseConfig);
   auth = getAuth(fb);
+  auth.languageCode = "ar"; // إيميلات فايربيس (نسيت كلمة السر) تجي بالعربي
   db = getFirestore(fb);
 }
 
@@ -1623,7 +1625,8 @@ VIEWS.email = () => {
       </div>`}
     </form>
     <p class="switch">${signup ? "عندك حساب؟" : "ما عندك حساب؟"} <button type="button" class="link" id="switchMode">${signup ? "تسجيل الدخول" : "إنشاء حساب"}</button></p>
-    <div class="foot"><button class="btn ghost" id="gInstead"><span class="g-logo" aria-hidden="true">${GOOGLE_G}</span>أو كمّل بقوقل</button></div>
+    <div class="foot"><button class="btn ghost" id="gInstead"><span class="g-logo" aria-hidden="true">${GOOGLE_G}</span>أو كمّل بقوقل</button>
+      <p class="hint center">بتسجيلك توافق على <a class="link" href="privacy.html" target="_blank" rel="noopener">سياسة الخصوصية</a></p></div>
   </section>`;
   const msg = document.getElementById("emMsg");
   bindEyes();
@@ -1700,7 +1703,7 @@ VIEWS.forgot = () => {
       if (isEmail) await sendPasswordResetEmail(auth, v).catch(err => { if (err.code === "auth/too-many-requests" || err.code === "auth/network-request-failed") throw err; });
       else { const r = await callAuth({ action: "reset", username: v.replace(/^@/, "") }); if (!r.ok) throw new Error("server"); }
       msg.className = "hint msg-ok";
-      msg.textContent = "إذا الحساب موجود، بيوصلك إيميل فيه رابط تغيير كلمة السر خلال دقايق. شيّك على البريد المزعج (Spam) بعد.";
+      msg.innerHTML = "إذا عندك حساب بالإيميل وكلمة سر، بيوصلك إيميل خلال دقايق فيه رابط تغيّر منه كلمة السر.<br>📥 <b>شيّك على البريد المزعج (Junk / Spam)</b>، غالبًا يروح هناك.<br>🔵 إذا كنت مسجّل بقوقل، ما عندك كلمة سر: ارجع واضغط «كمّل بقوقل».";
       btn.textContent = "انرسل ✓";
     } catch (err) {
       btn.disabled = false; btn.textContent = "أرسل الرابط";
@@ -2194,8 +2197,10 @@ VIEWS.profile = () => {
       <div class="li"><span class="nm" dir="ltr">@${esc(me.username)}</span><button class="btn small ghost" id="copy">انسخ</button>${isOwner() ? "" : `<button class="btn small ghost" id="rename">غيّر</button>`}</div>
       <p class="hint">أرسله لأصحابك عشان يضيفونك.</p></div>
 
-    <div class="foot"><button class="btn ghost" id="tour">شرح اللعبة</button><button class="btn ghost" id="out">تسجيل خروج</button></div></section>`;
+    <div class="foot"><button class="btn ghost" id="tour">شرح اللعبة</button><button class="btn ghost" id="out">تسجيل خروج</button>
+      <div class="row legal"><a class="link" href="privacy.html" target="_blank" rel="noopener">سياسة الخصوصية</a>${isOwner() ? "" : `<button class="link danger-link" id="delAcc">احذف حسابي</button>`}</div></div></section>`;
   on("tour", "click", () => { ui.slide = 0; go("welcome"); });
+  on("delAcc", "click", openDeleteAccount);
   const bio = document.getElementById("bio"), save = document.getElementById("saveBio");
   bio.addEventListener("input", () => {
     ui.bioDraft = bio.value;
@@ -2227,6 +2232,60 @@ VIEWS.profile = () => {
   on("rename", "click", () => go("rename"));
   on("out", "click", async e => { if (!confirmTap(e.currentTarget)) return; await leaveRoom(true); signOut(auth); });
 };
+
+/* ================= حذف الحساب ================= */
+function openDeleteAccount() {
+  const user = auth.currentUser; if (!user || !me?.username) return;
+  const viaGoogle = user.providerData.some(p => p.providerId === "google.com");
+  const viaPass = user.providerData.some(p => p.providerId === "password");
+  document.getElementById("delSheet")?.remove();
+  const el = document.createElement("div");
+  el.id = "delSheet"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "احذف حسابي");
+  el.innerHTML = `<div class="sheet bot-sheet"><span class="bot-av" aria-hidden="true">🗑️</span><b class="pf-name">احذف حسابك نهائيًا؟</b>
+    <p class="pf-bio">بينحذف يوزرك <b dir="ltr">@${esc(me.username)}</b> وصورتك ونبذتك وأصدقائك. وما تقدر ترجعه بعدين.</p>
+    ${viaPass && !viaGoogle ? `<input class="txt" id="delPw" type="password" dir="ltr" autocomplete="current-password" placeholder="كلمة السر للتأكيد" aria-label="كلمة السر">` : ""}
+    <input class="txt" id="delTxt" autocomplete="off" placeholder="اكتب: احذف" aria-label="اكتب احذف للتأكيد">
+    <p class="hint" id="delMsg" role="status"></p>
+    <button class="btn danger" id="delGo" disabled>احذف حسابي</button>
+    <button class="btn ghost" id="delX">إلغاء</button></div>`;
+  document.body.appendChild(el);
+  const close = () => el.remove(), go2 = el.querySelector("#delGo"), msg = el.querySelector("#delMsg");
+  el.addEventListener("click", e => { if (e.target === el) close(); });
+  el.querySelector("#delX").addEventListener("click", close);
+  el.querySelector("#delTxt").addEventListener("input", e => { go2.disabled = e.target.value.trim() !== "احذف"; });
+  go2.addEventListener("click", async () => {
+    go2.disabled = true; go2.textContent = "لحظة…"; msg.className = "hint";
+    try {
+      if (viaGoogle) await reauthenticateWithPopup(user, new GoogleAuthProvider());
+      else if (viaPass) {
+        const pw = el.querySelector("#delPw").value;
+        if (!pw) throw { code: "need-pw" };
+        await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, pw));
+      }
+      if (roomCode) await leaveRoom(true).catch(() => {});
+      const refs = [];
+      friends.forEach((_, u) => refs.push(doc(db, "friendships", pairId(me.uid, u))));
+      [...reqIn, ...reqOut].forEach(r => { if (r.from && r.to) refs.push(doc(db, "friendRequests", r.from + "_" + r.to)); });
+      for (let i = 0; i < refs.length; i += 400) { const b = writeBatch(db); refs.slice(i, i + 400).forEach(r => b.delete(r)); await b.commit().catch(e => console.error(e)); }
+      const b = writeBatch(db);
+      b.delete(doc(db, "usernames", me.username.toLowerCase()));
+      b.delete(doc(db, "users", me.uid));
+      await b.commit();
+      ["welcomed:" + me.uid, "blocked", "instHide"].forEach(k => { try { localStorage.removeItem("jalsa:" + k); } catch (e) {} });
+      offAll();
+      await deleteUser(user);
+      close(); toast("انحذف حسابك. الله يحييك أي وقت 👋");
+    } catch (err) {
+      console.error(err);
+      go2.disabled = false; go2.textContent = "احذف حسابي"; msg.className = "hint msg-bad";
+      msg.textContent = err.code === "need-pw" ? "اكتب كلمة السر أول."
+        : err.code === "auth/wrong-password" || err.code === "auth/invalid-credential" ? "كلمة السر غلط."
+        : err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request" ? "لازم تأكد بحساب قوقل عشان نحذف."
+        : err.code === "auth/requires-recent-login" ? "سجّل خروج وادخل مرة ثانية، بعدين احذف."
+        : "ما قدرنا نحذف الحساب، جرّب مرة ثانية.";
+    }
+  });
+}
 
 VIEWS.friends = () => {
   const list = [...friends.entries()].sort((a, b) => (isOnline(b[1]) - isOnline(a[1])) || a[1].username.localeCompare(b[1].username));
