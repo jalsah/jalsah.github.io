@@ -2,16 +2,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
   onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  sendPasswordResetEmail
+  sendPasswordResetEmail, signInAnonymously
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot,
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
-  getCountFromServer, Timestamp
+  getCountFromServer, Timestamp, orderBy, limit, addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, authUrl } from "./firebase-config.js?v=14";
-import { WORDS, MOST, FIVE } from "./content.js?v=14";
-import { ICONS } from "./icons.js?v=14";
+import { firebaseConfig, authUrl } from "./firebase-config.js?v=15";
+import { WORDS, MOST, FIVE, LETTERS, HCATS } from "./content.js?v=15";
+import { ICONS } from "./icons.js?v=15";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -61,7 +61,15 @@ function avatar(name, photo, size = 40, label) {
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const ONLINE_MS = 150000;
 const INVITE_MS = 15 * 60 * 1000;
-const GAMES = { imp: "الدخيل", most: "مين أكثر واحد" };
+const GAMES = { imp: "الدخيل", most: "مين أكثر واحد", hhnj: "إنسان حيوان نبات جماد" };
+// كل ألعاب جلسة: وين تنلعب (أونلاين، بجوال واحد)
+const CATALOG = [
+  { id: "imp", icon: "imp", title: "الدخيل", desc: "الكل يعرف الكلمة إلا واحد. اكشفوه قبل ما يكشف الكلمة.", online: true, local: "l-imp", min: 3 },
+  { id: "most", icon: "most", title: "مين أكثر واحد؟", desc: "سؤال، وكل واحد يصوّت على واحد من الشلة.", online: true, local: "l-most", min: 3 },
+  { id: "hhnj", icon: "hhnj", title: "إنسان حيوان نبات جماد", desc: "حرف عشوائي، واكتب أربع كلمات تبدأ فيه قبل يخلص الوقت.", online: true, local: "l-hhnj", min: 2 },
+  { id: "five", icon: "five", title: "خمسة بعشر", desc: "اذكر خمسة أشياء من الفئة خلال عشر ثواني.", online: false, local: "l-five", min: 2 }
+];
+const minPlayers = g => CATALOG.find(c => c.id === g)?.min || 3;
 
 const V = document.getElementById("view");
 const HDR = document.getElementById("hdr");
@@ -90,7 +98,9 @@ function sub(k, unsub) { off(k); subs.set(k, unsub); }
 function off(k) { const u = subs.get(k); if (u) { u(); subs.delete(k); } }
 function offAll() { [...subs.keys()].forEach(off); }
 
-let announce = null, banned = false;
+let announce = null, banned = false, promo = null, guestUid = null, guestTimer = null;
+let inbox = [];               // محادثات الخاص
+let roomChat = [];            // شات الغرفة
 const profiles = new Map();   // uid -> { username, photo, bio }
 const profWant = new Set();
 function prof(uid) {
@@ -109,9 +119,11 @@ const isOnline = f => { const t = f?.lastSeen?.toMillis?.(); return !!t && Date.
 const pairId = (a, b) => [a, b].sort().join("_");
 
 /* ================= navigation & rendering ================= */
-const REFRESH = new Set(["home", "friends", "room", "profile", "admin"]);
+const REFRESH = new Set(["home", "friends", "room", "profile", "admin", "inbox"]);
 function go(name) {
   stopLocalTimers();
+  if (screen === "dm" && name !== "dm") { off("dm"); ui.dmWith = null; }
+  if (name !== "room") { document.getElementById("chatPanel")?.remove(); document.getElementById("chatFab")?.remove(); }
   screen = name;
   render(true);
   window.scrollTo(0, 0);
@@ -123,7 +135,7 @@ function render(fresh) {
   // نحافظ على اللي مكتوب في الحقول لو انعاد الرسم
   const saved = {}; let focusId = null;
   if (!fresh) {
-    V.querySelectorAll("input[id], textarea[id]").forEach(i => saved[i.id] = i.value);
+    V.querySelectorAll("input[id]:not([type=file]), textarea[id]").forEach(i => saved[i.id] = i.value);
     focusId = document.activeElement?.id || null;
   }
   renderHeader(); renderBanner();
@@ -137,7 +149,8 @@ function on(id, ev, fn) { const el = document.getElementById(id); if (el) el.add
 function onAll(sel, fn) { V.querySelectorAll(sel).forEach(el => el.addEventListener("click", e => fn(e.currentTarget, e))); }
 
 const BACK = {
-  friends: "home", profile: "home", admin: "home", rename: "profile",
+  friends: "home", profile: "home", admin: "home", rename: "profile", inbox: "home", dm: "inbox",
+  "l-hhnj": "local",
   email: "auth", forgot: () => (ui.emailMode = "login", "email"),
   local: () => me?.username ? "home" : (configured ? "auth" : "setup"),
   "l-players": "local", "l-imp": "local", "l-pass": "local", "l-play": "local",
@@ -148,9 +161,11 @@ function renderHeader() {
   if (roomCode && screen !== "room") h += `<button class="pill hot" id="hRoom">الغرفة ${esc(roomCode)}</button>`;
   const back = BACK[screen];
   if (back) h += `<button class="pill" id="hBack">رجوع</button>`;
-  if (me?.username && !back && screen !== "room") {
+  if (me?.username && !back && screen !== "room" && screen !== "welcome") {
     if (isOwner()) h += `<button class="pill hot" id="hAdmin" aria-label="لوحة المالك">👑</button>`;
     h += `<button class="pill add" id="hFriends"><span aria-hidden="true">+</span> أضف صديق${reqIn.length ? `<span class="badge">${ar(reqIn.length)}</span>` : ""}</button>`;
+    const un = unreadCount();
+    h += `<button class="pill icon" id="hChat" aria-label="الرسائل">💬${un ? `<span class="badge">${ar(un)}</span>` : ""}</button>`;
     h += `<button class="me-btn" id="hMe" aria-label="بروفايلي">${avatar(me.username, me.photo, 38)}</button>`;
   }
   HDR.innerHTML = h;
@@ -159,6 +174,7 @@ function renderHeader() {
   HDR.querySelector("#hFriends")?.addEventListener("click", () => go("friends"));
   HDR.querySelector("#hMe")?.addEventListener("click", () => go("profile"));
   HDR.querySelector("#hAdmin")?.addEventListener("click", () => go("admin"));
+  HDR.querySelector("#hChat")?.addEventListener("click", () => go("inbox"));
 }
 function renderBanner() {
   const now = Date.now();
@@ -167,7 +183,12 @@ function renderBanner() {
     return now - t < INVITE_MS && i.code !== roomCode;
   });
   renderAnnounce();
-  BANNER.innerHTML = list.map(i => `
+  const pimg = promo && typeof promo.img === "string" && promo.img.startsWith("data:image/jpeg;base64,") ? promo.img : "";
+  const plink = promo && /^https:\/\//.test(promo.link || "") ? promo.link : "";
+  const promoHtml = pimg && !["dm"].includes(screen)
+    ? (plink ? `<a class="promo" href="${esc(plink)}" target="_blank" rel="noopener"><img src="${esc(pimg)}" alt="${esc(promo.alt || "إعلان جلسة")}"></a>`
+             : `<div class="promo"><img src="${esc(pimg)}" alt="${esc(promo.alt || "إعلان جلسة")}"></div>`) : "";
+  BANNER.innerHTML = promoHtml + list.map(i => `
     <div class="inv"><span class="txt"><span dir="ltr">${at(i.fromName)}</span> عزمك على غرفة</span>
     <button class="btn small" data-ij="${esc(i.id)}">ادخل</button>
     <button class="btn small ghost" data-ix="${esc(i.id)}">تجاهل</button></div>`).join("");
@@ -281,6 +302,11 @@ function startGlobal() {
     if (banned && !was) { if (roomCode) leaveRoom(true); go("banned"); }
     else if (!banned && was && screen === "banned") go("home");
   }, err));
+  sub("inbox", onSnapshot(query(collection(db, "chats"), where("members", "array-contains", me.uid)), snap => {
+    inbox = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.lastAt?.toMillis?.() || 0) - (a.lastAt?.toMillis?.() || 0));
+    if (screen === "inbox") render(false); else renderHeader();
+  }, err));
   sub("invites", onSnapshot(query(collection(db, "invites"), where("to", "==", me.uid)), snap => {
     invites = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderBanner();
   }, err));
@@ -291,7 +317,7 @@ function onVisible() {
 function stopGlobal() {
   offAll(); clearInterval(presenceTimer); presenceTimer = null;
   document.removeEventListener("visibilitychange", onVisible);
-  friends.clear(); reqIn = []; reqOut = []; invites = []; banned = false;
+  friends.clear(); reqIn = []; reqOut = []; invites = []; banned = false; inbox = [];
   room = null; roomCode = null; votes = {}; secret = null;
 }
 function err(e) { console.error(e); }
@@ -339,7 +365,7 @@ const order = () => Object.entries(room?.players || {}).sort((a, b) => a[1].at -
 const pname = u => room?.players?.[u]?.name || room?.names?.[u] || "—";
 const roundPlayers = () => (room?.roundPlayers || order()).filter(u => room.players[u]);
 
-async function createRoom() {
+async function createRoom(game = "imp") {
   try {
     let code;
     for (let i = 0; i < 6; i++) {
@@ -347,7 +373,7 @@ async function createRoom() {
       if (!(await getDoc(doc(db, "rooms", code))).exists()) break;
     }
     await setDoc(doc(db, "rooms", code), {
-      host: me.uid, createdAt: serverTimestamp(), phase: "lobby", game: "imp", cat: "عشوائي", imps: 1,
+      host: me.uid, createdAt: serverTimestamp(), phase: "lobby", game: GAMES[game] ? game : "imp", cat: "عشوائي", imps: 1,
       round: 0, players: { [me.uid]: { name: me.username, at: Date.now() } }, scores: {}
     });
     enterRoom(code);
@@ -380,12 +406,18 @@ function enterRoom(code) {
     if (!subs.has("votes")) sub("votes", onSnapshot(collection(db, "rooms", code, "votes"), q => {
       votes = {}; q.forEach(d => votes[d.id] = d.data()); if (screen === "room") render(false);
     }, err));
+    if (!subs.has("rchat")) sub("rchat", onSnapshot(query(collection(db, "rooms", code, "chat"), orderBy("at", "desc"), limit(60)), q => {
+      roomChat = q.docs.map(d => ({ id: d.id, ...d.data() })).reverse();
+      updateRoomChat();
+    }, err));
+    if (room.phase === "hq" && !subs.has("hdone")) watchHhnjDone();
     if (screen === "room") render(false); else renderHeader();
   }, e => { console.error(e); exitRoomLocal("انقطع الاتصال بالغرفة"); }));
   go("room");
 }
 function exitRoomLocal(msg) {
-  off("room"); off("secret"); off("votes");
+  off("room"); off("secret"); off("votes"); off("rchat"); off("hdone"); clearInterval(ui.hTimer); ui.hTimer = null;
+  roomChat = []; closeChatPanel(); ui.chatSeen = 0;
   room = null; roomCode = null; votes = {}; secret = null;
   if (msg) toast(msg);
   if (screen === "room") go("home"); else renderHeader();
@@ -438,7 +470,7 @@ async function revealImp() {
 async function impGuessed() {
   const scores = { ...(room.scores || {}) };
   room.result.imps.forEach(u => scores[u] = (scores[u] || 0) + 1);
-  await setRoom({ scores, "result.guessed": true });
+  await setRoom({ scores, "result.guessed": true, "result.wordShown": true });
 }
 // ---- مين أكثر واحد أونلاين (المضيف) ----
 async function startMost() {
@@ -455,6 +487,75 @@ async function revealMost() {
   });
   await setRoom({ phase: "mresult", result: { tally } });
 }
+// ---- إنسان حيوان نبات جماد أونلاين ----
+const HHNJ_SECS = 90;
+const normAr = t => String(t || "").trim()
+  .replace(/[\u064B-\u0652\u0640]/g, "")
+  .replace(/[أإآٱ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه")
+  .replace(/\s+/g, " ").toLowerCase();
+const stripAl = t => t.replace(/^ال(?=..)/, "");
+function startsWithLetter(word, letter) {
+  const w = stripAl(normAr(word)), l = normAr(letter);
+  return !!w && w.charAt(0) === l;
+}
+async function startHhnj() {
+  const ps = order();
+  if (ps.length < 2) return toast("تحتاجون لاعبين على الأقل");
+  let letter = pick(LETTERS);
+  if (letter === room.letter) letter = pick(LETTERS);
+  const names = {}; ps.forEach(u => names[u] = pname(u));
+  await setRoom({ game: "hhnj", phase: "hq", round: (room.round || 0) + 1, letter, deadline: Date.now() + HHNJ_SECS * 1000, roundPlayers: ps, names, result: null });
+}
+function hhnjScore(rows, letter, rej) {
+  const out = {};
+  const uids = Object.keys(rows);
+  HCATS.forEach((_, ci) => {
+    const seen = {};
+    uids.forEach(u => {
+      const a = rows[u].a[ci] || "";
+      if (rej[u + "_" + ci] || !startsWithLetter(a, letter)) return;
+      const k = stripAl(normAr(a)); seen[k] = (seen[k] || 0) + 1;
+    });
+    uids.forEach(u => {
+      out[u] = out[u] || { a: rows[u].a, p: [], total: 0 };
+      const a = rows[u].a[ci] || "";
+      let p = 0;
+      if (!rej[u + "_" + ci] && startsWithLetter(a, letter)) p = seen[stripAl(normAr(a))] > 1 ? 5 : 10;
+      out[u].p[ci] = p; out[u].total += p;
+    });
+  });
+  return out;
+}
+async function revealHhnj() {
+  if (ui.hReveal) return; ui.hReveal = true;
+  try {
+    const snap = await getDocs(collection(db, "rooms", roomCode, "answers"));
+    const ps = roundPlayers(), rows = {};
+    ps.forEach(u => rows[u] = { a: ["", "", "", ""] });
+    snap.forEach(d => { const v = d.data(); if (v.round === room.round && rows[d.id]) rows[d.id] = { a: (v.a || []).slice(0, 4).map(x => String(x || "").slice(0, 40)) }; });
+    const scored = hhnjScore(rows, room.letter, {});
+    const scores = { ...(room.scores || {}) }, applied = {};
+    Object.entries(scored).forEach(([u, r]) => { scores[u] = (scores[u] || 0) + r.total; applied[u] = r.total; });
+    await setRoom({ phase: "hres", result: { rows: scored, rej: {}, applied }, scores });
+  } catch (e) { console.error(e); toast("ما قدرنا نجيب الأجوبة"); }
+  ui.hReveal = false;
+}
+async function toggleReject(u, ci) {
+  const r = room.result; if (!r) return;
+  const rej = { ...(r.rej || {}) }, key = u + "_" + ci;
+  if (rej[key]) delete rej[key]; else rej[key] = true;
+  const rows = {}; Object.entries(r.rows).forEach(([k, v]) => rows[k] = { a: v.a });
+  const scored = hhnjScore(rows, room.letter, rej);
+  const scores = { ...(room.scores || {}) }, applied = {};
+  Object.entries(scored).forEach(([k, v]) => { scores[k] = (scores[k] || 0) - ((r.applied || {})[k] || 0) + v.total; applied[k] = v.total; });
+  await setRoom({ result: { rows: scored, rej, applied }, scores });
+}
+async function submitHhnj(done) {
+  const a = [0, 1, 2, 3].map(i => (document.getElementById("h" + i)?.value || "").trim().slice(0, 40));
+  try { await setDoc(doc(db, "rooms", roomCode, "answers", me.uid), { round: room.round, a, done: !!done }); }
+  catch (e) { console.error(e); if (done) toast("ما انرسلت أجوبتك، جرّب مرة ثانية"); }
+}
+
 async function vote(target) {
   try { await setDoc(doc(db, "rooms", roomCode, "votes", me.uid), { round: room.round, target }); }
   catch (e) { console.error(e); toast("ما انحسب صوتك، جرّب مرة ثانية"); }
@@ -469,14 +570,17 @@ async function loadStats() {
   try {
     const start = new Date(); start.setHours(0, 0, 0, 0);
     const since = Timestamp.fromMillis(Date.now() - ONLINE_MS);
-    const [total, online, today, rooms, bans] = await Promise.all([
+    const [total, online, today, rooms, bans, gOnline, gToday] = await Promise.all([
       getCountFromServer(collection(db, "users")),
       getCountFromServer(query(collection(db, "users"), where("lastSeen", ">", since))),
       getCountFromServer(query(collection(db, "users"), where("createdAt", ">=", Timestamp.fromDate(start)))),
       getCountFromServer(collection(db, "rooms")),
-      getDocs(collection(db, "bans"))
+      getDocs(collection(db, "bans")),
+      getCountFromServer(query(collection(db, "guests"), where("lastSeen", ">", since))).catch(() => null),
+      getCountFromServer(query(collection(db, "guests"), where("firstSeen", ">=", Timestamp.fromDate(start)))).catch(() => null)
     ]);
-    adm.stats = { total: total.data().count, online: online.data().count, today: today.data().count, rooms: rooms.data().count, at: new Date() };
+    adm.stats = { total: total.data().count, online: online.data().count, today: today.data().count, rooms: rooms.data().count,
+      gOnline: gOnline ? gOnline.data().count : null, gToday: gToday ? gToday.data().count : null, at: new Date() };
     adm.banned = bans.docs.map(d => ({ uid: d.id, ...d.data() }));
   } catch (e) { console.error(e); toast("ما قدرنا نجيب الأرقام"); }
   adm.loading = false; render(false);
@@ -513,7 +617,168 @@ async function saveAnnounce(text) {
   } catch (e) { console.error(e); toast("ما قدرنا ننشر الإعلان"); }
 }
 
+/* ================= الشات ================= */
+const EMOJIS = ["😂", "🤣", "😅", "😍", "😎", "🤔", "😮", "😡", "😭", "👍", "👏", "🙏", "🔥", "❤️", "💯", "🎉", "👀", "🕵️", "🤝", "✋"];
+const cleanMsg = t => String(t || "").replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, "").trim();
+const timeOf = ts => { const d = ts?.toDate?.(); return d ? d.toLocaleTimeString("ar-SA", { hour: "numeric", minute: "2-digit" }) : ""; };
+function msgHtml(m, mine, showName) {
+  return `<div class="msg ${mine ? "me" : ""}">
+    ${mine ? "" : `<span class="msg-av">${avatar(m.name || "", prof(m.uid || m.from)?.photo, 28)}</span>`}
+    <div class="bub">${showName && !mine ? `<span class="msg-n" dir="ltr">${at(m.name || "")}</span>` : ""}<span class="msg-t" dir="auto">${esc(m.text)}</span><span class="msg-time">${timeOf(m.at)}</span></div>
+  </div>`;
+}
+function emojiBar(target) {
+  return `<div class="emo" role="group" aria-label="إيموجي">${EMOJIS.map(e => `<button type="button" data-emo="${e}" data-for="${target}">${e}</button>`).join("")}</div>`;
+}
+function bindEmoji(root) {
+  root.querySelectorAll("[data-emo]").forEach(b => b.addEventListener("click", () => {
+    const inp = document.getElementById(b.dataset.for); if (!inp) return;
+    const st = inp.selectionStart ?? inp.value.length, en = inp.selectionEnd ?? inp.value.length;
+    inp.value = inp.value.slice(0, st) + b.dataset.emo + inp.value.slice(en);
+    inp.focus(); const p = st + b.dataset.emo.length; try { inp.setSelectionRange(p, p); } catch (e) {}
+  }));
+}
+
+// ---- شات الغرفة ----
+function chatUnread() {
+  const seen = ui.chatSeen || 0;
+  return roomChat.filter(m => m.uid !== me?.uid && (m.at?.toMillis?.() || 0) > seen).length;
+}
+function showChatFab() {
+  let fab = document.getElementById("chatFab");
+  if (!roomCode || screen !== "room") { fab?.remove(); return; }
+  if (!fab) {
+    fab = document.createElement("button");
+    fab.id = "chatFab"; fab.className = "chat-fab"; fab.setAttribute("aria-label", "شات الغرفة");
+    fab.addEventListener("click", openChatPanel);
+    document.body.appendChild(fab);
+  }
+  const n = document.getElementById("chatPanel") ? 0 : chatUnread();
+  fab.innerHTML = `💬<span>شات</span>${n ? `<i class="badge">${ar(n)}</i>` : ""}`;
+}
+function openChatPanel() {
+  if (document.getElementById("chatPanel")) return;
+  const el = document.createElement("div");
+  el.id = "chatPanel"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "شات الغرفة");
+  el.innerHTML = `<div class="chat-sheet">
+    <div class="chat-head"><b>شات الغرفة</b><span class="hint" dir="ltr">${esc(roomCode)}</span><button class="btn small ghost" id="chatX">إغلاق</button></div>
+    <div class="chat-list" id="chatList"></div>
+    ${emojiBar("chatIn")}
+    <form class="chat-form" id="chatF"><input class="txt" id="chatIn" dir="auto" maxlength="300" placeholder="اكتب رسالة…" autocomplete="off"><button class="btn small">إرسال</button></form>
+  </div>`;
+  document.body.appendChild(el);
+  bindEmoji(el);
+  el.addEventListener("click", e => { if (e.target === el) closeChatPanel(); });
+  el.querySelector("#chatX").addEventListener("click", closeChatPanel);
+  el.querySelector("#chatF").addEventListener("submit", async e => {
+    e.preventDefault();
+    const inp = document.getElementById("chatIn"), text = cleanMsg(inp.value).slice(0, 300);
+    if (!text || !roomCode) return;
+    inp.value = "";
+    try { await addDoc(collection(db, "rooms", roomCode, "chat"), { uid: me.uid, name: me.username, text, at: serverTimestamp() }); }
+    catch (err) { console.error(err); toast("ما انرسلت الرسالة"); inp.value = text; }
+  });
+  updateRoomChat();
+  showChatFab();
+  document.getElementById("chatIn").focus({ preventScroll: true });
+}
+function closeChatPanel() {
+  const el = document.getElementById("chatPanel"); if (!el) return;
+  ui.chatSeen = Date.now(); el.remove(); showChatFab();
+}
+function updateRoomChat() {
+  const list = document.getElementById("chatList");
+  if (list) {
+    const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+    list.innerHTML = roomChat.length ? roomChat.map(m => msgHtml(m, m.uid === me.uid, true)).join("")
+      : `<p class="hint center chat-empty">ما فيه رسايل للحين. قول هلا 👋</p>`;
+    if (nearBottom || !list.dataset.init) { list.scrollTop = list.scrollHeight; list.dataset.init = "1"; }
+    ui.chatSeen = Date.now();
+  }
+  showChatFab();
+}
+
+// ---- الخاص ----
+const chatId = uid => pairId(me.uid, uid);
+function unreadCount() {
+  return inbox.filter(c => c.lastFrom && c.lastFrom !== me?.uid && (c.lastAt?.toMillis?.() || 0) > (c.read?.[me.uid]?.toMillis?.() || 0)).length;
+}
+let dmMsgs = [];
+function openDm(uid) {
+  if (!friends.has(uid)) { toast("لازم تكونون أصحاب عشان تراسله"); return; }
+  ui.dmWith = uid; dmMsgs = [];
+  go("dm");
+  sub("dm", onSnapshot(query(collection(db, "chats", chatId(uid), "msgs"), orderBy("at", "desc"), limit(100)), q => {
+    dmMsgs = q.docs.map(d => ({ id: d.id, ...d.data() })).reverse();
+    updateDmList(); markDmRead();
+  }, e => { console.error(e); }));
+}
+function markDmRead() {
+  const uid = ui.dmWith; if (!uid) return;
+  const c = inbox.find(x => x.id === chatId(uid));
+  if (!c) return;
+  if ((c.read?.[me.uid]?.toMillis?.() || 0) >= (c.lastAt?.toMillis?.() || 0)) return;
+  updateDoc(doc(db, "chats", c.id), { ["read." + me.uid]: serverTimestamp() }).catch(() => {});
+}
+function updateDmList() {
+  const list = document.getElementById("dmList"); if (!list) return;
+  const f = friends.get(ui.dmWith);
+  list.innerHTML = dmMsgs.length ? dmMsgs.map(m => msgHtml({ ...m, name: m.from === me.uid ? me.username : f?.username }, m.from === me.uid, false)).join("")
+    : `<p class="hint center chat-empty">ابدأ السالفة 👋</p>`;
+  list.scrollTop = list.scrollHeight;
+}
+async function sendDm(uid, text) {
+  const pid = chatId(uid), b = writeBatch(db);
+  b.set(doc(db, "chats", pid), { members: pid.split("_"), last: text.slice(0, 80), lastAt: serverTimestamp(), lastFrom: me.uid, read: { [me.uid]: serverTimestamp() } }, { merge: true });
+  b.set(doc(collection(db, "chats", pid, "msgs")), { from: me.uid, text, at: serverTimestamp() });
+  await b.commit();
+}
+
 const VIEWS = {};
+
+VIEWS.inbox = () => {
+  const chatted = new Set();
+  const rows = inbox.map(c => {
+    const other = c.members.find(m => m !== me.uid); chatted.add(other);
+    const f = friends.get(other) || prof(other) || { username: "…" };
+    const unread = c.lastFrom !== me.uid && (c.lastAt?.toMillis?.() || 0) > (c.read?.[me.uid]?.toMillis?.() || 0);
+    return `<button class="ib ${unread ? "unread" : ""}" data-dm="${esc(other)}">
+      <span class="av-wrap">${avatar(f.username, f.photo, 46)}${friends.get(other) ? `<i class="dot ${isOnline(friends.get(other)) ? "on" : ""}"></i>` : ""}</span>
+      <span class="ib-t"><span class="ib-n" dir="ltr">${at(f.username)}</span><span class="ib-l" dir="auto">${c.lastFrom === me.uid ? "أنت: " : ""}${esc(c.last || "")}</span></span>
+      <span class="ib-r"><span class="ib-time">${timeOf(c.lastAt)}</span>${unread ? `<i class="ib-dot"></i>` : ""}</span></button>`;
+  }).join("");
+  const others = [...friends.entries()].filter(([u]) => !chatted.has(u));
+  V.innerHTML = `<section>
+    <h2>الرسائل</h2>
+    ${rows ? `<div class="list">${rows}</div>` : `<p class="hint">ما عندك محادثات للحين.</p>`}
+    ${others.length ? `<div class="field"><span class="label">ابدأ محادثة مع</span>
+      <div class="onl">${others.map(([u, f]) => `<button class="onl-i" data-dm="${esc(u)}">${avatar(f.username, f.photo, 48)}${isOnline(f) ? `<i class="dot on"></i>` : ""}<span dir="ltr">${esc(f.username)}</span></button>`).join("")}</div></div>`
+      : (friends.size ? "" : `<p class="hint">تقدر تراسل أصحابك بس. أضف أصحابك أول من زر «أضف صديق».</p>`)}
+  </section>`;
+  onAll("[data-dm]", b => openDm(b.dataset.dm));
+};
+
+VIEWS.dm = () => {
+  const uid = ui.dmWith, f = friends.get(uid);
+  if (!uid || !f) { go("inbox"); return; }
+  V.innerHTML = `<section class="dm">
+    <button class="dm-head" id="dmWho">${avatar(f.username, f.photo, 40)}<span class="who-t"><span class="nm" dir="ltr">${at(f.username)}</span><span class="who-bio">${isOnline(f) ? "أونلاين الحين" : "مو أونلاين"}</span></span></button>
+    <div class="chat-list dm-list" id="dmList"></div>
+    ${emojiBar("dmIn")}
+    <form class="chat-form" id="dmF"><input class="txt" id="dmIn" dir="auto" maxlength="500" placeholder="اكتب رسالة…" autocomplete="off"><button class="btn small">إرسال</button></form>
+  </section>`;
+  bindEmoji(V);
+  on("dmWho", "click", () => showProfile(uid));
+  on("dmF", "submit", async e => {
+    e.preventDefault();
+    const inp = document.getElementById("dmIn"), text = cleanMsg(inp.value).slice(0, 500);
+    if (!text) return;
+    inp.value = "";
+    try { await sendDm(uid, text); }
+    catch (err) { console.error(err); toast("ما انرسلت. لازم تكونون أصحاب."); inp.value = text; }
+  });
+  updateDmList();
+};
 
 VIEWS.banned = () => {
   V.innerHTML = `<section><div class="card imposter"><span class="big">محظور</span>
@@ -538,6 +803,8 @@ VIEWS.admin = () => {
         ${tile(st?.total, "كل اللاعبين")}
         ${tile(st?.today, "سجّلوا اليوم")}
         ${tile(st?.rooms, "غرف مفتوحة")}
+        ${tile(st?.gOnline ?? "—", "زوار بدون حساب الحين", "good")}
+        ${tile(st?.gToday ?? "—", "زوار بدون حساب اليوم")}
       </div>
       ${st ? `<p class="hint">آخر تحديث ${esc(st.at.toLocaleTimeString("ar-SA", { hour: "numeric", minute: "2-digit" }))}</p>` : ""}
     </div>
@@ -546,6 +813,15 @@ VIEWS.admin = () => {
       <textarea class="txt" id="annText" rows="3" maxlength="200" placeholder="مثال: نزلت لعبة جديدة الليلة 🔥">${esc(announce?.text || "")}</textarea>
       <div class="row"><button class="btn" id="annSend">انشر الإعلان</button>${announce?.text ? `<button class="btn ghost" id="annDel">شيل الإعلان</button>` : ""}</div>
       <p class="hint">${announce?.text ? "فيه إعلان منشور الحين، ويطلع فوق الصفحة لكل اللاعبين." : "ما فيه إعلان منشور."}</p>
+    </div>
+
+    <div class="field"><span class="label">البنر (يطلع فوق تحت الشعار)</span>
+      ${promo?.img ? `<div class="promo preview"><img src="${esc(safeJpeg(promo.img))}" alt=""></div>` : `<p class="hint">ما فيه بنر الحين.</p>`}
+      <input type="file" id="bnFile" accept="image/*" hidden>
+      <input class="txt" id="bnLink" dir="ltr" placeholder="رابط اختياري يفتح لما يضغطون البنر (https://...)" value="${esc(promo?.link || "")}">
+      <div class="row"><label class="btn" for="bnFile">${promo?.img ? "غيّر صورة البنر" : "ارفع صورة البنر"}</label>${promo?.img ? `<button class="btn ghost" id="bnDel">شيل البنر</button>` : ""}</div>
+      ${promo?.img ? `<button class="btn ghost" id="bnLinkSave">احفظ الرابط</button>` : ""}
+      <p class="hint">أفضل مقاس: صورة عريضة، مثل ١٢٠٠×٤٠٠.</p>
     </div>
 
     <div class="field"><span class="label">حظر لاعب</span>
@@ -571,7 +847,40 @@ VIEWS.admin = () => {
     banUser(document.getElementById("banName").value);
   });
   onAll("[data-unban]", b => unbanUser(b.dataset.unban));
+  on("bnFile", "change", async e => {
+    const f = e.target.files?.[0]; if (!f) return;
+    toast("نرفع البنر…");
+    try {
+      const img = await shrinkBanner(f);
+      const link = document.getElementById("bnLink").value.trim();
+      await setDoc(doc(db, "config", "banner"), { img, link: /^https:\/\//.test(link) ? link : "", at: serverTimestamp() });
+      toast("انرفع البنر 👌");
+    } catch (err) { console.error(err); toast("ما قدرنا نرفع البنر، جرّب صورة ثانية"); }
+  });
+  on("bnLinkSave", "click", async () => {
+    const link = document.getElementById("bnLink").value.trim();
+    if (link && !/^https:\/\//.test(link)) return toast("الرابط لازم يبدأ بـ https://");
+    try { await updateDoc(doc(db, "config", "banner"), { link }); toast("انحفظ الرابط"); } catch (err) { console.error(err); }
+  });
+  on("bnDel", "click", async e => {
+    if (!confirmTap(e.currentTarget, "متأكد؟")) return;
+    try { await deleteDoc(doc(db, "config", "banner")); toast("انشال البنر"); } catch (err) { console.error(err); }
+  });
 };
+const safeJpeg = p => typeof p === "string" && p.startsWith("data:image/jpeg;base64,") ? p : "";
+async function shrinkBanner(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+    const W = Math.min(1200, img.naturalWidth), H = Math.round(img.naturalHeight * W / img.naturalWidth);
+    const c = document.createElement("canvas"); c.width = W; c.height = Math.min(H, 900);
+    c.getContext("2d").drawImage(img, 0, 0, W, H);
+    let q = .85, out = c.toDataURL("image/jpeg", q);
+    while (out.length > 600000 && q > .35) { q -= .1; out = c.toDataURL("image/jpeg", q); }
+    if (out.length > 900000) throw new Error("big");
+    return out;
+  } finally { URL.revokeObjectURL(url); }
+}
 
 VIEWS.loading = () => { V.innerHTML = `<div class="spinner" aria-label="جاري التحميل"></div>`; };
 
@@ -824,6 +1133,32 @@ VIEWS.rename = () => {
   });
 };
 
+/* ================= الترحيب وشرح اللعبة ================= */
+const SLIDES = [
+  { art: "local", t: "أهلًا فيك في جلسة 👋", d: "ألعاب جلسات عربية تلعبها مع أصحابك. خلنا نوريك كيف تمشي في دقيقة." },
+  { art: "create", t: "العب أونلاين", d: "سوّ غرفة، وأرسل الكود أو رابط الدعوة لأصحابك. كل واحد يلعب من جواله." },
+  { art: "imp", t: "الألعاب", d: "الدخيل، مين أكثر واحد، إنسان حيوان نبات جماد، وخمسة بعشر. تلقاها كلها في الصفحة الرئيسية تحت «الألعاب»." },
+  { art: "friends", t: "أصحابك والرسائل", d: "من زر «أضف صديق» فوق، أضف أصحابك بيوزراتهم. وبعدها تقدر تراسلهم في الخاص 💬، وتسولف معهم في شات الغرفة." },
+  { art: "five", t: "بجوال واحد", d: "ما عندكم نت أو قاعدين مع بعض؟ العبوا كل الألعاب على جوال واحد يتمرر بينكم." }
+];
+VIEWS.welcome = () => {
+  const i = Math.min(ui.slide || 0, SLIDES.length - 1), sl = SLIDES[i], last = i === SLIDES.length - 1;
+  V.innerHTML = `<section class="welcome">
+    <div class="wl-top"><span class="wl-step">${ar(i + 1)} / ${ar(SLIDES.length)}</span>${last ? "" : `<button class="link" id="wlSkip">تخطي</button>`}</div>
+    <div class="wl-art pop">${ICONS[sl.art]}</div>
+    <h2 class="center">${sl.t}</h2>
+    <p class="lead center wl-d">${sl.d}</p>
+    <div class="wl-dots" aria-hidden="true">${SLIDES.map((_, k) => `<i class="${k === i ? "on" : ""}"></i>`).join("")}</div>
+    <div class="foot">
+      <button class="btn" id="wlNext">${last ? "يلا نبدأ 🎉" : "التالي"}</button>
+      ${i > 0 ? `<button class="btn ghost" id="wlPrev">السابق</button>` : ""}
+    </div></section>`;
+  const done = () => { store.set("welcomed:" + me?.uid, true); ui.slide = 0; afterLogin(); };
+  on("wlSkip", "click", done);
+  on("wlNext", "click", () => { if (last) done(); else { ui.slide = i + 1; render(true); } });
+  on("wlPrev", "click", () => { ui.slide = i - 1; render(true); });
+};
+
 const UNAME_HINT = "حروف إنجليزية وأرقام و _ و - ، من ٣ إلى ٢٠ خانة، وفيه حرف كبير واحد على الأقل.";
 
 VIEWS.username = () => {
@@ -855,7 +1190,7 @@ VIEWS.username = () => {
     try {
       await claimUsername(name);
       me.username = name;
-      startGlobal(); afterLogin();
+      startGlobal(); ui.slide = 0; go("welcome");
     } catch (e) {
       btn.disabled = false; btn.textContent = "اعتمد اليوزر";
       if (e?.code === "taken") { msg.className = "hint msg-bad"; msg.textContent = "@" + name + " محجوز، جرّب غيره"; }
@@ -886,10 +1221,18 @@ VIEWS.home = () => {
     ${onl.length ? `<div class="field"><span class="label">أونلاين الحين (${ar(onl.length)})</span>
       <div class="onl">${onl.map(([u, f]) => `<button class="onl-i" data-pf="${esc(u)}">${avatar(f.username, f.photo, 48)}<i class="dot on"></i><span dir="ltr">${esc(f.username)}</span></button>`).join("")}</div></div>` : ""}
 
-    <button class="mode wide" id="local"><span class="glyph">${ICONS.local}</span><b>بجوال واحد</b><span>الدخيل، مين أكثر واحد، خمسة بعشر. مرّروا الجوال بينكم.</span></button>
+    <div class="field"><div class="row-h"><span class="label">الألعاب</span><span class="hint">اضغط أي لعبة</span></div>
+      <div class="games">${CATALOG.map(g => `<button class="gcard" data-game-card="${g.id}">
+        <span class="gc-ic">${ICONS[g.icon]}</span>
+        <b>${g.title}</b>
+        <span class="gc-tags">${g.online ? `<i class="t-on">أونلاين</i>` : ""}${g.local ? `<i class="t-lo">بجوال واحد</i>` : ""}</span>
+      </button>`).join("")}</div></div>
+
+    <button class="mode wide" id="local"><span class="glyph">${ICONS.local}</span><b>بجوال واحد</b><span>كل الألعاب على جوال واحد يتمرر بينكم.</span></button>
   </section>`;
   on("hProf", "click", () => go("profile"));
   on("create", "click", () => roomCode ? go("room") : createRoom());
+  onAll("[data-game-card]", b => gameSheet(b.dataset.gameCard));
   on("joinBtn", "click", () => { ui.showJoin = true; const f = document.getElementById("joinF"); f.hidden = false; document.getElementById("code").focus(); });
   on("joinF", "submit", e => { e.preventDefault(); joinRoom(document.getElementById("code").value); });
   onAll("[data-pf]", b => showProfile(b.dataset.pf));
@@ -897,26 +1240,65 @@ VIEWS.home = () => {
 };
 
 // بطاقة بروفايل لاعب ثاني
+function gameSheet(id) {
+  const g = CATALOG.find(c => c.id === id); if (!g) return;
+  document.getElementById("gSheet")?.remove();
+  const el = document.createElement("div");
+  el.id = "gSheet"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", g.title);
+  el.innerHTML = `<div class="sheet">
+    <span class="gs-ic">${ICONS[g.icon]}</span>
+    <b class="pf-name">${g.title}</b>
+    <p class="pf-bio">${g.desc}</p>
+    ${g.online ? `<button class="btn" id="gsOn">العب أونلاين مع أصحابك</button>` : ""}
+    ${g.local ? `<button class="btn ${g.online ? "ghost" : ""}" id="gsLo">العب بجوال واحد</button>` : ""}
+    <button class="btn ghost" id="gsX">إغلاق</button></div>`;
+  document.body.appendChild(el);
+  const close = () => el.remove();
+  el.addEventListener("click", e => { if (e.target === el) close(); });
+  el.querySelector("#gsX").addEventListener("click", close);
+  el.querySelector("#gsOn")?.addEventListener("click", () => {
+    close();
+    if (!me?.username) { toast("سجّل دخول عشان تلعب أونلاين"); go("auth"); return; }
+    if (roomCode) { if (isHost() && room?.phase === "lobby") setRoom({ game: id }); go("room"); return; }
+    createRoom(id);
+  });
+  el.querySelector("#gsLo")?.addEventListener("click", () => { close(); L.mostPrompt = null; L.fivePrompt = null; L.letter = null; go(g.local); });
+}
+
 function showProfile(uid) {
-  const p = prof(uid); if (!p) return;
+  if (uid === me?.uid) { go("profile"); return; }
+  const p = prof(uid); if (!p) { toast("لحظة…"); return; }
   document.getElementById("pfModal")?.remove();
   const el = document.createElement("div");
-  el.id = "pfModal"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true");
+  el.id = "pfModal"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "بروفايل " + p.username);
   const f = friends.get(uid);
-  el.innerHTML = `<div class="sheet">
-    ${avatar(p.username, p.photo, 96)}
-    <b class="pf-name" dir="ltr">${at(p.username)}</b>
-    ${f ? `<span class="hint">${isOnline(f) ? "🟢 أونلاين" : "مو أونلاين"}</span>` : ""}
-    ${p.bio ? `<p class="pf-bio">${esc(p.bio)}</p>` : `<p class="hint">ما كتب نبذة للحين.</p>`}
-    <div class="row">
-      ${f && roomCode && !room?.players?.[uid] ? `<button class="btn" id="pfInv">اعزمه لغرفتك</button>` : ""}
-      <button class="btn ghost" id="pfClose">سكّر</button>
+  const sent = reqOut.some(r => r.to === uid), got = reqIn.some(r => r.from === uid);
+  const col = avColor(p.username);
+  let acts = "";
+  if (f) {
+    acts += `<button class="btn" id="pfMsg">💬 رسالة</button>`;
+    if (roomCode && !room?.players?.[uid]) acts += `<button class="btn ghost" id="pfInv">اعزمه لغرفتك</button>`;
+  } else if (got) acts += `<button class="btn good" id="pfAcc">اقبل طلب الصداقة</button>`;
+  else if (sent) acts += `<button class="btn ghost" disabled>انرسل طلب الصداقة ✓</button>`;
+  else acts += `<button class="btn" id="pfAdd">+ أضف صديق</button>`;
+  el.innerHTML = `<div class="pcard">
+    <div class="pcard-cover" style="--c:${col}" aria-hidden="true"><span class="pc-sadu"></span></div>
+    <div class="pcard-av">${avatar(p.username, p.photo, 104)}</div>
+    <div class="pcard-body">
+      <b class="pf-name" dir="ltr">${at(p.username)}</b>
+      ${f ? `<span class="chip-st ${isOnline(f) ? "on" : ""}">${isOnline(f) ? "أونلاين الحين" : "مو أونلاين"}</span>` : ""}
+      ${p.bio ? `<p class="pcard-bio">${esc(p.bio)}</p>` : ""}
+      <div class="pcard-acts">${acts}</div>
+      <button class="btn ghost" id="pfClose">إغلاق</button>
     </div></div>`;
   document.body.appendChild(el);
   const close = () => el.remove();
   el.addEventListener("click", e => { if (e.target === el) close(); });
   el.querySelector("#pfClose").addEventListener("click", close);
   el.querySelector("#pfInv")?.addEventListener("click", () => { sendInvite(uid); close(); });
+  el.querySelector("#pfMsg")?.addEventListener("click", () => { close(); openDm(uid); });
+  el.querySelector("#pfAcc")?.addEventListener("click", () => { acceptRequest(uid); close(); });
+  el.querySelector("#pfAdd")?.addEventListener("click", () => { sendRequest(p.username); close(); });
   el.querySelector("#pfClose").focus({ preventScroll: true });
 }
 
@@ -959,7 +1341,8 @@ VIEWS.profile = () => {
       <div class="li"><span class="nm" dir="ltr">@${esc(me.username)}</span><button class="btn small ghost" id="copy">انسخ</button>${isOwner() ? "" : `<button class="btn small ghost" id="rename">غيّر</button>`}</div>
       <p class="hint">أرسله لأصحابك عشان يضيفونك.</p></div>
 
-    <div class="foot"><button class="btn ghost" id="out">تسجيل خروج</button></div></section>`;
+    <div class="foot"><button class="btn ghost" id="tour">شرح اللعبة</button><button class="btn ghost" id="out">تسجيل خروج</button></div></section>`;
+  on("tour", "click", () => { ui.slide = 0; go("welcome"); });
   const bio = document.getElementById("bio"), save = document.getElementById("saveBio");
   bio.addEventListener("input", () => {
     ui.bioDraft = bio.value;
@@ -1005,6 +1388,7 @@ VIEWS.friends = () => {
     ${list.length ? `<div class="list">${list.map(([uid, f]) => `
       <div class="li"><button class="li-who" data-pf="${esc(uid)}"><span class="av-wrap">${avatar(f.username, f.photo, 40)}<i class="dot ${isOnline(f) ? "on" : ""}" title="${isOnline(f) ? "أونلاين" : "مو أونلاين"}"></i></span>
       <span class="who-t"><span class="nm" dir="ltr">${at(f.username)}</span>${f.bio ? `<span class="who-bio">${esc(f.bio)}</span>` : ""}</span></button>
+      <button class="btn small ghost" data-msg="${esc(uid)}" aria-label="رسالة">💬</button>
       ${roomCode && !room?.players?.[uid] ? `<button class="btn small" data-inv="${esc(uid)}">اعزمه</button>` : ""}
       <button class="btn small ghost" data-rm="${esc(uid)}">حذف</button></div>`).join("")}</div>`
       : `<p class="hint">ما عندك أصدقاء للحين. اكتب يوزر صديقك فوق وأرسل له طلب.</p>`}</div>
@@ -1016,6 +1400,7 @@ VIEWS.friends = () => {
   on("addF", "submit", e => { e.preventDefault(); sendRequest(document.getElementById("addName").value); });
   onAll("[data-acc]", b => acceptRequest(b.dataset.acc));
   onAll("[data-pf]", b => showProfile(b.dataset.pf));
+  onAll("[data-msg]", b => openDm(b.dataset.msg));
   onAll("[data-dec]", b => deleteDoc(doc(db, "friendRequests", b.dataset.dec + "_" + me.uid)).catch(err));
   onAll("[data-can]", b => deleteDoc(doc(db, "friendRequests", me.uid + "_" + b.dataset.can)).catch(err));
   onAll("[data-inv]", b => { b.disabled = true; sendInvite(b.dataset.inv); });
@@ -1047,16 +1432,34 @@ function votedCount() {
   return Object.entries(votes).filter(([u, v]) => v.round === room.round && ps.includes(u)).length;
 }
 const statusBar = () => `<div class="status"><span>الغرفة <b dir="ltr">${esc(roomCode)}</b> · ${GAMES[room.game] || ""}</span><span>الجولة ${ar(room.round || 0)}</span></div>`;
-const leaveBtn = () => `<button class="btn ghost" id="leave">${isHost() ? "أنهِ الغرفة" : "اطلع من الغرفة"}</button>`;
+const leaveBtn = () => `<button class="btn ghost" id="leave">${isHost() ? "إنهاء الغرفة" : "خروج من الغرفة"}</button>`;
 function bindLeave() { on("leave", "click", e => { if (confirmTap(e.currentTarget)) leaveRoom(); }); }
 
 VIEWS.room = () => {
   if (!room) { V.innerHTML = `<div class="spinner" aria-label="جاري التحميل"></div>`; return; }
+  if (room.phase === "hq") { if (!subs.has("hdone")) watchHhnjDone(); } else if (subs.has("hdone")) { off("hdone"); ui.hDoneCount = 0; }
   const view = ROOM_VIEWS[room.phase] || ROOM_VIEWS.lobby;
   view();
+  showChatFab();
   bindLeave();
   onAll("[data-vote]", b => vote(b.dataset.vote));
 };
+
+function hhnjTick() {
+  if (screen !== "room" || room?.phase !== "hq") { clearInterval(ui.hTimer); ui.hTimer = null; return; }
+  const ms = room.deadline - Date.now(), left = Math.max(0, Math.ceil(ms / 1000));
+  const bar = document.getElementById("hBar"), lt = document.getElementById("hLeft");
+  if (bar) bar.style.transform = `scaleX(${Math.max(0, ms) / (HHNJ_SECS * 1000)})`;
+  if (lt) lt.textContent = left ? `باقي ${ar(left)} ثانية` : "خلص الوقت!";
+  if (!left && ui.hDoneRound !== room.round && roundPlayers().includes(me.uid)) { ui.hDoneRound = room.round; submitHhnj(true).then(() => render(false)); }
+  if (isHost() && (ms < -3000 || (ui.hDoneCount || 0) >= roundPlayers().length)) revealHhnj();
+}
+function watchHhnjDone() {
+  sub("hdone", onSnapshot(collection(db, "rooms", roomCode, "answers"), q => {
+    let n = 0; q.forEach(d => { const v = d.data(); if (v.round === room?.round && v.done) n++; });
+    if (n !== ui.hDoneCount) { ui.hDoneCount = n; if (screen === "room" && room?.phase === "hq") render(false); }
+  }, () => {}));
+}
 
 const ROOM_VIEWS = {
   lobby() {
@@ -1081,7 +1484,7 @@ const ROOM_VIEWS = {
         <div class="li"><i class="dot on"></i><span class="nm" dir="ltr">${at(f.username)}</span><button class="btn small" data-inv="${esc(u)}">اعزمه</button></div>`).join("")}</div></div>` : ""}
       ${hasScores ? `<div class="field"><span class="label">النقاط</span>${scoreBoard(ps)}</div>` : ""}
       <div class="foot">
-        ${host ? `<button class="btn" id="start" ${n < 3 ? "disabled" : ""}>${n < 3 ? "تحتاجون ٣ لاعبين على الأقل" : "ابدأ"}</button>` : ""}
+        ${host ? `<button class="btn" id="start" ${n < minPlayers(room.game) ? "disabled" : ""}>${n < minPlayers(room.game) ? `تحتاجون ${ar(minPlayers(room.game))} لاعبين على الأقل` : "ابدأ"}</button>` : ""}
         ${leaveBtn()}
       </div></section>`;
     on("copyLink", "click", () => copyText(location.origin + location.pathname + "?r=" + roomCode, "انسخ رابط الدعوة"));
@@ -1090,7 +1493,7 @@ const ROOM_VIEWS = {
     onAll("[data-game]", b => setRoom({ game: b.dataset.game }));
     onAll("[data-cat]", b => setRoom({ cat: b.dataset.cat }));
     onAll("[data-imps]", b => setRoom({ imps: Number(b.dataset.imps) }));
-    on("start", "click", () => room.game === "most" ? startMost() : startImp());
+    on("start", "click", () => ({ most: startMost, hhnj: startHhnj }[room.game] || startImp)());
   },
 
   reveal() {
@@ -1136,16 +1539,62 @@ const ROOM_VIEWS = {
       <div class="card ${r.caught ? "safe" : "imposter"} pop">
         <span class="eyebrow">${r.caught ? "مسكتوا الدخيل!" : "الدخيل نجا!"}</span>
         <span class="big" dir="ltr">${imps.map(u => at(pname(u))).join(" و ")}</span>
-        <span class="hint">الكلمة كانت: <b>${esc(r.word)}</b>${r.guessed ? " · الدخيل خمّنها" : ""}</span></div>
+        <span class="hint">${r.wordShown ? `الكلمة كانت: <b>${esc(r.word)}</b>${r.guessed ? " · الدخيل خمّنها ✓" : " · ما خمّنها"}` : "الدخيل يحاول يخمّن الكلمة… 🤔"}</span></div>
       <div class="field"><span class="label">الأصوات</span>${tallyList(r.tally || {}, ps)}</div>
       <div class="field"><span class="label">النقاط</span>${scoreBoard(order())}</div>
       <div class="foot">${isHost() ? `
-        ${r.guessed ? "" : `<button class="btn ghost" id="guessed">الدخيل خمّن الكلمة صح (+١)</button>`}
+        ${r.wordShown ? "" : `<p class="hint center">خلّوا الدخيل يقول وش يتوقع الكلمة، وبعدها:</p>
+        <div class="row"><button class="btn good" id="guessed">خمّن صح (+١)</button><button class="btn danger" id="notGuessed">خمّن غلط</button></div>`}
         <button class="btn" id="again">جولة جديدة</button>
-        <button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يبدأ الجولة الجاية.</p>`}
+        <button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">${r.wordShown ? "المضيف يبدأ الجولة الجاية." : "الدخيل يخمّن الكلمة الحين…"}</p>`}
         ${leaveBtn()}</div></section>`;
     on("guessed", "click", impGuessed);
+    on("notGuessed", "click", () => setRoom({ "result.wordShown": true }));
     on("again", "click", startImp);
+    on("lobby", "click", () => setRoom({ phase: "lobby" }));
+  },
+
+  hq() {
+    const ps = roundPlayers(), left = Math.max(0, Math.ceil((room.deadline - Date.now()) / 1000));
+    const mineDone = ui.hDoneRound === room.round;
+    const inRound = ps.includes(me.uid);
+    V.innerHTML = `<section>${statusBar()}
+      <div class="hletter pop"><span class="eyebrow">الحرف</span><span class="hl">${esc(room.letter)}</span>
+        <div class="timer" aria-hidden="true"><i id="hBar" style="transform:scaleX(${left / HHNJ_SECS})"></i></div>
+        <span class="hint" id="hLeft">باقي ${ar(left)} ثانية</span></div>
+      ${inRound ? `<form class="hform" id="hF" autocomplete="off">
+        ${HCATS.map((c, i) => `<label class="hrow"><span>${c}</span><input class="txt" id="h${i}" maxlength="40" ${mineDone || !left ? "disabled" : ""} placeholder="${esc(room.letter)}…"></label>`).join("")}
+        <button class="btn" id="hDone" ${mineDone || !left ? "disabled" : ""}>${mineDone ? "انرسلت ✓ ننتظر الباقين" : "خلصت ✋"}</button>
+      </form>` : `<p class="hint">انتظر الجولة الجاية.</p>`}
+      <p class="hint center">خلص ${ar(ui.hDoneCount || 0)} من ${ar(ps.length)}</p>
+      <div class="foot">${isHost() ? `<button class="btn ghost" id="hNow">اكشف الأجوبة الحين</button>` : ""}${leaveBtn()}</div></section>`;
+    if (ui.hAns && ui.hAns.round === room.round) ui.hAns.a.forEach((v, i) => { const el = document.getElementById("h" + i); if (el && !el.value) el.value = v; });
+    V.querySelectorAll(".hrow input").forEach(inp => inp.addEventListener("input", () => {
+      ui.hAns = { round: room.round, a: [0, 1, 2, 3].map(i => document.getElementById("h" + i).value) };
+    }));
+    on("hF", "submit", async e => { e.preventDefault(); ui.hDoneRound = room.round; await submitHhnj(true); render(false); });
+    on("hNow", "click", e => { if (!confirmTap(e.currentTarget, "باقي ناس ما خلصوا، اكشف؟")) return; revealHhnj(); });
+    if (!ui.hTimer) ui.hTimer = setInterval(hhnjTick, 500);
+  },
+
+  hres() {
+    const r = room.result || {}, rows = r.rows || {}, rej = r.rej || {};
+    const ids = Object.keys(rows).sort((a, b) => rows[b].total - rows[a].total);
+    V.innerHTML = `<section>${statusBar()}
+      <div class="row-h"><h2>النتيجة · حرف <span class="hl-s">${esc(room.letter)}</span></h2></div>
+      ${isHost() ? `<p class="hint">اضغط على أي جواب غلط عشان تلغيه (يصير صفر).</p>` : ""}
+      <div class="htable">${ids.map(u => `<div class="hcard">
+        <div class="hc-top">${avatar(pname(u), prof(u)?.photo, 32)}<span class="nm" dir="ltr">${at(pname(u))}</span><span class="hc-tot">+${ar(rows[u].total)}</span></div>
+        <div class="hc-ans">${HCATS.map((c, i) => {
+          const a = rows[u].a[i] || "", p = rows[u].p[i] || 0, x = rej[u + "_" + i];
+          return `<button class="ha ${x ? "rej" : p === 10 ? "p10" : p === 5 ? "p5" : "p0"}" ${isHost() && a ? `data-rej="${esc(u)}|${i}"` : "disabled"}>
+            <span class="ha-c">${c}</span><span class="ha-a">${a ? esc(a) : "—"}</span><span class="ha-p">${ar(p)}</span></button>`;
+        }).join("")}</div></div>`).join("")}</div>
+      <p class="hint">١٠ = جواب صح ومحد كتبه غيرك · ٥ = صح بس فيه أحد كاتبه · ٠ = فاضي أو ما يبدأ بالحرف</p>
+      <div class="field"><span class="label">النقاط</span>${scoreBoard(order())}</div>
+      <div class="foot">${isHost() ? `<button class="btn" id="again">حرف جديد</button><button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يبدأ الجولة الجاية.</p>`}${leaveBtn()}</div></section>`;
+    onAll("[data-rej]", b => { const [u, i] = b.dataset.rej.split("|"); toggleReject(u, Number(i)); });
+    on("again", "click", startHhnj);
     on("lobby", "click", () => setRoom({ phase: "lobby" }));
   },
 
@@ -1198,12 +1647,14 @@ VIEWS.local = () => {
       <button class="mode" id="m1"><span class="glyph">${ICONS.imp}</span><b>الدخيل</b><span>الكل يعرف الكلمة إلا واحد. اكشفوه قبل ما يكشف الكلمة.</span></button>
       <button class="mode" id="m2"><span class="glyph">${ICONS.most}</span><b>مين أكثر واحد؟</b><span>سؤال على الشاشة، وعلى العد الكل يأشر على واحد.</span></button>
       <button class="mode" id="m3"><span class="glyph">${ICONS.five}</span><b>خمسة بعشر</b><span>اذكر خمسة أشياء من الفئة خلال عشر ثواني.</span></button>
+      <button class="mode" id="m4"><span class="glyph">${ICONS.hhnj}</span><b>إنسان حيوان نبات جماد</b><span>حرف عشوائي ومؤقت. اكتبوا بالورقة والقلم.</span></button>
     </div>
     <div class="foot"><button class="btn ghost" id="ls">النقاط</button></div></section>`;
   on("roster", "click", () => go("l-players"));
   on("m1", "click", () => go("l-imp"));
   on("m2", "click", () => { L.mostPrompt = null; go("l-most"); });
   on("m3", "click", () => { L.fivePrompt = null; go("l-five"); });
+  on("m4", "click", () => { L.letter = null; go("l-hhnj"); });
   on("ls", "click", () => go("l-scores"));
 };
 
@@ -1278,14 +1729,16 @@ VIEWS["l-play"] = () => {
   }
   const ids = [...r.imps].sort((a, b) => a - b);
   V.innerHTML = `<section><div class="card imposter pop"><span class="eyebrow">${ids.length > 1 ? "الدخلاء" : "الدخيل"}</span>
-    <span class="big">${ids.map(k => esc(lname(k))).join(" و ")}</span><span class="hint">الكلمة كانت: <b>${esc(r.word)}</b></span></div>
+    <span class="big">${ids.map(k => esc(lname(k))).join(" و ")}</span><span class="hint">${r.wordShown ? `الكلمة كانت: <b>${esc(r.word)}</b>${r.guessed ? " · خمّنها ✓" : ""}` : "الكلمة مخفية لين يخمّن الدخيل 🤔"}</span></div>
     <div class="foot"><p class="hint center">وش صار في التصويت؟</p>
     <div class="row"><button class="btn good" id="c" ${r.scored ? "disabled" : ""}>مسكناه</button><button class="btn danger" id="e" ${r.scored ? "disabled" : ""}>نجا منّا</button></div>
-    <button class="btn ghost" id="g" ${r.guessed ? "disabled" : ""}>الدخيل خمّن الكلمة صح (+١)</button>
+    ${r.wordShown ? "" : `<p class="hint center">الدخيل يقول وش يتوقع الكلمة:</p>
+    <div class="row"><button class="btn ghost" id="g">خمّن صح (+١)</button><button class="btn ghost" id="gn">خمّن غلط</button></div>`}
     <button class="btn ghost" id="ag">جولة جديدة</button></div></section>`;
   on("c", "click", () => { if (r.scored) return; for (let k = 0; k < L.count; k++) if (!r.imps.includes(k)) laddScore(k, 1); r.scored = true; toast("+١ لكل اللي مسكوه"); render(true); });
   on("e", "click", () => { if (r.scored) return; ids.forEach(k => laddScore(k, 2)); r.scored = true; toast("+٢ للدخيل"); render(true); });
-  on("g", "click", () => { ids.forEach(k => laddScore(k, 1)); r.guessed = true; toast("+١ للدخيل"); render(true); });
+  on("g", "click", () => { ids.forEach(k => laddScore(k, 1)); r.guessed = true; r.wordShown = true; toast("+١ للدخيل"); render(true); });
+  on("gn", "click", () => { r.wordShown = true; render(true); });
   on("ag", "click", lNewRound);
 };
 
@@ -1330,11 +1783,50 @@ VIEWS["l-five"] = () => {
   });
 };
 
+VIEWS["l-hhnj"] = () => {
+  if (!L.letter) L.letter = pick(LETTERS);
+  const SECS = 60;
+  V.innerHTML = `<section>
+    <div class="hletter pop"><span class="eyebrow">الحرف</span><span class="hl">${esc(L.letter)}</span>
+      <div class="timer" aria-hidden="true"><i id="bar"></i></div><span class="count" id="sec">${ar(SECS)}</span></div>
+    <div class="hcats">${HCATS.map(c => `<span>${c}</span>`).join("")}</div>
+    <p class="hint center">كل واحد يكتب بورقته أربع كلمات تبدأ بالحرف. ١٠ نقاط للجواب اللي محد كتبه، و٥ لو تكرر.</p>
+    <div class="foot" id="ff"><button class="btn" id="go">ابدأ الوقت</button><button class="btn ghost" id="nl">حرف ثاني</button></div></section>`;
+  on("nl", "click", () => { stopLocalTimers(); L.letter = null; render(true); });
+  on("go", "click", () => {
+    document.getElementById("go").disabled = true;
+    const t0 = performance.now(), dur = SECS * 1000;
+    const tick = now => {
+      const left = Math.max(0, dur - (now - t0));
+      const bar = document.getElementById("bar"), sec = document.getElementById("sec");
+      if (!bar) return;
+      bar.style.transform = `scaleX(${left / dur})`;
+      sec.textContent = left > 0 ? ar(Math.ceil(left / 1000)) : "وقّفوا! ✋";
+      if (left > 0) { L.raf = requestAnimationFrame(tick); return; }
+      L.raf = null;
+      document.getElementById("ff").innerHTML = `<button class="btn" id="nl2">حرف جديد</button>`;
+      on("nl2", "click", () => { L.letter = null; render(true); });
+    };
+    L.raf = requestAnimationFrame(tick);
+  });
+};
+
 // ابقِ الشاشة شغالة أثناء اللعب لو الجهاز يسمح
 let wakeLock = null;
 document.addEventListener("click", async () => {
   try { if ("wakeLock" in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => wakeLock = null); } } catch (e) {}
 });
+
+/* ================= الزوار بدون حساب (للإحصائيات) ================= */
+function startGuest(uid) {
+  guestUid = uid;
+  const ping = async () => {
+    try { await updateDoc(doc(db, "guests", uid), { lastSeen: serverTimestamp() }); }
+    catch (e) { setDoc(doc(db, "guests", uid), { firstSeen: serverTimestamp(), lastSeen: serverTimestamp() }).catch(() => {}); }
+  };
+  ping(); guestTimer = setInterval(ping, 60000);
+}
+function stopGuest() { clearInterval(guestTimer); guestTimer = null; guestUid = null; }
 
 /* ================= start ================= */
 if (configured) {
@@ -1343,9 +1835,23 @@ if (configured) {
     announce = s.exists() ? s.data() : null; renderBanner(); if (screen === "admin") render(false);
   }, err);
   getRedirectResult(auth).catch(() => {});
+  onSnapshot(doc(db, "config", "banner"), s => {
+    promo = s.exists() ? s.data() : null; renderBanner(); if (screen === "admin") render(false);
+  }, err);
+  const GUEST_OK = new Set(["auth", "email", "forgot", "local", "setup", "l-players", "l-imp", "l-pass", "l-play", "l-most", "l-five", "l-scores", "l-hhnj"]);
   onAuthStateChanged(auth, async user => {
-    stopGlobal();
-    if (!user) { me = null; go("auth"); return; }
+    stopGlobal(); stopGuest();
+    if (!user) {
+      me = null;
+      if (!GUEST_OK.has(screen)) go("auth");
+      signInAnonymously(auth).catch(() => {});
+      return;
+    }
+    if (user.isAnonymous) {
+      me = null; startGuest(user.uid);
+      if (!GUEST_OK.has(screen)) go("auth"); else renderHeader();
+      return;
+    }
     try {
       const s = await getDoc(doc(db, "users", user.uid));
       if (!s.exists()) { me = { uid: user.uid }; go("username"); return; }

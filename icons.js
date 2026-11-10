@@ -4,6 +4,20 @@ const shine = `<path d="M6 18 Q6 6 18 6 H46 Q30 10 6 30Z" fill="#fff" opacity=".
 const wrap = s => `<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">${s}</svg>`;
 
 export const ICONS = {
+  // إنسان حيوان نبات جماد: بلاطات حروف
+  hhnj: wrap(bg("gHh", "#c9b8ff", "#6b4fd8") + shine + `
+    <g transform="rotate(-8 32 32)">
+      <rect x="9" y="14" width="22" height="22" rx="5" fill="#fff8ec"/>
+      <text x="20" y="31" text-anchor="middle" font-family="Lalezar,Tahoma,sans-serif" font-size="17" fill="#1c1530">ح</text>
+    </g>
+    <g transform="rotate(7 32 32)">
+      <rect x="33" y="12" width="22" height="22" rx="5" fill="#ffd36b"/>
+      <text x="44" y="29" text-anchor="middle" font-family="Lalezar,Tahoma,sans-serif" font-size="17" fill="#1c1530">ن</text>
+    </g>
+    <rect x="20" y="36" width="24" height="16" rx="4" fill="#1c1530"/>
+    <path d="M25 44 h14" stroke="#8ef0cf" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="50" cy="48" r="7" fill="#ef6f6c"/><path d="M50 44 v4 l3 2" stroke="#fff8ec" stroke-width="2" fill="none" stroke-linecap="round"/>`),
+
   // غرفة جديدة: باب مجلس مفتوح ونجمة +
   create: wrap(bg("gCreate", "#ffcf5c", "#f08a24") + shine + `
     <rect x="16" y="14" width="28" height="40" rx="14" fill="#2b1d4a"/>
