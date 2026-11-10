@@ -9,9 +9,9 @@ import {
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
   getCountFromServer, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=10";
-import { WORDS, MOST, FIVE } from "./content.js?v=10";
-import { ICONS } from "./icons.js?v=10";
+import { firebaseConfig, authUrl } from "./firebase-config.js?v=11";
+import { WORDS, MOST, FIVE } from "./content.js?v=11";
+import { ICONS } from "./icons.js?v=11";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -115,7 +115,7 @@ function onAll(sel, fn) { V.querySelectorAll(sel).forEach(el => el.addEventListe
 
 const BACK = {
   friends: "home", profile: "home", admin: "home",
-  email: "auth",
+  email: "auth", forgot: () => (ui.emailMode = "login", "email"),
   local: () => me?.username ? "home" : (configured ? "auth" : "setup"),
   "l-players": "local", "l-imp": "local", "l-pass": "local", "l-play": "local",
   "l-most": "local", "l-five": "local", "l-scores": "local"
@@ -600,30 +600,19 @@ const EYE_ON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7
 const EYE_OFF = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/><path d="M4 4l16 16" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`;
 const eyeBtn = id => `<button type="button" class="eye" data-for="${id}" aria-label="إظهار كلمة السر" aria-pressed="false">${EYE_ON}</button>`;
 
-VIEWS.email = () => {
-  const signup = ui.emailMode !== "login";
-  V.innerHTML = `<section>
-    <div><h2>${signup ? "سوّ حساب جديد" : "سجّل دخول"}</h2>
-    <p class="lead">${signup ? "بعدها تختار يوزرك وتبدأ تضيف أصحابك." : "ادخل بالإيميل وكلمة السر اللي سجلت فيها."}</p></div>
-    <div class="tabs" role="tablist">
-      <button class="tab" role="tab" id="tSignup" aria-selected="${signup}">حساب جديد</button>
-      <button class="tab" role="tab" id="tLogin" aria-selected="${!signup}">عندي حساب</button>
-    </div>
-    <form class="field" id="emailF" novalidate>
-      <label class="label" for="em">الإيميل</label>
-      <input class="txt" id="em" type="email" dir="ltr" autocomplete="email" autocapitalize="none" inputmode="email" placeholder="name@gmail.com">
-      <label class="label" for="pw">كلمة السر</label>
-      <div class="pwbox"><input class="txt" id="pw" type="password" dir="ltr" autocomplete="${signup ? "new-password" : "current-password"}" placeholder="${signup ? "مثال: Dalp2026" : ""}">${eyeBtn("pw")}</div>
-      ${signup ? `<p class="hint" id="pwHint">٨ خانات أو أكثر، وفيها حرف إنجليزي كبير واحد على الأقل.</p>` : ""}
-      ${signup ? `<label class="label" for="pw2">أكّد كلمة السر</label>
-      <div class="pwbox"><input class="txt" id="pw2" type="password" dir="ltr" autocomplete="new-password">${eyeBtn("pw2")}</div>` : ""}
-      <p class="hint msg-bad" id="emMsg" role="alert"></p>
-      <button class="btn" id="emGo">${signup ? "سوّ الحساب" : "دخول"}</button>
-      ${signup ? "" : `<button type="button" class="link center" id="forgot">نسيت كلمة السر؟</button>`}
-    </form>
-    <div class="foot"><button class="btn ghost" id="gInstead"><span class="g-logo" aria-hidden="true">${GOOGLE_G}</span>أو كمّل بقوقل</button></div>
-  </section>`;
-  const msg = document.getElementById("emMsg");
+async function callAuth(body) {
+  const r = await fetch(authUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  return { ok: r.ok, ...data };
+}
+const LOGIN_ERR = {
+  bad: "اليوزر أو كلمة السر غلط.",
+  google: "هذا الحساب مسجّل بقوقل. ادخل بزر قوقل.",
+  tooMany: "محاولات كثيرة. انتظر شوي وجرّب مرة ثانية.",
+  disabled: "هذا الحساب موقوف."
+};
+
+function bindEyes() {
   V.querySelectorAll(".eye").forEach(b => b.addEventListener("click", () => {
     const inp = document.getElementById(b.dataset.for);
     const show = inp.type === "password";
@@ -632,6 +621,40 @@ VIEWS.email = () => {
     b.setAttribute("aria-label", show ? "إخفاء كلمة السر" : "إظهار كلمة السر");
     b.innerHTML = show ? EYE_OFF : EYE_ON;
   }));
+}
+
+VIEWS.email = () => {
+  const signup = ui.emailMode !== "login";
+  if (!ui.loginBy) ui.loginBy = authUrl ? "username" : "email";
+  const byUser = !signup && ui.loginBy === "username";
+  V.innerHTML = `<section>
+    <div><h2>${signup ? "سوّ حساب جديد" : "سجّل دخول"}</h2>
+    <p class="lead">${signup ? "بعدها تختار يوزرك وتبدأ تضيف أصحابك." : byUser ? "ادخل بيوزرك وكلمة السر." : "ادخل بالإيميل وكلمة السر اللي سجلت فيها."}</p></div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tSignup" aria-selected="${signup}">حساب جديد</button>
+      <button class="tab" role="tab" id="tLogin" aria-selected="${!signup}">عندي حساب</button>
+    </div>
+    <form class="field" id="emailF" novalidate>
+      ${byUser ? `<label class="label" for="un">اليوزر</label>
+      <div class="uinput"><span>@</span><input id="un" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="D-A-L-P"></div>`
+      : `<label class="label" for="em">الإيميل</label>
+      <input class="txt" id="em" type="email" dir="ltr" autocomplete="email" autocapitalize="none" inputmode="email" placeholder="name@gmail.com">`}
+      <label class="label" for="pw">كلمة السر</label>
+      <div class="pwbox"><input class="txt" id="pw" type="password" dir="ltr" autocomplete="${signup ? "new-password" : "current-password"}" placeholder="${signup ? "مثال: Dalp2026" : ""}">${eyeBtn("pw")}</div>
+      ${signup ? `<p class="hint" id="pwHint">٨ خانات أو أكثر، وفيها حرف إنجليزي كبير واحد على الأقل.</p>` : ""}
+      ${signup ? `<label class="label" for="pw2">أكّد كلمة السر</label>
+      <div class="pwbox"><input class="txt" id="pw2" type="password" dir="ltr" autocomplete="new-password">${eyeBtn("pw2")}</div>` : ""}
+      <p class="hint msg-bad" id="emMsg" role="alert"></p>
+      <button class="btn" id="emGo">${signup ? "سوّ الحساب" : "دخول"}</button>
+      ${signup ? "" : `<div class="links">
+        <button type="button" class="link" id="forgot">نسيت كلمة السر؟</button>
+        ${authUrl ? `<button type="button" class="link" id="switchBy">${byUser ? "نسيت اليوزر؟ ادخل بالإيميل" : "ادخل باليوزر"}</button>` : ""}
+      </div>`}
+    </form>
+    <div class="foot"><button class="btn ghost" id="gInstead"><span class="g-logo" aria-hidden="true">${GOOGLE_G}</span>أو كمّل بقوقل</button></div>
+  </section>`;
+  const msg = document.getElementById("emMsg");
+  bindEyes();
   const pwIn = document.getElementById("pw"), pwHint = document.getElementById("pwHint");
   if (pwHint) pwIn.addEventListener("input", () => {
     const v = pwIn.value, okLen = v.length >= PW_MIN, okUp = HAS_UPPER.test(v);
@@ -639,31 +662,78 @@ VIEWS.email = () => {
     pwHint.textContent = !v ? "٨ خانات أو أكثر، وفيها حرف إنجليزي كبير واحد على الأقل."
       : (okLen ? "✓ ٨ خانات" : "✗ ٨ خانات أو أكثر") + "  ·  " + (okUp ? "✓ حرف كبير" : "✗ حرف كبير (A-Z)");
   });
-  on("tSignup", "click", () => { ui.emailMode = "signup"; render(false); });
-  on("tLogin", "click", () => { ui.emailMode = "login"; render(false); });
+  on("tSignup", "click", () => { ui.emailMode = "signup"; render(true); });
+  on("tLogin", "click", () => { ui.emailMode = "login"; render(true); });
+  on("switchBy", "click", () => { ui.loginBy = byUser ? "email" : "username"; render(true); });
   on("gInstead", "click", login);
-  on("forgot", "click", async () => {
-    const em = document.getElementById("em").value.trim();
-    if (!em) { msg.textContent = "اكتب إيميلك فوق، وبعدها اضغط نسيت كلمة السر."; return; }
-    try { await sendPasswordResetEmail(auth, em); msg.className = "hint msg-ok"; msg.textContent = "أرسلنا لك رابط تغيير كلمة السر على الإيميل."; }
-    catch (e) { msg.className = "hint msg-bad"; msg.textContent = AUTH_ERR[e.code] || "ما قدرنا نرسل الرابط."; }
-  });
+  on("forgot", "click", () => go("forgot"));
   on("emailF", "submit", async e => {
     e.preventDefault();
     msg.className = "hint msg-bad"; msg.textContent = "";
-    const em = document.getElementById("em").value.trim();
     const pw = document.getElementById("pw").value;
+    const btn = document.getElementById("emGo");
+    const busy = on => { btn.disabled = on; btn.textContent = on ? "لحظة…" : (signup ? "سوّ الحساب" : "دخول"); };
+    if (byUser) {
+      const un = document.getElementById("un").value.trim().replace(/^@/, "");
+      if (!USER_RE.test(un)) { msg.textContent = "اكتب يوزرك صح."; return; }
+      if (!pw) { msg.textContent = "اكتب كلمة السر."; return; }
+      busy(true);
+      try {
+        const r = await callAuth({ action: "login", username: un, password: pw });
+        if (!r.ok || !r.email) { busy(false); msg.textContent = LOGIN_ERR[r.error] || "ما زبط، جرّب مرة ثانية."; return; }
+        await signInWithEmailAndPassword(auth, r.email, pw);
+      } catch (err) {
+        busy(false); msg.textContent = AUTH_ERR[err.code] || "فيه مشكلة في الاتصال، جرّب مرة ثانية.";
+      }
+      return;
+    }
+    const em = document.getElementById("em").value.trim();
     if (!/^\S+@\S+\.\S+$/.test(em)) { msg.textContent = AUTH_ERR["auth/invalid-email"]; return; }
     if (signup && (pw.length < PW_MIN || !HAS_UPPER.test(pw))) { msg.textContent = AUTH_ERR["auth/weak-password"]; return; }
     if (!signup && !pw) { msg.textContent = "اكتب كلمة السر."; return; }
     if (signup && pw !== document.getElementById("pw2").value) { msg.textContent = "كلمتين السر مو نفس بعض."; return; }
-    const btn = document.getElementById("emGo"); btn.disabled = true; btn.textContent = "لحظة…";
+    busy(true);
     try {
       if (signup) await createUserWithEmailAndPassword(auth, em, pw);
       else await signInWithEmailAndPassword(auth, em, pw);
     } catch (err) {
-      btn.disabled = false; btn.textContent = signup ? "سوّ الحساب" : "دخول";
-      msg.textContent = AUTH_ERR[err.code] || "ما زبط، جرّب مرة ثانية.";
+      busy(false); msg.textContent = AUTH_ERR[err.code] || "ما زبط، جرّب مرة ثانية.";
+    }
+  });
+};
+
+VIEWS.forgot = () => {
+  V.innerHTML = `<section>
+    <div><h2>نسيت كلمة السر؟</h2>
+    <p class="lead">اكتب ${authUrl ? "إيميلك أو يوزرك" : "إيميلك"}، ونرسل لك رابط تغيّر فيه كلمة السر.</p></div>
+    <form class="field" id="fgF" novalidate>
+      <label class="label" for="fg">${authUrl ? "الإيميل أو اليوزر" : "الإيميل"}</label>
+      <input class="txt" id="fg" dir="ltr" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="${authUrl ? "name@gmail.com أو D-A-L-P" : "name@gmail.com"}">
+      <p class="hint" id="fgMsg" role="status"></p>
+      <button class="btn" id="fgGo">أرسل الرابط</button>
+    </form>
+    <div class="foot"><button class="btn ghost" id="fgBack">رجوع لتسجيل الدخول</button></div>
+  </section>`;
+  const msg = document.getElementById("fgMsg"), btn = document.getElementById("fgGo");
+  on("fgBack", "click", () => { ui.emailMode = "login"; go("email"); });
+  on("fgF", "submit", async e => {
+    e.preventDefault();
+    const v = document.getElementById("fg").value.trim();
+    msg.className = "hint msg-bad";
+    const isEmail = v.includes("@") && /^\S+@\S+\.\S+$/.test(v);
+    if (!isEmail && !(authUrl && USER_RE.test(v.replace(/^@/, "")))) {
+      msg.textContent = authUrl ? "اكتب إيميلك أو يوزرك صح." : "اكتب إيميلك صح."; return;
+    }
+    btn.disabled = true; btn.textContent = "لحظة…";
+    try {
+      if (isEmail) await sendPasswordResetEmail(auth, v).catch(err => { if (err.code === "auth/too-many-requests" || err.code === "auth/network-request-failed") throw err; });
+      else { const r = await callAuth({ action: "reset", username: v.replace(/^@/, "") }); if (!r.ok) throw new Error("server"); }
+      msg.className = "hint msg-ok";
+      msg.textContent = "إذا الحساب موجود، بيوصلك إيميل فيه رابط تغيير كلمة السر خلال دقايق. شيّك على البريد المزعج (Spam) بعد.";
+      btn.textContent = "انرسل ✓";
+    } catch (err) {
+      btn.disabled = false; btn.textContent = "أرسل الرابط";
+      msg.textContent = AUTH_ERR[err.code] || "ما قدرنا نرسل الرابط، جرّب بعد شوي.";
     }
   });
 };
