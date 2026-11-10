@@ -9,10 +9,10 @@ import {
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
   getCountFromServer, Timestamp, orderBy, limit, addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, authUrl } from "./firebase-config.js?v=19";
-import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=19";
-import { ICONS } from "./icons.js?v=19";
-import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=19";
+import { firebaseConfig, authUrl } from "./firebase-config.js?v=20";
+import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=20";
+import { ICONS } from "./icons.js?v=20";
+import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=20";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -399,6 +399,7 @@ async function joinRoom(raw) {
     const r = s.data();
     if (roomCode) await leaveRoom(true);
     if (!r.players[me.uid]) {
+      if (r.kicked?.[me.uid]) return toast("المضيف طردك من هالغرفة 🚫");
       if (r.phase !== "lobby") return toast("اللعبة بدأت، انتظروا الجولة الجاية");
       if (Object.keys(r.players).length >= 12) return toast("الغرفة مليانة");
       await updateDoc(doc(db, "rooms", code), { [`players.${me.uid}`]: { name: me.username, at: Date.now() } });
@@ -411,7 +412,7 @@ function enterRoom(code) {
   sub("room", onSnapshot(doc(db, "rooms", code), s => {
     if (!s.exists()) { exitRoomLocal("انتهت الغرفة"); return; }
     room = s.data();
-    if (!room.players?.[me.uid]) { exitRoomLocal("طلعت من الغرفة"); return; }
+    if (!room.players?.[me.uid]) { exitRoomLocal(room.kicked?.[me.uid] ? "المضيف طردك من الغرفة 🚫" : "طلعت من الغرفة"); return; }
     if (!subs.has("secret")) sub("secret", onSnapshot(doc(db, "rooms", code, "secrets", me.uid), d => { secret = d.exists() ? d.data() : null; if (screen === "room") render(false); }, err));
     if (!subs.has("votes")) sub("votes", onSnapshot(collection(db, "rooms", code, "votes"), q => {
       votes = {}; q.forEach(d => votes[d.id] = d.data()); if (screen === "room") render(false);
@@ -1154,7 +1155,20 @@ const shareBtn = () => `<button class="btn ghost share" data-share>📸 شارك
 
 /* ================= views ================= */
 /* ================= owner tools ================= */
-const adm = { stats: null, loading: false, banned: [], bannedLoaded: false };
+const adm = { stats: null, loading: false, banned: [], bannedLoaded: false, reports: [], repLoaded: false, repLoading: false };
+async function loadReports() {
+  adm.repLoading = true;
+  try {
+    const q = await getDocs(query(collection(db, "reports"), orderBy("at", "desc"), limit(50)));
+    adm.reports = q.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) { console.error(e); }
+  adm.repLoaded = true; adm.repLoading = false;
+  if (screen === "admin") render(false);
+}
+async function delReport(id) {
+  try { await deleteDoc(doc(db, "reports", id)); adm.reports = adm.reports.filter(r => r.id !== id); render(false); }
+  catch (e) { console.error(e); toast("ما قدرنا نحذفه"); }
+}
 async function loadStats() {
   if (adm.loading) return;
   adm.loading = true; render(false);
@@ -1214,7 +1228,7 @@ const cleanMsg = t => String(t || "").replace(/[\u0000-\u0008\u000B-\u001F\u007F
 const timeOf = ts => { const d = ts?.toDate?.(); return d ? d.toLocaleTimeString("ar-SA", { hour: "numeric", minute: "2-digit" }) : ""; };
 function msgHtml(m, mine, showName) {
   return `<div class="msg ${mine ? "me" : ""}">
-    ${mine ? "" : `<span class="msg-av">${avatar(m.name || "", prof(m.uid || m.from)?.photo, 28)}</span>`}
+    ${mine ? "" : `<button class="msg-av" data-who="${esc(m.uid || m.from || "")}" aria-label="بروفايل ${esc(m.name || "")}">${avatar(m.name || "", prof(m.uid || m.from)?.photo, 28)}</button>`}
     <div class="bub">${showName && !mine ? `<span class="msg-n" dir="ltr">${at(m.name || "")}</span>` : ""}<span class="msg-t" dir="auto">${esc(m.text)}</span><span class="msg-time">${timeOf(m.at)}</span></div>
   </div>`;
 }
@@ -1233,7 +1247,7 @@ function bindEmoji(root) {
 // ---- شات الغرفة ----
 function chatUnread() {
   const seen = ui.chatSeen || 0;
-  return roomChat.filter(m => m.uid !== me?.uid && (m.at?.toMillis?.() || 0) > seen).length;
+  return roomChat.filter(m => m.uid !== me?.uid && !isBlocked(m.uid) && (m.at?.toMillis?.() || 0) > seen).length;
 }
 function showChatFab() {
   let fab = document.getElementById("chatFab");
@@ -1261,6 +1275,8 @@ function openChatPanel() {
   bindEmoji(el);
   el.addEventListener("click", e => { if (e.target === el) closeChatPanel(); });
   el.querySelector("#chatX").addEventListener("click", closeChatPanel);
+  el.querySelector("#chatList").addEventListener("click", e => { const b = e.target.closest("[data-who]"); if (b?.dataset.who) showProfile(b.dataset.who); });
+  el.querySelector(".chat-head").insertAdjacentHTML("afterend", `<p class="hint chat-tip">اضغط صورة أي أحد عشان تبلّغ أو تحظر${isHost() ? " أو تطرد" : ""}.</p>`);
   el.querySelector("#chatF").addEventListener("submit", async e => {
     e.preventDefault();
     const inp = document.getElementById("chatIn"), text = cleanMsg(inp.value).slice(0, 300);
@@ -1281,7 +1297,8 @@ function updateRoomChat() {
   const list = document.getElementById("chatList");
   if (list) {
     const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
-    list.innerHTML = roomChat.length ? roomChat.map(m => msgHtml(m, m.uid === me.uid, true)).join("")
+    const shown = roomChat.filter(m => !isBlocked(m.uid));
+    list.innerHTML = shown.length ? shown.map(m => msgHtml(m, m.uid === me.uid, true)).join("")
       : `<p class="hint center chat-empty">ما فيه رسايل للحين. قول هلا 👋</p>`;
     if (nearBottom || !list.dataset.init) { list.scrollTop = list.scrollHeight; list.dataset.init = "1"; }
     ui.chatSeen = Date.now();
@@ -1415,6 +1432,16 @@ VIEWS.admin = () => {
       <p class="hint">أفضل مقاس: صورة عريضة، مثل ١٢٠٠×٤٠٠.</p>
     </div>
 
+    <div class="field"><div class="row-h"><span class="label">البلاغات 🚩 ${adm.reports.length ? `(${ar(adm.reports.length)})` : ""}</span><button class="link" id="repLoad">تحديث</button></div>
+      ${adm.reports.length ? `<div class="list">${adm.reports.map(r => `<div class="rep">
+        <div class="row-h"><b dir="ltr">@${esc(r.targetName || "—")}</b><span class="tag">${esc(r.why || "")}</span></div>
+        ${r.text ? `<p class="rep-t" dir="auto">${esc(r.text)}</p>` : ""}
+        ${r.msgs ? `<p class="rep-m" dir="auto">رسايله: ${esc(r.msgs)}</p>` : ""}
+        <span class="hint">بلّغ: <span dir="ltr">@${esc(r.byName || "")}</span> · ${esc(r.at?.toDate?.().toLocaleString("ar-SA", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) || "")}</span>
+        <div class="row"><button class="btn small danger" data-repban="${esc(r.id)}">احظره</button><button class="btn small ghost" data-repdel="${esc(r.id)}">تجاهل</button></div></div>`).join("")}</div>`
+        : `<p class="hint">${adm.repLoaded ? "ما فيه بلاغات 👌" : "…"}</p>`}
+    </div>
+
     <div class="field"><span class="label">حظر لاعب</span>
       <form class="addf" id="banF"><div class="uinput"><span>@</span><input id="banName" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="يوزر اللاعب" aria-label="يوزر اللاعب"></div><button class="btn small danger">احظر</button></form>
       <p class="hint">المحظور ما يقدر يسوي غرف، ولا يدخلها، ولا يضيف أحد.</p>
@@ -1424,6 +1451,14 @@ VIEWS.admin = () => {
     </div>
   </section>`;
   on("reload", "click", loadStats);
+  if (!adm.repLoaded && !adm.repLoading) loadReports();
+  on("repLoad", "click", loadReports);
+  onAll("[data-repdel]", b => delReport(b.dataset.repdel));
+  onAll("[data-repban]", async b => {
+    if (!confirmTap(b, "متأكد؟")) return;
+    const r = adm.reports.find(x => x.id === b.dataset.repban); if (!r) return;
+    await banUser(r.targetName || ""); delReport(r.id);
+  });
   on("annSend", "click", e => {
     const t = document.getElementById("annText").value;
     if (!t.trim()) return toast("اكتب الإعلان أول");
@@ -1791,6 +1826,53 @@ VIEWS.username = () => {
   on("logout", "click", () => signOut(auth));
 };
 
+/* ================= الطرد والبلاغ والحظر ================= */
+const blocked = new Set(store.get("blocked", []));
+const isBlocked = u => blocked.has(u);
+function toggleBlock(uid, name) {
+  if (blocked.has(uid)) { blocked.delete(uid); toast("انفك الحظر عن @" + name); }
+  else { blocked.add(uid); toast("حظرت @" + name + "، ما راح تشوف رسايله"); }
+  store.set("blocked", [...blocked]);
+  updateRoomChat(); refresh();
+}
+async function kickPlayer(uid) {
+  if (!isHost() || !room?.players?.[uid] || uid === me.uid) return;
+  const name = pname(uid);
+  try { await updateDoc(roomRef(), { [`players.${uid}`]: deleteField(), [`kicked.${uid}`]: true }); toast("انطرد @" + name); }
+  catch (e) { console.error(e); toast("ما قدرنا نطرده"); }
+}
+const REPORT_WHY = ["كلام مسيء أو سب", "إزعاج أو سبام", "محتوى غير لائق", "غش في اللعب", "شي ثاني"];
+function openReport(uid, name) {
+  document.getElementById("repSheet")?.remove();
+  const el = document.createElement("div");
+  el.id = "repSheet"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "بلّغ عن لاعب");
+  el.innerHTML = `<div class="sheet"><b class="pf-name">🚩 بلّغ عن <span dir="ltr">@${esc(name)}</span></b>
+    <p class="pf-bio">وش المشكلة؟ البلاغ يوصل لإدارة جلسة، ومحد يعرف إنك أنت اللي بلّغت.</p>
+    <div class="chips rep-why">${REPORT_WHY.map((w, i) => `<button class="chip" data-why="${i}" aria-pressed="false">${w}</button>`).join("")}</div>
+    <textarea class="txt" id="repTxt" rows="2" maxlength="200" dir="auto" placeholder="تفاصيل (اختياري)"></textarea>
+    <button class="btn danger" id="repGo" disabled>أرسل البلاغ</button>
+    <button class="btn ghost" id="repX">إلغاء</button></div>`;
+  document.body.appendChild(el);
+  let why = null;
+  const close = () => el.remove();
+  el.addEventListener("click", e => { if (e.target === el) close(); });
+  el.querySelector("#repX").addEventListener("click", close);
+  el.querySelectorAll("[data-why]").forEach(b => b.addEventListener("click", () => {
+    why = REPORT_WHY[Number(b.dataset.why)];
+    el.querySelectorAll("[data-why]").forEach(x => x.setAttribute("aria-pressed", x === b));
+    el.querySelector("#repGo").disabled = false;
+  }));
+  el.querySelector("#repGo").addEventListener("click", async e => {
+    const btn = e.currentTarget; btn.disabled = true; btn.textContent = "لحظة…";
+    const recent = roomChat.filter(m => m.uid === uid).slice(-3).map(m => m.text).join(" | ").slice(0, 300);
+    try {
+      await addDoc(collection(db, "reports"), { by: me.uid, byName: me.username, target: uid, targetName: name, why,
+        text: cleanMsg(document.getElementById("repTxt").value).slice(0, 200), msgs: recent, room: roomCode || "", at: serverTimestamp() });
+      close(); toast("وصل البلاغ، شكرًا 🙏");
+    } catch (err) { console.error(err); btn.disabled = false; btn.textContent = "أرسل البلاغ"; toast("ما انرسل البلاغ"); }
+  });
+}
+
 /* ================= الغرف العامة ================= */
 const PUB_ALIVE = 150000;
 function watchPub() {
@@ -1956,6 +2038,8 @@ function showProfile(uid) {
   } else if (got) acts += `<button class="btn good" id="pfAcc">اقبل طلب الصداقة</button>`;
   else if (sent) acts += `<button class="btn ghost" disabled>انرسل طلب الصداقة ✓</button>`;
   else acts += `<button class="btn" id="pfAdd">+ أضف صديق</button>`;
+  if (roomCode && isHost() && room?.players?.[uid]) acts += `<button class="btn danger" id="pfKick">اطرده من الغرفة</button>`;
+  const modRow = `<div class="row pf-mod"><button class="btn small ghost" id="pfRep">🚩 بلّغ</button><button class="btn small ghost" id="pfBlk">${isBlocked(uid) ? "فك الحظر" : "🚫 احظر"}</button></div>`;
   el.innerHTML = `<div class="pcard">
     <div class="pcard-cover" style="--c:${col}" aria-hidden="true"><span class="pc-sadu"></span></div>
     <div class="pcard-av">${avatar(p.username, p.photo, 104)}</div>
@@ -1964,6 +2048,7 @@ function showProfile(uid) {
       ${f ? `<span class="chip-st ${isOnline(f) ? "on" : ""}">${isOnline(f) ? "أونلاين الحين" : "مو أونلاين"}</span>` : ""}
       ${p.bio ? `<p class="pcard-bio">${esc(p.bio)}</p>` : ""}
       <div class="pcard-acts">${acts}</div>
+      ${modRow}
       <button class="btn ghost" id="pfClose">إغلاق</button>
     </div></div>`;
   document.body.appendChild(el);
@@ -1974,6 +2059,9 @@ function showProfile(uid) {
   el.querySelector("#pfMsg")?.addEventListener("click", () => { close(); openDm(uid); });
   el.querySelector("#pfAcc")?.addEventListener("click", () => { acceptRequest(uid); close(); });
   el.querySelector("#pfAdd")?.addEventListener("click", () => { sendRequest(p.username); close(); });
+  el.querySelector("#pfKick")?.addEventListener("click", e => { if (!confirmTap(e.currentTarget, "متأكد؟ ما يقدر يرجع للغرفة")) return; kickPlayer(uid); close(); });
+  el.querySelector("#pfRep")?.addEventListener("click", () => { close(); openReport(uid, p.username); });
+  el.querySelector("#pfBlk")?.addEventListener("click", () => { toggleBlock(uid, p.username); close(); });
   el.querySelector("#pfClose").focus({ preventScroll: true });
 }
 
@@ -2183,7 +2271,7 @@ const ROOM_VIEWS = {
         <div class="row inv-row"><a class="btn small wa" id="waInv" href="${esc(waLink())}" target="_blank" rel="noopener">${ICONS.wa} ادعُ بالواتساب</a>
         <button class="btn small ghost" id="copyLink">انسخ الرابط</button></div></div>
       <div class="field"><span class="label">اللاعبين (${ar(n)} من ١٢)</span><div class="list">${ps.map(u => `
-        <div class="li"><button class="li-who" data-pf="${esc(u)}">${avatar(pname(u), prof(u)?.photo, 36)}<span class="nm" dir="ltr">${at(pname(u))}</span></button>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}</div>`).join("")}</div></div>
+        <div class="li"><button class="li-who" data-pf="${esc(u)}">${avatar(pname(u), prof(u)?.photo, 36)}<span class="nm" dir="ltr">${at(pname(u))}</span></button>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}${host && u !== me.uid ? `<button class="btn small ghost kick" data-kick="${esc(u)}" aria-label="اطرد ${esc(pname(u))}">اطرد</button>` : ""}</div>`).join("")}</div></div>
       ${host ? `
         <div class="field"><span class="label">نوع الغرفة</span><div class="chips">
           <button class="chip" data-pub="0" aria-pressed="${!room.public}">خاصة 🔒</button>
@@ -2208,6 +2296,7 @@ const ROOM_VIEWS = {
     onAll("[data-inv]", b => { b.disabled = true; sendInvite(b.dataset.inv); });
     onAll("[data-pf]", b => { if (b.dataset.pf !== me.uid) showProfile(b.dataset.pf); else go("profile"); });
     onAll("[data-game]", b => setRoom({ game: b.dataset.game }));
+    onAll("[data-kick]", b => { if (!confirmTap(b, "متأكد؟")) return; kickPlayer(b.dataset.kick); });
     onAll("[data-pub]", b => { const pub = b.dataset.pub === "1"; setRoom({ public: pub, listed: pub, ping: Date.now(), hostName: me.username }); if (pub) toast("صارت غرفتك عامة 🌍"); });
     onAll("[data-cat]", b => setRoom({ cat: b.dataset.cat }));
     onAll("[data-imps]", b => setRoom({ imps: Number(b.dataset.imps) }));
