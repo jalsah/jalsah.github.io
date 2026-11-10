@@ -732,8 +732,9 @@ function unoApply(u, mv, uno, st) {
     if (uno.drew !== u) return null;
     uno.drew = null; uno.drewCard = null; uno.turn = at_(1); uno.last = `${nm(u)} عدّى`;
   } else if (mv.type === "kick") { // المضيف يتخطى لاعب ما يلعب
-    const got = unoDraw(st, 1); hand.push(...got); changed.add(u);
-    uno.drew = null; uno.drewCard = null; uno.turn = at_(1); uno.last = `${nm(u)} تأخر، سحب ورقة وانتقل الدور`;
+    const already = uno.drew === u;
+    if (!already) { const got = unoDraw(st, 1); hand.push(...got); changed.add(u); }
+    uno.drew = null; uno.drewCard = null; uno.turn = at_(1); uno.last = already ? `${nm(u)} خلص وقته ⏰ وانتقل الدور` : `${nm(u)} خلص وقته ⏰ سحب ورقة وانتقل الدور`;
   } else return null;
   ord.forEach(x => uno.counts[x] = (st.hands[x] || []).length);
   uno.deck = st.deck.length; uno.v = (uno.v || 0) + 1;
@@ -807,6 +808,25 @@ async function unoMove(type, card, color) {
   try { await setDoc(doc(db, "rooms", roomCode, "moves", me.uid), { round: room.round, seq: Date.now(), type, card: card || "", color: color || "" }); }
   catch (e) { console.error(e); ui.unoWait = null; toast("ما انرسلت الحركة، جرّب مرة ثانية"); }
   render(false);
+}
+// مؤقت الدور: ٣٠ ثانية (١٥ بعد السحب). يحسبه كل جوال من لحظة ما شاف الحركة، والمضيف ينفّذ لما يخلص
+const UNO_T = 30, UNO_T_DREW = 15;
+function unoTimeLeft(uno) {
+  if (!ui.unoSeen || ui.unoSeen.v !== uno.v || ui.unoSeen.round !== room.round) ui.unoSeen = { v: uno.v, round: room.round, t: Date.now() };
+  const dur = uno.drew && uno.drew === uno.order[uno.turn] ? UNO_T_DREW : UNO_T;
+  return { dur, left: Math.max(0, dur - (Date.now() - ui.unoSeen.t) / 1000) };
+}
+function unoTimerStart() {
+  if (ui.unoTimer) return;
+  ui.unoTimer = setInterval(() => {
+    const uno = unoState();
+    if (screen !== "room" || room?.phase !== "uno" || !uno) { clearInterval(ui.unoTimer); ui.unoTimer = null; return; }
+    if (uno.winner) return;
+    const { left } = unoTimeLeft(uno);
+    const el = document.getElementById("uSec");
+    if (el) { el.textContent = "⏱ " + ar(Math.ceil(left)); el.classList.toggle("hot", left <= 5); }
+    if (left <= 0 && isHost() && ui.unoKickV !== uno.v) { ui.unoKickV = uno.v; unoKick(); }
+  }, 500);
 }
 async function unoKick() {
   const uno = unoState(); if (!uno || !isHost()) return;
@@ -2694,6 +2714,7 @@ const ROOM_VIEWS = {
     const canDraw = myTurn && uno.drew !== me.uid && !waiting;
     const playable = c => myTurn && !waiting && canPlay(c, uno.top, uno.color);
     const anyPlayable = myHand.some(playable);
+    const tm = unoTimeLeft(uno);
     // كومة اللعب: آخر كم ورقة تحت بعض بزوايا عشوائية مثل الواقع
     if (!ui.unoTrail || ui.unoTrail.round !== room.round) ui.unoTrail = { round: room.round, list: [] };
     const tr = ui.unoTrail.list;
@@ -2705,7 +2726,7 @@ const ROOM_VIEWS = {
     const ORD = { r: 0, y: 1, g: 2, b: 3, w: 4 }, VO = v => "0123456789SRDWF".indexOf(v);
     const hand = myHand.map((c, i) => ({ c, i })).sort((p, q) => (ORD[cColor(p.c)] - ORD[cColor(q.c)]) || (VO(cVal(p.c)) - VO(cVal(q.c))));
     const hn = hand.length, HW = Math.min(V.clientWidth || 360, 520) - 24, step = hn > 1 ? Math.min(46, (HW - 74) / (hn - 1)) : 0, da = Math.min(5, 40 / Math.max(hn, 1));
-    const fan = k => { const d = k - (hn - 1) / 2, r = d * da; return `--x:${(d * step).toFixed(1)}px;--r:${r.toFixed(2)}deg;--y:${(r * r * .22).toFixed(1)}px;z-index:${k + 1}`; };
+    const fan = k => { const d = k - (hn - 1) / 2, r = d * da; return `--x:${(d * step).toFixed(1)}px;--r:${r.toFixed(2)}deg;--y:${(r * r * .12).toFixed(1)}px;z-index:${k + 1}`; };
     V.innerHTML = `<section class="uno">
       ${statusBar()}
       <div class="utable" style="--cur:${col.fill}">
@@ -2720,20 +2741,20 @@ const ROOM_VIEWS = {
       </div>
       <div class="ubar ${myTurn ? "mine" : ""}">
         <span class="ub-t">${uno.winner ? "" : myTurn ? (waiting ? "لحظة…" : uno.drew === me.uid ? "سحبت ورقة. العب ورقة أو عدّي" : anyPlayable ? "دورك! حط ورقة في الوسط 👇" : "دورك! ما عندك ورقة تنلعب، اسحب من الكومة") : `مو دورك، ننتظر ${at(pname(turnU))}`}</span>
-        <span class="ub-col"><i style="background:${col.fill}"></i>${col.name}</span>
+        <span class="ub-col">${uno.winner ? "" : `<b class="usec ${tm.left <= 5 ? "hot" : ""}" id="uSec">⏱ ${ar(Math.ceil(tm.left))}</b>`}<i style="background:${col.fill}"></i>${col.name}</span>
       </div>
+      ${uno.winner ? "" : `<div class="utime ${myTurn ? "mine" : ""}" aria-hidden="true"><i style="--s:${(tm.left / tm.dur).toFixed(3)};--d:${tm.left.toFixed(2)}s"></i></div>`}
       <p class="ulast">${esc(uno.last || "")}</p>
       ${uno.flash && uno.flash !== me.uid ? `<div class="uno-call pop">أونو! 🔥 ${at(pname(uno.flash))}</div>` : uno.flash === me.uid ? `<div class="uno-call pop">أونو! 🔥 باقي لك ورقة</div>` : ""}
       <div class="uhand ${myTurn ? "" : "wait"}" id="uHand">${hand.map(({ c, i }, k) => `<button class="ucard ${playable(c) ? "ok" : myTurn ? "no" : ""}" style="${fan(k)}" data-card="${esc(c)}" data-i="${i}" ${playable(c) ? "" : "aria-disabled=\"true\""} aria-label="${esc(cardName(c))}">${cardSVG(c)}</button>`).join("")}</div>
       <p class="hint center">عندك ${ar(myHand.length)} ${myHand.length === 1 ? "ورقة" : "أوراق"}</p>
       <div class="foot">
         ${myTurn && uno.drew === me.uid && !waiting ? `<button class="btn ghost" id="uPass">عدّي</button>` : ""}
-        ${isHost() && !myTurn && !uno.winner ? `<button class="btn ghost" id="uKick">${at(pname(turnU))} تأخر؟ تخطّاه</button>` : ""}
         ${leaveBtn()}
       </div></section>`;
     on("uDraw", "click", () => unoMove("draw"));
     on("uPass", "click", () => unoMove("pass"));
-    on("uKick", "click", e => { if (confirmTap(e.currentTarget, "يسحب ورقة وينتقل الدور، متأكد؟")) unoKick(); });
+    unoTimerStart();
     const tryPlay = c => {
       if (!myTurn) { toast(uno.winner ? "انتهت اللعبة" : "مو دورك، ننتظر @" + pname(turnU)); return false; }
       if (waiting) return false;

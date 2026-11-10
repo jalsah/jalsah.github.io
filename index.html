@@ -428,6 +428,12 @@ body:has(#chatFab) main{padding-bottom:78px}
 .ub-t{font-weight:700;min-width:0}
 .ub-col{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);flex:none}
 .ub-col i{width:14px;height:14px;border-radius:50%}
+.utime{height:6px;border-radius:999px;background:var(--surface);overflow:hidden;margin-top:-4px}
+.utime i{display:block;height:100%;background:var(--muted);border-radius:inherit;transform-origin:right;transform:scaleX(var(--s));animation:utime var(--d) linear forwards}
+.utime.mine i{background:var(--saffron)}
+@keyframes utime{to{transform:scaleX(0)}}
+.usec{font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted);margin-inline-end:8px}
+.usec.hot{color:var(--rose);animation:pulse .5s ease-in-out infinite}
 .ulast{margin:0;text-align:center;color:var(--muted);font-size:13.5px}
 .uno-call{align-self:center;font-family:var(--display);font-size:24px;color:var(--bg);background:var(--rose);border-radius:999px;padding:4px 18px;box-shadow:0 8px 20px rgba(0,0,0,.4)}
 .uhand{position:relative;height:160px;margin-top:4px;touch-action:none;overflow:visible}
@@ -559,6 +565,6 @@ body:has(#chatFab) main{padding-bottom:78px}
   <main id="view"><div class="spinner" aria-label="جاري التحميل"></div></main>
 </div>
 <noscript><section style="padding:24px"><h1>جلسة: ألعاب الجلسات مع أصحابك</h1><p>ألعاب الجلسات مع الشلة من جوالك: ارسم وخمّن، الدخيل، أونو، مين قالها، صح ولا خطأ، ومين أكثر واحد. أونلاين أو بجوال واحد، ومجانية.</p><p>شغّل الجافاسكربت عشان تلعب.</p></section></noscript>
-<script type="module" src="./app.js?v=33"></script>
+<script type="module" src="./app.js?v=34"></script>
 </body>
 </html>
