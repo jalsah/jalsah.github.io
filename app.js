@@ -10,6 +10,7 @@ import {
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
   getCountFromServer, Timestamp, orderBy, limit, addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getMessaging, getToken, isSupported as pushSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import { firebaseConfig, authUrl } from "./firebase-config.js?v=27";
 import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=27";
 import { ICONS } from "./icons.js?v=27";
@@ -391,6 +392,7 @@ async function claimUsername(name) {
 
 /* ================= live data ================= */
 function startGlobal() {
+  if (pushState() === "granted") setTimeout(() => pushSaveToken(true), 3000);
   const ping = () => updateDoc(doc(db, "users", me.uid), { lastSeen: serverTimestamp() }).catch(() => {});
   ping();
   presenceTimer = setInterval(ping, 60000);
@@ -457,7 +459,7 @@ async function sendRequest(raw) {
     const back = await getDoc(doc(db, "friendRequests", to + "_" + me.uid));
     if (back.exists()) { await acceptRequest(to); return; }
     await setDoc(doc(db, "friendRequests", me.uid + "_" + to), { from: me.uid, to, fromName: me.username, toName: name, at: serverTimestamp() });
-    toast("انرسل الطلب إلى @" + name);
+    toast("انرسل الطلب إلى @" + name); pushNotify(to, "friend");
     const inp = document.getElementById("addName"); if (inp) inp.value = "";
   } catch (e) { console.error(e); toast("ما قدرنا نرسل الطلب"); }
 }
@@ -472,7 +474,7 @@ async function sendInvite(uid) {
   if (!roomCode) return;
   try {
     await setDoc(doc(db, "invites", me.uid + "_" + uid), { from: me.uid, fromName: me.username, to: uid, code: roomCode, at: serverTimestamp() });
-    toast("انرسلت الدعوة");
+    toast("انرسلت الدعوة"); pushNotify(uid, "invite");
   } catch (e) { console.error(e); toast("ما قدرنا نرسل الدعوة"); }
 }
 
@@ -1541,6 +1543,7 @@ async function sendDm(uid, text) {
   b.set(doc(db, "chats", pid), { members: pid.split("_"), last: text.slice(0, 80), lastAt: serverTimestamp(), lastFrom: me.uid, read: { [me.uid]: serverTimestamp() } }, { merge: true });
   b.set(doc(collection(db, "chats", pid, "msgs")), { from: me.uid, text, at: serverTimestamp() });
   await b.commit();
+  pushNotify(uid, "dm");
 }
 
 const VIEWS = {};
@@ -2199,6 +2202,47 @@ VIEWS.pub = () => {
   on("pubNew", "click", () => { if (roomCode) return go("room"); ui.makePublic = true; createRoom("draw"); });
 };
 
+/* ================= الإشعارات ================= */
+const VAPID = "BKamZekNiEBI9VTRRKJThJbC4WMA0HQXzCMkZMOPJx9U1Ew2kci-bIMtyW8yD7ohWd14VDf_ab2Tf3-xxrdvhuw";
+const PUSH_URL = "https://jalsah-push.baselbadawood17.workers.dev"; // سيرفر Cloudflare
+const pushLast = {};
+// نطلب من السيرفر يرسل إشعار. الرسائل: مرة كل دقيقة لنفس الشخص بس
+function pushNotify(to, kind) {
+  if (!PUSH_URL || !to || !auth?.currentUser || auth.currentUser.isAnonymous) return;
+  const k = kind + to;
+  if (kind === "dm" && Date.now() - (pushLast[k] || 0) < 60e3) return;
+  pushLast[k] = Date.now();
+  auth.currentUser.getIdToken().then(t => fetch(PUSH_URL, { method: "POST", headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" }, body: JSON.stringify({ to, kind }) })).catch(() => {});
+}
+const pushState = () => !("Notification" in window) || !("serviceWorker" in navigator) ? (isIOS() && !isStandalone() ? "ios" : "no") : Notification.permission;
+async function pushSaveToken(quiet) {
+  try {
+    if (!(await pushSupported())) throw new Error("unsupported");
+    const reg = await navigator.serviceWorker.register("./sw.js");
+    await navigator.serviceWorker.ready;
+    const token = await getToken(getMessaging(), { vapidKey: VAPID, serviceWorkerRegistration: reg });
+    if (!token || !me?.uid) return false;
+    const ref = doc(db, "pushTokens", me.uid);
+    const cur = await getDoc(ref).catch(() => null);
+    const list = (cur?.exists() ? cur.data().tokens || [] : []).filter(t => t !== token);
+    list.push(token);
+    if (!cur?.exists() || (cur.data().tokens || []).at(-1) !== token) await setDoc(ref, { tokens: list.slice(-5), at: serverTimestamp() });
+    return true;
+  } catch (e) { if (!quiet) console.error(e); return false; }
+}
+async function enablePush() {
+  const st = pushState();
+  if (st === "ios") { toast("أضف جلسة للشاشة الرئيسية أول، وافتحها من هناك"); doInstall(); return; }
+  if (st === "no") return toast("جهازك أو متصفحك ما يدعم الإشعارات");
+  if (st === "denied") return toast("الإشعارات مقفلة. فعّلها من إعدادات الجوال لجلسة");
+  const p = await Notification.requestPermission();
+  if (p !== "granted") { render(false); return toast("ما تفعّلت الإشعارات"); }
+  toast("لحظة…");
+  if (await pushSaveToken()) { store.set("pushOk", 1); toast("تفعّلت الإشعارات 🔔"); } else toast("ما قدرنا نفعّلها، جرّب مرة ثانية");
+  render(false);
+}
+const showPushCard = () => me?.uid && ["default", "ios"].includes(pushState()) && Date.now() - store.get("pushHide", 0) > 3 * 864e5;
+
 /* ================= ثبّت جلسة على الشاشة ================= */
 let installEvt = null;
 const isStandalone = () => window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true;
@@ -2253,6 +2297,10 @@ VIEWS.home = () => {
       <div class="inst-t"><b>ثبّت جلسة على شاشتك</b><span class="hint">تفتح بضغطة مثل التطبيق، وبدون متصفح</span></div>
       <button class="btn small" id="instGo">ثبّت</button><button class="inst-x" id="instHide" aria-label="إخفاء">×</button></div>` : ""}
 
+    ${!showInstallCard() && showPushCard() ? `<div class="inst push"><span class="push-ic" aria-hidden="true">🔔</span>
+      <div class="inst-t"><b>فعّل الإشعارات</b><span class="hint">عشان توصلك العزايم والرسائل حتى لو جلسة مقفلة</span></div>
+      <button class="btn small" id="pushGo">فعّل</button><button class="inst-x" id="pushHide" aria-label="إخفاء">×</button></div>` : ""}
+
     <h2>وش نلعب الليلة؟</h2>
     <div class="big2">
       <button class="bigbtn create" id="create"><span class="bb-ic">${ICONS.create}</span><b>${roomCode ? "ارجع لغرفتك" : "غرفة جديدة"}</b><span>واعزم أصحابك</span></button>
@@ -2278,6 +2326,8 @@ VIEWS.home = () => {
   </section>`;
   on("hProf", "click", () => go("profile"));
   on("instGo", "click", doInstall);
+  on("pushGo", "click", enablePush);
+  on("pushHide", "click", () => { store.set("pushHide", Date.now()); render(false); });
   on("pubBtn", "click", () => go("pub"));
   on("instHide", "click", () => { store.set("instHide", Date.now()); render(false); });
   on("create", "click", () => roomCode ? go("room") : createRoom());
@@ -2396,6 +2446,11 @@ VIEWS.profile = () => {
       <button class="btn small" id="saveBio" ${draft === (me.bio || "") ? "disabled" : ""}>احفظ</button></div>
     </div>
 
+    <div class="field"><span class="label">🔔 الإشعارات</span>
+      <div class="li"><span class="nm">${{ granted: "مفعّلة ✓", denied: "مقفلة من إعدادات الجوال", ios: "تحتاج تضيف جلسة للشاشة الرئيسية", no: "جهازك ما يدعمها" }[pushState()] || "مو مفعّلة"}</span>
+      ${pushState() === "granted" ? `<button class="btn small ghost" id="pushRe">حدّث</button>` : ["default", "ios"].includes(pushState()) ? `<button class="btn small" id="pushOn">فعّل</button>` : ""}</div>
+      <p class="hint">توصلك العزايم وطلبات الصداقة والرسائل حتى لو جلسة مقفلة.</p></div>
+
     <div class="field"><span class="label">🎖️ إنجازاتك (${ar(achGot(me.stats, me.xp, me.username).length)} من ${ar(ACH.length)})</span>
       <div class="achs">${ACH.map(x => { const ok = STAFF(me.username) || x.ok(me.stats || {}, me.xp || 0); return `<div class="ach ${ok ? "on" : ""}"><span class="ach-ic">${ok ? x.ic : "🔒"}</span><b>${x.t}</b><span>${x.d}</span></div>`; }).join("")}</div></div>
 
@@ -2424,6 +2479,8 @@ VIEWS.profile = () => {
   onAll("[data-lt]", b => setLook("t", b.dataset.lt, TABLES));
   onAll("[data-lb]", b => setLook("b", b.dataset.lb, BACKS));
   on("switchAcc", "click", openSwitcher);
+  on("pushOn", "click", enablePush);
+  on("pushRe", "click", async () => { toast(await pushSaveToken() ? "تمام، الإشعارات شغالة 🔔" : "ما زبط، جرّب مرة ثانية"); });
   const bio = document.getElementById("bio"), save = document.getElementById("saveBio");
   bio.addEventListener("input", () => {
     ui.bioDraft = bio.value;
@@ -2492,6 +2549,7 @@ function openDeleteAccount() {
       for (let i = 0; i < refs.length; i += 400) { const b = writeBatch(db); refs.slice(i, i + 400).forEach(r => b.delete(r)); await b.commit().catch(e => console.error(e)); }
       const b = writeBatch(db);
       b.delete(doc(db, "usernames", me.username.toLowerCase()));
+      b.delete(doc(db, "pushTokens", me.uid));
       b.delete(doc(db, "users", me.uid));
       await b.commit();
       ["welcomed:" + me.uid, "blocked", "instHide"].forEach(k => { try { localStorage.removeItem("jalsa:" + k); } catch (e) {} });
