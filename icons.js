@@ -4,6 +4,16 @@ const shine = `<path d="M6 18 Q6 6 18 6 H46 Q30 10 6 30Z" fill="#fff" opacity=".
 const wrap = s => `<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">${s}</svg>`;
 
 export const ICONS = {
+  // أونو جلسة: أوراق مروحة
+  uno: wrap(bg("gUno", "#ff9b6b", "#d9475b") + shine + `
+    <g transform="rotate(-22 32 50)"><rect x="18" y="16" width="20" height="30" rx="4" fill="#fff8ec"/><rect x="20" y="18" width="16" height="26" rx="3" fill="#8f7bea"/></g>
+    <g transform="rotate(0 32 50)"><rect x="22" y="13" width="20" height="30" rx="4" fill="#fff8ec"/><rect x="24" y="15" width="16" height="26" rx="3" fill="#3fbf9a"/></g>
+    <g transform="rotate(22 32 50)"><rect x="26" y="16" width="20" height="30" rx="4" fill="#fff8ec"/><rect x="28" y="18" width="16" height="26" rx="3" fill="#f2b134"/>
+      <ellipse cx="36" cy="31" rx="6" ry="9" fill="#fff8ec" transform="rotate(-25 36 31)"/>
+      <text x="36" y="35" text-anchor="middle" font-family="Lalezar,Tahoma,sans-serif" font-size="11" fill="#d9475b">+٤</text></g>
+    <rect x="12" y="46" width="40" height="10" rx="5" fill="#1c1530"/>
+    <text x="32" y="54.5" text-anchor="middle" font-family="Lalezar,Tahoma,sans-serif" font-size="9" fill="#f2b134">أونو</text>`),
+
   // إنسان حيوان نبات جماد: بلاطات حروف
   hhnj: wrap(bg("gHh", "#c9b8ff", "#6b4fd8") + shine + `
     <g transform="rotate(-8 32 32)">

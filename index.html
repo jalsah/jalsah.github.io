@@ -365,6 +365,56 @@ label.btn{display:inline-flex;align-items:center;justify-content:center}
 body:has(#chatFab) main{padding-bottom:78px}
 .dm-head{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:8px 12px;color:var(--ink);font:inherit;text-align:start;cursor:pointer}
 .dm-list{min-height:50vh;max-height:calc(100vh - 330px)}
+
+/* ---------- uno ---------- */
+.gcard{position:relative}
+.gcard.hot{border-color:color-mix(in srgb,var(--rose) 60%,var(--line));background:linear-gradient(160deg,color-mix(in srgb,var(--rose) 18%,var(--surface)),var(--surface))}
+.gc-new{position:absolute;top:8px;left:8px;font-size:11px;font-weight:700;background:var(--rose);color:var(--bg);border-radius:999px;padding:1px 8px}
+.uno{gap:10px}
+.utable{position:relative;width:100%;max-width:420px;margin:4px auto 0;aspect-ratio:1/1}
+.utable-svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.useat{position:absolute;transform:translate(-50%,0);display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;padding:0;color:var(--ink);font:inherit;cursor:pointer;z-index:2;width:70px}
+.useat .av{box-shadow:0 0 0 3px var(--bg),0 6px 14px rgba(0,0,0,.45)}
+.useat.turn .av{box-shadow:0 0 0 3px var(--saffron),0 0 18px 4px color-mix(in srgb,var(--saffron) 60%,transparent);animation:pulse 1.4s ease-in-out infinite}
+.us-n{font-size:11.5px;font-weight:700;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:rgba(15,11,28,.75);border-radius:999px;padding:0 7px}
+.us-c{font-size:11px;font-weight:700;background:var(--saffron);color:var(--bg);border-radius:999px;padding:0 7px;font-variant-numeric:tabular-nums}
+.useat.flash .us-c{background:var(--rose)}
+@keyframes pulse{50%{transform:scale(1.07)}}
+.ucenter{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:16px;z-index:1}
+.upile,.udisc{position:relative;width:64px;aspect-ratio:2/3}
+.upile{background:none;border:none;padding:0;cursor:pointer;filter:drop-shadow(0 6px 10px rgba(0,0,0,.5))}
+.upile:disabled{cursor:default}
+.upile::before{content:"";position:absolute;inset:0;transform:translate(3px,3px);border-radius:8px;background:#0f0b1c}
+.upile svg{position:relative}
+.upile.go{animation:bob 1.2s ease-in-out infinite}
+.upile.go::after{content:"اسحب";position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:700;color:var(--saffron);white-space:nowrap}
+.up-n{position:absolute;top:-8px;right:-8px;background:var(--bg);border:1px solid var(--line);color:var(--muted);border-radius:999px;font-size:10px;padding:0 6px;font-variant-numeric:tabular-nums}
+@keyframes bob{50%{transform:translateY(-4px)}}
+.udisc .ring{position:absolute;inset:-9px;border-radius:14px;border:4px solid var(--cur);box-shadow:0 0 20px 2px color-mix(in srgb,var(--cur) 55%,transparent)}
+.udisc .ucard{position:absolute;inset:0;transform:rotate(-6deg);filter:drop-shadow(0 8px 12px rgba(0,0,0,.5))}
+.udisc .ucard.top{animation:land .35s cubic-bezier(.2,1.4,.4,1)}
+@keyframes land{from{transform:translateY(-40px) rotate(-30deg) scale(1.2);opacity:.2}}
+.ucard-svg{width:100%;height:100%;display:block}
+.udir{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);font-size:150px;line-height:1;color:rgba(242,177,52,.12);pointer-events:none;animation:spin 9s linear infinite}
+.udir.rev{animation-direction:reverse}
+.ubar{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:10px 14px}
+.ubar.mine{border-color:var(--saffron);background:color-mix(in srgb,var(--saffron) 14%,var(--surface))}
+.ub-t{font-weight:700;min-width:0}
+.ub-col{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);flex:none}
+.ub-col i{width:14px;height:14px;border-radius:50%}
+.ulast{margin:0;text-align:center;color:var(--muted);font-size:13.5px}
+.uno-call{align-self:center;font-family:var(--display);font-size:24px;color:var(--bg);background:var(--rose);border-radius:999px;padding:4px 18px;box-shadow:0 8px 20px rgba(0,0,0,.4)}
+.uhand{display:flex;gap:0;overflow-x:auto;padding:22px 10px 6px;scrollbar-width:none;min-height:130px}
+.uhand .ucard{flex:none;width:68px;aspect-ratio:2/3;margin-inline-start:-18px;background:none;border:none;padding:0;cursor:pointer;transition:transform .15s;filter:drop-shadow(0 6px 10px rgba(0,0,0,.45))}
+.uhand .ucard:first-child{margin-inline-start:0}
+.uhand .ucard.ok{transform:translateY(-14px)}
+.uhand .ucard.ok:active{transform:translateY(-20px) scale(1.04)}
+.uhand .ucard.no{filter:brightness(.55) drop-shadow(0 6px 10px rgba(0,0,0,.45))}
+.uhand .ucard:focus-visible{outline:3px solid var(--mint);outline-offset:2px;border-radius:8px}
+.ucolors{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%}
+.ucol{min-height:72px;border:none;border-radius:18px;background:var(--c);color:#1c1530;font:inherit;font-family:var(--display);font-size:22px;cursor:pointer;box-shadow:inset 0 -6px 0 rgba(0,0,0,.18)}
+.uwin{gap:10px}
+.uwin .av{box-shadow:0 0 0 4px var(--bg)}
 </style>
 </head>
 <body>
@@ -377,6 +427,6 @@ body:has(#chatFab) main{padding-bottom:78px}
   <div id="banner"></div>
   <main id="view"><div class="spinner" aria-label="جاري التحميل"></div></main>
 </div>
-<script type="module" src="./app.js?v=15"></script>
+<script type="module" src="./app.js?v=16"></script>
 </body>
 </html>

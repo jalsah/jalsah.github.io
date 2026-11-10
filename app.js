@@ -9,9 +9,10 @@ import {
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
   getCountFromServer, Timestamp, orderBy, limit, addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, authUrl } from "./firebase-config.js?v=15";
-import { WORDS, MOST, FIVE, LETTERS, HCATS } from "./content.js?v=15";
-import { ICONS } from "./icons.js?v=15";
+import { firebaseConfig, authUrl } from "./firebase-config.js?v=16";
+import { WORDS, MOST, FIVE, LETTERS, HCATS } from "./content.js?v=16";
+import { ICONS } from "./icons.js?v=16";
+import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=16";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -61,9 +62,10 @@ function avatar(name, photo, size = 40, label) {
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const ONLINE_MS = 150000;
 const INVITE_MS = 15 * 60 * 1000;
-const GAMES = { imp: "الدخيل", most: "مين أكثر واحد", hhnj: "إنسان حيوان نبات جماد" };
+const GAMES = { imp: "الدخيل", most: "مين أكثر واحد", hhnj: "إنسان حيوان نبات جماد", uno: "أونو" };
 // كل ألعاب جلسة: وين تنلعب (أونلاين، بجوال واحد)
 const CATALOG = [
+  { id: "uno", icon: "uno", title: "أونو جلسة", desc: "الأونو اللي تعرفه، بأوراق وطاولة جلسة. من ٢ إلى ٨ لاعبين، كل واحد من جواله.", online: true, local: null, min: 2, hot: true },
   { id: "imp", icon: "imp", title: "الدخيل", desc: "الكل يعرف الكلمة إلا واحد. اكشفوه قبل ما يكشف الكلمة.", online: true, local: "l-imp", min: 3 },
   { id: "most", icon: "most", title: "مين أكثر واحد؟", desc: "سؤال، وكل واحد يصوّت على واحد من الشلة.", online: true, local: "l-most", min: 3 },
   { id: "hhnj", icon: "hhnj", title: "إنسان حيوان نبات جماد", desc: "حرف عشوائي، واكتب أربع كلمات تبدأ فيه قبل يخلص الوقت.", online: true, local: "l-hhnj", min: 2 },
@@ -416,7 +418,7 @@ function enterRoom(code) {
   go("room");
 }
 function exitRoomLocal(msg) {
-  off("room"); off("secret"); off("votes"); off("rchat"); off("hdone"); clearInterval(ui.hTimer); ui.hTimer = null;
+  off("room"); off("secret"); off("votes"); off("rchat"); off("hdone"); off("umoves"); UNO.st = null; UNO.processed = {}; clearInterval(ui.hTimer); ui.hTimer = null;
   roomChat = []; closeChatPanel(); ui.chatSeen = 0;
   room = null; roomCode = null; votes = {}; secret = null;
   if (msg) toast(msg);
@@ -554,6 +556,178 @@ async function submitHhnj(done) {
   const a = [0, 1, 2, 3].map(i => (document.getElementById("h" + i)?.value || "").trim().slice(0, 40));
   try { await setDoc(doc(db, "rooms", roomCode, "answers", me.uid), { round: room.round, a, done: !!done }); }
   catch (e) { console.error(e); if (done) toast("ما انرسلت أجوبتك، جرّب مرة ثانية"); }
+}
+
+// ---- أونو (المضيف يدير اللعبة، واللاعبين يرسلون حركاتهم) ----
+const UNO = { st: null, processed: {}, busy: false, queue: [] };
+const unoState = () => room?.uno || null;
+async function startUno() {
+  const ps = order();
+  if (ps.length < 2) return toast("تحتاجون لاعبين على الأقل");
+  if (ps.length > 8) return toast("أونو لين ٨ لاعبين");
+  let deck = shuffle(buildDeck());
+  const hands = {};
+  ps.forEach(u => hands[u] = deck.splice(0, 7));
+  let top = deck.pop();
+  while (isWild(top) || !/^\d$/.test(cVal(top))) { deck.unshift(top); top = deck.pop(); }
+  const round = (room.round || 0) + 1, names = {}; ps.forEach(u => names[u] = pname(u));
+  const counts = {}; ps.forEach(u => counts[u] = 7);
+  const ord = shuffle(ps);
+  const uno = { order: ord, turn: 0, dir: 1, top, color: cColor(top), counts, deck: deck.length, drew: null, last: "بدأت اللعبة! أول دور لـ @" + names[ord[0]], v: 1, winner: null, flash: null };
+  UNO.st = { deck, discard: [], hands }; UNO.processed = {};
+  const b = writeBatch(db);
+  ps.forEach(u => b.set(doc(db, "rooms", roomCode, "secrets", u), { round, role: "uno", hand: hands[u] }));
+  b.set(doc(db, "rooms", roomCode, "hidden", "uno"), { round, deck, discard: [], hands, processed: {} });
+  b.update(roomRef(), { game: "uno", phase: "uno", round, roundPlayers: ps, names, uno, result: null });
+  try { await b.commit(); } catch (e) { console.error(e); toast("ما قدرنا نبدأ أونو"); }
+}
+async function unoLoadHost() {
+  if (UNO.st || !isHost()) return;
+  const h = await getDoc(doc(db, "rooms", roomCode, "hidden", "uno")).catch(() => null);
+  if (h?.exists() && h.data().round === room.round) { const d = h.data(); UNO.st = { deck: d.deck, discard: d.discard, hands: d.hands }; UNO.processed = d.processed || {}; }
+}
+function unoDraw(st, n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    if (!st.deck.length) { st.deck = shuffle(st.discard); st.discard = []; }
+    if (!st.deck.length) break;
+    out.push(st.deck.pop());
+  }
+  return out;
+}
+// حركة وحدة من لاعب، يطبقها المضيف
+function unoApply(u, mv, uno, st) {
+  const ord = uno.order, n = ord.length, me_i = ord.indexOf(u);
+  if (me_i < 0 || me_i !== uno.turn || uno.winner) return null;
+  const at_ = k => ((uno.turn + k * uno.dir) % n + n) % n;
+  const nm = x => "@" + pname(x);
+  const changed = new Set();
+  const hand = st.hands[u] || [];
+  if (mv.type === "play") {
+    const idx = hand.indexOf(mv.card);
+    if (idx < 0 || !canPlay(mv.card, uno.top, uno.color)) return null;
+    if (uno.drew === u && mv.card !== uno.drewCard) return null;
+    hand.splice(idx, 1); changed.add(u);
+    st.discard.push(uno.top); uno.top = mv.card;
+    uno.color = isWild(mv.card) ? (UCOLORS[mv.color] ? mv.color : "r") : cColor(mv.card);
+    const v = cVal(mv.card);
+    let nextTurn = at_(1), msg = `${nm(u)} لعب ${cardName(mv.card)}`;
+    if (v === "S") { msg += ` وتخطّى ${nm(ord[at_(1)])}`; nextTurn = at_(2); }
+    else if (v === "R") { uno.dir *= -1; nextTurn = n === 2 ? uno.turn : ((uno.turn + uno.dir) % n + n) % n; msg += " وعكس الدور 🔄"; }
+    else if (v === "D" || v === "F") {
+      const victim = ord[at_(1)], k = v === "D" ? 2 : 4;
+      st.hands[victim].push(...unoDraw(st, k)); changed.add(victim);
+      msg += ` و${nm(victim)} سحب ${k === 2 ? "٢" : "٤"} 😬`; nextTurn = at_(2);
+    }
+    if (isWild(mv.card)) msg += ` واختار ${UCOLORS[uno.color].name}`;
+    uno.drew = null; uno.drewCard = null;
+    uno.flash = hand.length === 1 ? u : null;
+    if (!hand.length) { uno.winner = u; msg = `🏆 ${nm(u)} فاز!`; }
+    else uno.turn = nextTurn;
+    uno.last = msg;
+  } else if (mv.type === "draw") {
+    if (uno.drew === u) return null;
+    const got = unoDraw(st, 1); hand.push(...got); changed.add(u);
+    const c = got[0];
+    if (c && canPlay(c, uno.top, uno.color)) { uno.drew = u; uno.drewCard = c; uno.last = `${nm(u)} سحب ورقة`; }
+    else { uno.drew = null; uno.drewCard = null; uno.turn = at_(1); uno.last = `${nm(u)} سحب ورقة وعدّى`; }
+    uno.flash = null;
+  } else if (mv.type === "pass") {
+    if (uno.drew !== u) return null;
+    uno.drew = null; uno.drewCard = null; uno.turn = at_(1); uno.last = `${nm(u)} عدّى`;
+  } else if (mv.type === "kick") { // المضيف يتخطى لاعب ما يلعب
+    const got = unoDraw(st, 1); hand.push(...got); changed.add(u);
+    uno.drew = null; uno.drewCard = null; uno.turn = at_(1); uno.last = `${nm(u)} تأخر، سحب ورقة وانتقل الدور`;
+  } else return null;
+  ord.forEach(x => uno.counts[x] = (st.hands[x] || []).length);
+  uno.deck = st.deck.length; uno.v = (uno.v || 0) + 1;
+  return changed;
+}
+async function unoProcess(list) {
+  if (!isHost() || room?.phase !== "uno") return;
+  UNO.queue.push(...list);
+  if (UNO.busy) return;
+  UNO.busy = true;
+  try {
+    await unoLoadHost();
+    while (UNO.queue.length) {
+      const { u, mv } = UNO.queue.shift();
+      if (!UNO.st || mv.round !== room.round || (UNO.processed[u] || 0) >= mv.seq) continue;
+      UNO.processed[u] = mv.seq;
+      const uno = JSON.parse(JSON.stringify(room.uno));
+      const changed = unoApply(u, mv, uno, UNO.st);
+      if (!changed) continue;
+      const b = writeBatch(db);
+      changed.forEach(x => b.set(doc(db, "rooms", roomCode, "secrets", x), { round: room.round, role: "uno", hand: UNO.st.hands[x] }));
+      b.set(doc(db, "rooms", roomCode, "hidden", "uno"), { round: room.round, ...UNO.st, processed: UNO.processed });
+      const upd = { uno };
+      if (uno.winner) {
+        const scores = { ...(room.scores || {}) }; scores[uno.winner] = (scores[uno.winner] || 0) + 1;
+        upd.scores = scores; upd.phase = "unoend";
+      }
+      b.update(roomRef(), upd);
+      room.uno = uno; if (upd.phase) room.phase = upd.phase;
+      await b.commit();
+    }
+  } catch (e) { console.error(e); }
+  UNO.busy = false;
+}
+function unoCleanup() {
+  const uno = room.uno; if (!uno || uno.winner || UNO.busy || ui.unoCleaning) return;
+  const gone = uno.order.filter(u => !room.players[u]);
+  if (!gone.length) return;
+  ui.unoCleaning = true;
+  (async () => {
+    try {
+      await unoLoadHost();
+      const st = UNO.st; if (!st) return;
+      const u2 = JSON.parse(JSON.stringify(uno));
+      const cur = u2.order[u2.turn];
+      gone.forEach(g => { st.deck.unshift(...(st.hands[g] || [])); delete st.hands[g]; delete u2.counts[g]; });
+      u2.order = u2.order.filter(u => !gone.includes(u));
+      let t = u2.order.indexOf(cur); if (t < 0) t = u2.turn % Math.max(1, u2.order.length);
+      u2.turn = t; u2.deck = st.deck.length; u2.v++; u2.last = "طلع لاعب من اللعبة"; u2.drew = null; u2.drewCard = null;
+      const upd = { uno: u2 };
+      if (u2.order.length < 2) { u2.winner = u2.order[0] || null; upd.phase = "unoend"; u2.last = "باقي لاعب واحد، انتهت اللعبة"; }
+      const b = writeBatch(db);
+      b.set(doc(db, "rooms", roomCode, "hidden", "uno"), { round: room.round, ...st, processed: UNO.processed });
+      b.update(roomRef(), upd);
+      await b.commit();
+    } catch (e) { console.error(e); }
+    ui.unoCleaning = false;
+  })();
+}
+function watchUnoMoves() {
+  sub("umoves", onSnapshot(collection(db, "rooms", roomCode, "moves"), q => {
+    const list = [];
+    q.forEach(d => { const mv = d.data(); if (mv.round === room?.round && (UNO.processed[d.id] || 0) < mv.seq) list.push({ u: d.id, mv }); });
+    list.sort((a, b) => a.mv.seq - b.mv.seq);
+    if (list.length) unoProcess(list);
+  }, err));
+}
+async function unoMove(type, card, color) {
+  const uno = unoState(); if (!uno) return;
+  ui.unoWait = uno.v; setTimeout(() => { if (ui.unoWait === uno.v) { ui.unoWait = null; render(false); } }, 5000);
+  try { await setDoc(doc(db, "rooms", roomCode, "moves", me.uid), { round: room.round, seq: Date.now(), type, card: card || "", color: color || "" }); }
+  catch (e) { console.error(e); ui.unoWait = null; toast("ما انرسلت الحركة، جرّب مرة ثانية"); }
+  render(false);
+}
+async function unoKick() {
+  const uno = unoState(); if (!uno || !isHost()) return;
+  const u = uno.order[uno.turn];
+  await unoProcess([{ u, mv: { round: room.round, seq: (UNO.processed[u] || 0) + 1, type: "kick" } }]);
+}
+function unoPickColor(card) {
+  document.getElementById("uColor")?.remove();
+  const el = document.createElement("div");
+  el.id = "uColor"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true");
+  el.innerHTML = `<div class="sheet"><b class="pf-name">اختر اللون</b>
+    <div class="ucolors">${Object.entries(UCOLORS).map(([k, c]) => `<button class="ucol" data-col="${k}" style="--c:${c.fill}">${c.name}</button>`).join("")}</div>
+    <button class="btn ghost" id="ucX">إلغاء</button></div>`;
+  document.body.appendChild(el);
+  el.addEventListener("click", e => { if (e.target === el) el.remove(); });
+  el.querySelector("#ucX").addEventListener("click", () => el.remove());
+  el.querySelectorAll("[data-col]").forEach(b => b.addEventListener("click", () => { el.remove(); unoMove("play", card, b.dataset.col); }));
 }
 
 async function vote(target) {
@@ -1222,7 +1396,7 @@ VIEWS.home = () => {
       <div class="onl">${onl.map(([u, f]) => `<button class="onl-i" data-pf="${esc(u)}">${avatar(f.username, f.photo, 48)}<i class="dot on"></i><span dir="ltr">${esc(f.username)}</span></button>`).join("")}</div></div>` : ""}
 
     <div class="field"><div class="row-h"><span class="label">الألعاب</span><span class="hint">اضغط أي لعبة</span></div>
-      <div class="games">${CATALOG.map(g => `<button class="gcard" data-game-card="${g.id}">
+      <div class="games">${CATALOG.map(g => `<button class="gcard ${g.hot ? "hot" : ""}" data-game-card="${g.id}">${g.hot ? `<span class="gc-new">جديد 🔥</span>` : ""}
         <span class="gc-ic">${ICONS[g.icon]}</span>
         <b>${g.title}</b>
         <span class="gc-tags">${g.online ? `<i class="t-on">أونلاين</i>` : ""}${g.local ? `<i class="t-lo">بجوال واحد</i>` : ""}</span>
@@ -1438,6 +1612,8 @@ function bindLeave() { on("leave", "click", e => { if (confirmTap(e.currentTarge
 VIEWS.room = () => {
   if (!room) { V.innerHTML = `<div class="spinner" aria-label="جاري التحميل"></div>`; return; }
   if (room.phase === "hq") { if (!subs.has("hdone")) watchHhnjDone(); } else if (subs.has("hdone")) { off("hdone"); ui.hDoneCount = 0; }
+  if (room.phase === "uno" && isHost()) { if (!subs.has("umoves")) watchUnoMoves(); unoCleanup(); } else if (subs.has("umoves")) off("umoves");
+  if (room.phase !== "uno" && room.phase !== "unoend") { UNO.st = null; UNO.processed = {}; }
   const view = ROOM_VIEWS[room.phase] || ROOM_VIEWS.lobby;
   view();
   showChatFab();
@@ -1472,7 +1648,7 @@ const ROOM_VIEWS = {
       <div class="field"><span class="label">اللاعبين (${ar(n)} من ١٢)</span><div class="list">${ps.map(u => `
         <div class="li"><button class="li-who" data-pf="${esc(u)}">${avatar(pname(u), prof(u)?.photo, 36)}<span class="nm" dir="ltr">${at(pname(u))}</span></button>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}</div>`).join("")}</div></div>
       ${host ? `
-        <div class="field"><span class="label">اللعبة</span><div class="chips">${Object.entries(GAMES).map(([k, t]) => `<button class="chip" data-game="${k}" aria-pressed="${room.game === k}">${t}</button>`).join("")}</div></div>
+        <div class="field"><span class="label">اللعبة</span><div class="chips">${Object.entries(GAMES).map(([k, t]) => `<button class="chip" data-game="${k}" aria-pressed="${room.game === k}" ${k === "uno" && n > 8 ? "disabled" : ""}>${t}</button>`).join("")}</div>${room.game === "uno" ? `<p class="hint">أونو من ٢ إلى ٨ لاعبين.</p>` : ""}</div>
         ${room.game === "imp" ? `
         <div class="field"><span class="label">الفئة</span><div class="chips">${["عشوائي", ...Object.keys(WORDS)].map(c => `<button class="chip" data-cat="${esc(c)}" aria-pressed="${room.cat === c}">${esc(c)}</button>`).join("")}</div></div>
         <div class="field"><span class="label">عدد الدخلاء</span><div class="chips">
@@ -1493,7 +1669,7 @@ const ROOM_VIEWS = {
     onAll("[data-game]", b => setRoom({ game: b.dataset.game }));
     onAll("[data-cat]", b => setRoom({ cat: b.dataset.cat }));
     onAll("[data-imps]", b => setRoom({ imps: Number(b.dataset.imps) }));
-    on("start", "click", () => ({ most: startMost, hhnj: startHhnj }[room.game] || startImp)());
+    on("start", "click", () => ({ most: startMost, hhnj: startHhnj, uno: startUno }[room.game] || startImp)());
   },
 
   reveal() {
@@ -1595,6 +1771,68 @@ const ROOM_VIEWS = {
       <div class="foot">${isHost() ? `<button class="btn" id="again">حرف جديد</button><button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يبدأ الجولة الجاية.</p>`}${leaveBtn()}</div></section>`;
     onAll("[data-rej]", b => { const [u, i] = b.dataset.rej.split("|"); toggleReject(u, Number(i)); });
     on("again", "click", startHhnj);
+    on("lobby", "click", () => setRoom({ phase: "lobby" }));
+  },
+
+  uno() {
+    const uno = unoState(); if (!uno) { V.innerHTML = `<div class="spinner"></div>`; return; }
+    const myHand = secret?.round === room.round && secret.role === "uno" ? secret.hand : [];
+    const ord = uno.order, n = ord.length, myI = ord.indexOf(me.uid);
+    const turnU = ord[uno.turn], myTurn = turnU === me.uid && !uno.winner;
+    const waiting = ui.unoWait === uno.v;
+    if (ui.unoWait && ui.unoWait !== uno.v) ui.unoWait = null;
+    // اللاعبين حول الطاولة بترتيب الدور بعدي
+    const others = myI < 0 ? ord : [...ord.slice(myI + 1), ...ord.slice(0, myI)];
+    const spots = seatSpots(others.length);
+    const col = UCOLORS[uno.color];
+    const canDraw = myTurn && uno.drew !== me.uid && !waiting;
+    const playable = c => myTurn && !waiting && canPlay(c, uno.top, uno.color) && (uno.drew !== me.uid || c === uno.drewCard);
+    const anyPlayable = myHand.some(playable);
+    V.innerHTML = `<section class="uno">
+      ${statusBar()}
+      <div class="utable" style="--cur:${col.fill}">
+        ${TABLE_SVG}
+        ${others.map((u, i) => `<button class="useat ${u === turnU ? "turn" : ""} ${uno.flash === u ? "flash" : ""}" style="left:${spots[i][0]}%;top:${spots[i][1]}%" data-pf="${esc(u)}">
+          ${avatar(pname(u), prof(u)?.photo, 40)}<span class="us-n" dir="ltr">${esc(pname(u))}</span><span class="us-c">🃏 ${ar(uno.counts[u] || 0)}</span></button>`).join("")}
+        <div class="ucenter">
+          <button class="upile ${canDraw ? "go" : ""}" id="uDraw" ${canDraw ? "" : "disabled"} aria-label="اسحب ورقة">${cardSVG(null)}<span class="up-n">${ar(uno.deck)}</span></button>
+          <div class="udisc" aria-label="الورقة اللي فوق: ${esc(cardName(uno.top))}"><span class="ring"></span><span class="ucard top" data-v="${uno.v}">${cardSVG(uno.top)}</span></div>
+        </div>
+        <div class="udir ${uno.dir < 0 ? "rev" : ""}" aria-hidden="true">⟳</div>
+      </div>
+      <div class="ubar ${myTurn ? "mine" : ""}">
+        <span class="ub-t">${uno.winner ? "" : myTurn ? (waiting ? "لحظة…" : uno.drew === me.uid ? "سحبت ورقة تنلعب. العبها أو عدّي" : anyPlayable ? "دورك! اختر ورقة 👇" : "دورك! ما عندك ورقة تنلعب، اسحب من الكومة") : `دور ${at(pname(turnU))}`}</span>
+        <span class="ub-col"><i style="background:${col.fill}"></i>${col.name}</span>
+      </div>
+      <p class="ulast">${esc(uno.last || "")}</p>
+      ${uno.flash && uno.flash !== me.uid ? `<div class="uno-call pop">أونو! 🔥 ${at(pname(uno.flash))}</div>` : uno.flash === me.uid ? `<div class="uno-call pop">أونو! 🔥 باقي لك ورقة</div>` : ""}
+      <div class="uhand" id="uHand">${myHand.map((c, i) => `<button class="ucard ${playable(c) ? "ok" : myTurn ? "no" : ""}" data-card="${esc(c)}" data-i="${i}" ${playable(c) ? "" : "aria-disabled=\"true\""} aria-label="${esc(cardName(c))}">${cardSVG(c)}</button>`).join("")}</div>
+      <p class="hint center">عندك ${ar(myHand.length)} ${myHand.length === 1 ? "ورقة" : "أوراق"}</p>
+      <div class="foot">
+        ${myTurn && uno.drew === me.uid && !waiting ? `<button class="btn ghost" id="uPass">عدّي</button>` : ""}
+        ${isHost() && !myTurn && !uno.winner ? `<button class="btn ghost" id="uKick">${at(pname(turnU))} تأخر؟ تخطّاه</button>` : ""}
+        ${leaveBtn()}
+      </div></section>`;
+    on("uDraw", "click", () => unoMove("draw"));
+    on("uPass", "click", () => unoMove("pass"));
+    on("uKick", "click", e => { if (confirmTap(e.currentTarget, "يسحب ورقة وينتقل الدور، متأكد؟")) unoKick(); });
+    V.querySelectorAll("[data-card]").forEach(b => b.addEventListener("click", () => {
+      const c = b.dataset.card;
+      if (!playable(c)) { if (myTurn && !waiting) toast("هذي الورقة ما تنلعب الحين"); return; }
+      if (isWild(c)) unoPickColor(c); else unoMove("play", c);
+    }));
+    onAll("[data-pf]", b => showProfile(b.dataset.pf));
+  },
+
+  unoend() {
+    const uno = unoState() || {}, w = uno.winner;
+    V.innerHTML = `<section>${statusBar()}
+      <div class="card safe pop uwin"><span class="eyebrow">انتهت الجولة</span>
+        ${w ? `${avatar(pname(w), prof(w)?.photo, 84)}<span class="big" dir="ltr">${at(pname(w))}</span><span class="hint">فاز بأونو جلسة 🏆</span>` : `<span class="big">انتهت</span>`}</div>
+      <div class="field"><span class="label">الأوراق اللي بقت</span><div class="list">${(uno.order || []).filter(u => u !== w).map(u => `<div class="li">${avatar(pname(u), prof(u)?.photo, 32)}<span class="nm" dir="ltr">${at(pname(u))}</span><span class="tag">${ar(uno.counts?.[u] || 0)} ورقة</span></div>`).join("")}</div></div>
+      <div class="field"><span class="label">النقاط</span>${scoreBoard(order())}</div>
+      <div class="foot">${isHost() ? `<button class="btn" id="again">جولة جديدة</button><button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يبدأ الجولة الجاية.</p>`}${leaveBtn()}</div></section>`;
+    on("again", "click", startUno);
     on("lobby", "click", () => setRoom({ phase: "lobby" }));
   },
 
