@@ -9,9 +9,9 @@ import {
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
   getCountFromServer, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=8";
-import { WORDS, MOST, FIVE } from "./content.js?v=8";
-import { ICONS } from "./icons.js?v=8";
+import { firebaseConfig } from "./firebase-config.js?v=9";
+import { WORDS, MOST, FIVE } from "./content.js?v=9";
+import { ICONS } from "./icons.js?v=9";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -143,9 +143,8 @@ function renderBanner() {
     const t = i.at?.toMillis?.() ?? now;
     return now - t < INVITE_MS && i.code !== roomCode;
   });
-  const ann = announce?.text && store.get("annSeen", "") !== annKey(announce)
-    ? `<div class="ann" role="status"><span class="ann-ic" aria-hidden="true">📢</span><span class="txt">${esc(announce.text)}</span><button class="ann-x" id="annX" aria-label="إخفاء الإعلان">✕</button></div>` : "";
-  BANNER.innerHTML = ann + list.map(i => `
+  renderAnnounce();
+  BANNER.innerHTML = list.map(i => `
     <div class="inv"><span class="txt"><span dir="ltr">${at(i.fromName)}</span> عزمك على غرفة</span>
     <button class="btn small" data-ij="${esc(i.id)}">ادخل</button>
     <button class="btn small ghost" data-ix="${esc(i.id)}">تجاهل</button></div>`).join("");
@@ -157,8 +156,44 @@ function renderBanner() {
   BANNER.querySelectorAll("[data-ix]").forEach(b => b.addEventListener("click", () => {
     deleteDoc(doc(db, "invites", b.dataset.ix)).catch(() => {});
   }));
-  BANNER.querySelector("#annX")?.addEventListener("click", () => { store.set("annSeen", annKey(announce)); renderBanner(); });
 }
+// الإعلان: بطاقة تطلع فوق كل شي، مرة وحدة لكل إعلان
+function renderAnnounce() {
+  const show = announce?.text && store.get("annSeen", "") !== annKey(announce) && screen !== "admin";
+  let el = document.getElementById("annModal");
+  if (!show) { el?.remove(); return; }
+  const key = annKey(announce);
+  if (el && el.dataset.key === key) return;
+  el?.remove();
+  el = document.createElement("div");
+  el.id = "annModal"; el.dataset.key = key;
+  el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-labelledby", "annTitle");
+  el.innerHTML = `<div class="ann-card">
+      <div class="ann-top" aria-hidden="true">
+        <span class="ann-spark s1">✦</span><span class="ann-spark s2">✦</span><span class="ann-spark s3">✦</span>
+        <span class="ann-art">${MEGAPHONE}</span>
+      </div>
+      <div class="ann-body">
+        <span class="ann-eyebrow" id="annTitle">جديد في جلسة</span>
+        <p class="ann-text">${esc(announce.text)}</p>
+        <button class="btn" id="annOk">تمام 👍</button>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+  const close = () => { store.set("annSeen", key); el.classList.add("out"); setTimeout(() => el.remove(), 220); };
+  el.querySelector("#annOk").addEventListener("click", close);
+  el.addEventListener("click", e => { if (e.target === el) close(); });
+  el.querySelector("#annOk").focus({ preventScroll: true });
+}
+const MEGAPHONE = `<svg viewBox="0 0 120 100"><g transform="rotate(-14 60 50)">
+  <rect x="14" y="40" width="20" height="24" rx="6" fill="#1c1530"/>
+  <path d="M30 40 L82 18 Q90 15 90 24 V80 Q90 89 82 86 L30 64Z" fill="#fff8ec"/>
+  <path d="M30 40 L82 18 Q90 15 90 24 V34 L30 52Z" fill="#ffd36b"/>
+  <rect x="86" y="20" width="10" height="64" rx="5" fill="#ef6f6c"/>
+  <path d="M22 64 l6 22 h10 l-4 -22z" fill="#1c1530"/>
+  <path d="M104 36 q8 16 0 32" stroke="#1c1530" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <path d="M112 28 q14 24 0 48" stroke="#1c1530" stroke-width="5" fill="none" stroke-linecap="round" opacity=".5"/>
+</g></svg>`;
 const annKey = a => (a?.at?.toMillis?.() || 0) + ":" + (a?.text || "");
 
 /* ================= auth ================= */
