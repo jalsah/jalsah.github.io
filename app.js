@@ -9,10 +9,10 @@ import {
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
   getCountFromServer, Timestamp, orderBy, limit, addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, authUrl } from "./firebase-config.js?v=21";
-import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=21";
-import { ICONS } from "./icons.js?v=21";
-import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=21";
+import { firebaseConfig, authUrl } from "./firebase-config.js?v=22";
+import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=22";
+import { ICONS } from "./icons.js?v=22";
+import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=22";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -995,6 +995,7 @@ async function drawEnd() {
 }
 async function sendGuess(text) {
   const t = cleanMsg(text).slice(0, 30); if (!t) return;
+  if (botBad(t)) { await botWarn(t); return; }
   ui.gSeq = Math.max(Date.now(), (ui.gSeq || 0) + 1);
   try { await setDoc(doc(db, "rooms", roomCode, "guesses", me.uid), { round: room.round, text: t, seq: ui.gSeq }); }
   catch (e) { console.error(e); toast("ما انرسل تخمينك"); }
@@ -1229,7 +1230,7 @@ const timeOf = ts => { const d = ts?.toDate?.(); return d ? d.toLocaleTimeString
 function msgHtml(m, mine, showName) {
   return `<div class="msg ${mine ? "me" : ""}">
     ${mine ? "" : `<button class="msg-av" data-who="${esc(m.uid || m.from || "")}" aria-label="بروفايل ${esc(m.name || "")}">${avatar(m.name || "", prof(m.uid || m.from)?.photo, 28)}</button>`}
-    <div class="bub">${showName && !mine ? `<span class="msg-n" dir="ltr">${at(m.name || "")}</span>` : ""}<span class="msg-t" dir="auto">${esc(m.text)}</span><span class="msg-time">${timeOf(m.at)}</span></div>
+    <div class="bub">${showName && !mine ? `<span class="msg-n" dir="ltr">${at(m.name || "")}</span>` : ""}<span class="msg-t" dir="auto">${esc(censor(m.text))}</span><span class="msg-time">${timeOf(m.at)}</span></div>
   </div>`;
 }
 function emojiBar(target) {
@@ -1281,6 +1282,7 @@ function openChatPanel() {
     e.preventDefault();
     const inp = document.getElementById("chatIn"), text = cleanMsg(inp.value).slice(0, 300);
     if (!text || !roomCode) return;
+    if (!(await botGate(text))) { inp.value = ""; return; }
     inp.value = "";
     try { await addDoc(collection(db, "rooms", roomCode, "chat"), { uid: me.uid, name: me.username, text, at: serverTimestamp() }); }
     catch (err) { console.error(err); toast("ما انرسلت الرسالة"); inp.value = text; }
@@ -1381,6 +1383,7 @@ VIEWS.dm = () => {
     e.preventDefault();
     const inp = document.getElementById("dmIn"), text = cleanMsg(inp.value).slice(0, 500);
     if (!text) return;
+    if (!(await botGate(text))) { inp.value = ""; return; }
     inp.value = "";
     try { await sendDm(uid, text); }
     catch (err) { console.error(err); toast("ما انرسلت. لازم تكونون أصحاب."); inp.value = text; }
@@ -1442,6 +1445,10 @@ VIEWS.admin = () => {
         : `<p class="hint">${adm.repLoaded ? "ما فيه بلاغات 👌" : "…"}</p>`}
     </div>
 
+    <div class="field"><span class="label">🤖 فك كتم / صفّر تحذيرات البوت</span>
+      <form class="addf" id="unmuteF"><div class="uinput"><span>@</span><input id="unmuteName" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="يوزر اللاعب" aria-label="يوزر اللاعب"></div><button class="btn small good">صفّر</button></form>
+      <p class="hint">البوت يحذّر اللي يسب، وبعد ٣ تحذيرات يكتمه ٢٤ ساعة. من هنا تفك كتمه وترجع تحذيراته صفر.</p></div>
+
     <div class="field"><span class="label">حظر لاعب</span>
       <form class="addf" id="banF"><div class="uinput"><span>@</span><input id="banName" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="يوزر اللاعب" aria-label="يوزر اللاعب"></div><button class="btn small danger">احظر</button></form>
       <p class="hint">المحظور ما يقدر يسوي غرف، ولا يدخلها، ولا يضيف أحد.</p>
@@ -1473,6 +1480,16 @@ VIEWS.admin = () => {
     banUser(document.getElementById("banName").value);
   });
   onAll("[data-unban]", b => unbanUser(b.dataset.unban));
+  on("unmuteF", "submit", async e => {
+    e.preventDefault();
+    const key = document.getElementById("unmuteName").value.trim().replace(/^@/, "").toLowerCase();
+    if (!USER_RE.test(key)) return toast("اكتب يوزر صحيح");
+    try {
+      const u = await getDoc(doc(db, "usernames", key)); if (!u.exists()) return toast("ما لقينا هذا اليوزر");
+      await updateDoc(doc(db, "users", u.data().uid), { warns: 0, mutedUntil: 0 });
+      document.getElementById("unmuteName").value = ""; toast("تصفّرت تحذيراته وانفك كتمه ✅");
+    } catch (err) { console.error(err); toast("ما زبط"); }
+  });
   on("bnFile", "change", async e => {
     const f = e.target.files?.[0]; if (!f) return;
     toast("نرفع البنر…");
@@ -1826,6 +1843,79 @@ VIEWS.username = () => {
   on("logout", "click", () => signOut(auth));
 };
 
+/* ================= 🤖 بوت جلسة: يمنع السب والقذف ================= */
+// السب القوي بس (القذف والكلام الجنسي). السب الخفيف مسموح
+const BAD_HARD = ["شرموط","شرموطه","شراميط","قحبه","قحاب","عاهره","عاهر","منيوك","منيوكه","منيك","متناك","متناكه","نيك","انيك","ينيك","تنيك","نيكك","انيكك","مناكه","كس","كسك","كسمك","كسختك","كسخت","كسامك","زب","زبي","زبك","خول","لوطي","لوطيه","ديوث","معرص","عرص","عرصه","زاني","زانيه","ولد زنا","ابن زنا","بنت زنا","ابن الحرام","ولد الحرام","بنت الحرام","fuck","fucking","fucker","motherfucker","bitch","whore","slut","pussy","cunt","nigga","nigger","fag","faggot"];
+const BAD_SOFT = []; // السب الخفيف مسموح
+const botNorm = t => String(t || "").toLowerCase()
+  .replace(/[ً-ْـ]/g, "").replace(/[أإآٱ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه").replace(/ؤ/g, "و").replace(/ئ/g, "ي")
+  .replace(/[0@]/g, "o").replace(/[1!|]/g, "i").replace(/3/g, "e").replace(/\$/g, "s")
+  .replace(/[^a-zء-ي\s]/g, " ").replace(/(.)\1{2,}/g, "$1$1").replace(/\s+/g, " ").trim();
+const one = w => w.replace(/(.)\1+/g, "$1");
+const HARD_SET = new Set(BAD_HARD.map(botNorm).filter(w => !w.includes(" ")).flatMap(w => [w, one(w)]));
+const HARD_MULTI = BAD_HARD.map(botNorm).filter(w => w.includes(" "));
+const SOFT_SET = new Set(BAD_SOFT.map(botNorm).flatMap(w => [w, one(w)]));
+const SOFT_PRE = ["يا", "ابن", "بنت", "ولد", "يابن", "يابنت", "ياولد", "انت", "انتي"];
+const isHard = w => stripPre(w).some(v => HARD_SET.has(v) || HARD_SET.has(one(v)));
+const isSoft = w => stripPre(w).some(v => SOFT_SET.has(v) || SOFT_SET.has(one(v)));
+const stripPre = w => { const out = [w]; let x = w;
+  for (const pre of ["وال", "بال", "يال", "ال", "و", "ب", "يا"]) if (x.startsWith(pre) && x.length - pre.length >= 2) out.push(x.slice(pre.length));
+  return out; };
+function botBad(text) {
+  const n = botNorm(text); if (!n) return false;
+  const toks = n.split(" ");
+  // حروف مفرّقة: ك ل ب
+  const joined = toks.reduce((a, w) => { if (w.length === 1) a[a.length - 1] += w; else a.push(w, ""); return a; }, [""]).filter(x => x.length > 1);
+  const all = [...toks, ...joined];
+  for (const w of all) {
+    if (isHard(w)) return true;
+    if (w.startsWith("يا") && isSoft(w.slice(2))) return true;
+  }
+  for (let i = 0; i < toks.length - 1; i++) if (SOFT_PRE.includes(toks[i]) && isSoft(toks[i + 1])) return true;
+  return HARD_MULTI.some(m => (" " + n + " ").includes(" " + m + " "));
+}
+// يغطي الكلمات الممنوعة في رسايل غيرك (لو أحد تحايل)
+function censor(text) {
+  if (!botBad(text)) return text;
+  let prev = "";
+  const out = String(text).split(/(\s+)/).map(w => {
+    if (!w.trim()) return w;
+    const n = botNorm(w), bad = n && (isHard(n) || (n.startsWith("يا") && isSoft(n.slice(2))) || (SOFT_PRE.includes(prev) && isSoft(n)));
+    prev = n;
+    return bad ? "✱".repeat(Math.min(6, w.length)) : w;
+  }).join("");
+  return botBad(out) ? "✱✱✱" : out;
+}
+const isMuted = () => (me?.mutedUntil || 0) > Date.now();
+const muteLeft = () => { const m = Math.ceil(((me?.mutedUntil || 0) - Date.now()) / 60000); return m >= 60 ? `${ar(Math.ceil(m / 60))} ساعة` : `${ar(Math.max(1, m))} دقيقة`; };
+function botSheet(title, body) {
+  document.getElementById("botSheet")?.remove();
+  const el = document.createElement("div");
+  el.id = "botSheet"; el.className = "sheet-bg"; el.setAttribute("role", "alertdialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "بوت جلسة");
+  el.innerHTML = `<div class="sheet bot-sheet"><span class="bot-av" aria-hidden="true">🤖</span><b class="pf-name">${title}</b><p class="pf-bio">${body}</p><button class="btn" id="botOk">فاهم 👍</button></div>`;
+  document.body.appendChild(el);
+  el.querySelector("#botOk").addEventListener("click", () => el.remove());
+  el.querySelector("#botOk").focus({ preventScroll: true });
+}
+async function botWarn(text) {
+  const warns = (me.warns || 0) + 1;
+  const upd = { warns };
+  if (warns >= 3) upd.mutedUntil = Math.max(me.mutedUntil || 0, Date.now()) + 24 * 3600 * 1000;
+  try { await updateDoc(doc(db, "users", me.uid), upd); } catch (e) { console.error(e); }
+  me.warns = warns; if (upd.mutedUntil) me.mutedUntil = upd.mutedUntil;
+  if (warns >= 3) {
+    addDoc(collection(db, "reports"), { by: me.uid, byName: me.username, target: me.uid, targetName: me.username, why: "🤖 البوت: سب متكرر وانكتم",
+      text: "", msgs: String(text).slice(0, 300), room: roomCode || "", at: serverTimestamp() }).catch(() => {});
+    botSheet("انكتمت ٢٤ ساعة 🔇", `هذا التحذير رقم ${ar(warns)}. ما تقدر تكتب في الشات لمدة ${muteLeft()}. واللعب عادي تقدر تكمّله.`);
+  } else botSheet(`تحذير ${ar(warns)} من ٣ ⚠️`, "ممنوع القذف والكلام البذيء في جلسة. رسالتك ما انرسلت.<br>بعد التحذير الثالث تنكتم ٢٤ ساعة.");
+}
+// كل نص يطلع لغيرك يمر من هنا. يرجع true لو مسموح
+async function botGate(text) {
+  if (isMuted()) { botSheet("أنت مكتوم 🔇", `باقي على فك الكتم: ${muteLeft()}.`); return false; }
+  if (botBad(text)) { await botWarn(text); return false; }
+  return true;
+}
+
 /* ================= الطرد والبلاغ والحظر ================= */
 const blocked = new Set(store.get("blocked", []));
 const isBlocked = u => blocked.has(u);
@@ -2114,6 +2204,7 @@ VIEWS.profile = () => {
   });
   save.addEventListener("click", async () => {
     const v = bio.value.trim().slice(0, 120);
+    if (botBad(v)) { botWarn(v); return; }
     save.disabled = true; save.textContent = "لحظة…";
     try { await updateDoc(doc(db, "users", me.uid), { bio: v }); me.bio = v; ui.bioDraft = null; toast("انحفظت النبذة"); render(true); }
     catch (e) { console.error(e); save.disabled = false; save.textContent = "احفظ"; toast("ما قدرنا نحفظ النبذة"); }
@@ -2257,7 +2348,7 @@ function drawParts() {
   if (f) {
     const n = Object.keys(got).length, total = roundPlayers().filter(u => u !== room.drawer).length;
     f.innerHTML = `<span class="hint">عرفها ${ar(n)} من ${ar(total)}</span>` + (room.dfeed || []).slice().reverse().map(x =>
-      x.ok ? `<span class="dfi ok">${atL(x.u)} <b>عرفها ✅</b></span>` : `<span class="dfi"><b dir="ltr">${esc(pname(x.u))}</b>: <span dir="auto">${esc(x.t)}</span></span>`).join("");
+      x.ok ? `<span class="dfi ok">${atL(x.u)} <b>عرفها ✅</b></span>` : `<span class="dfi"><b dir="ltr">${esc(pname(x.u))}</b>: <span dir="auto">${esc(censor(x.t))}</span></span>`).join("");
   }
 }
 
@@ -2509,6 +2600,7 @@ const ROOM_VIEWS = {
       e.preventDefault();
       const t = cleanMsg(document.getElementById("wIn").value).slice(0, 100);
       if (!t) return toast("اكتب جوابك أول");
+      if (botBad(t)) { await botWarn(t); return; }
       if (await submitPriv({ text: t })) { ui.wSent = room.round; render(false); }
     });
     on("wEdit", "click", () => { ui.wSent = 0; render(false); });
@@ -2521,7 +2613,7 @@ const ROOM_VIEWS = {
     V.innerHTML = `<section>${statusBar()}
       <div class="who-n">${list.map((_, k) => `<i class="${k < i ? "done" : k === i ? "cur" : ""}"></i>`).join("")}</div>
       <div class="card prompt who-card pop" style="min-height:200px"><span class="eyebrow">${esc(room.prompt)}</span>
-        <span class="mid">«${esc(list[i] || "")}»</span>
+        <span class="mid">«${esc(censor(list[i] || ""))}»</span>
         <span class="hint">جواب ${ar(i + 1)} من ${ar(list.length)}</span></div>
       ${rev ? `<div class="card safe pop who-rev" style="min-height:120px"><span class="eyebrow">كتبها</span>
           <span class="big" dir="ltr">${at(pname(rev.a))}</span>
@@ -2538,7 +2630,7 @@ const ROOM_VIEWS = {
     V.innerHTML = `<section>${statusBar()}
       <div class="row-h"><h2>مين قالها؟ النتيجة</h2></div>
       <p class="lead">${esc(room.prompt)}</p>
-      <div class="list">${list.map((t, k) => `<div class="li who-li"><span class="who-t2" dir="auto">«${esc(t)}»</span><span class="nm" dir="ltr">${rev[k] ? at(pname(rev[k].a)) : "؟"}</span></div>`).join("")}</div>
+      <div class="list">${list.map((t, k) => `<div class="li who-li"><span class="who-t2" dir="auto">«${esc(censor(t))}»</span><span class="nm" dir="ltr">${rev[k] ? at(pname(rev[k].a)) : "؟"}</span></div>`).join("")}</div>
       <div class="field"><span class="label">النقاط</span>${scoreBoard(order())}</div>
       <div class="foot">${shareBtn()}${isHost() ? `<button class="btn" id="again">سؤال جديد</button><button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يبدأ الجولة الجاية.</p>`}${leaveBtn()}</div></section>`;
     on("again", "click", startWho);
@@ -2563,6 +2655,7 @@ const ROOM_VIEWS = {
     onAll("[data-truth]", async b => {
       const t = cleanMsg(document.getElementById("tIn").value).slice(0, 120);
       if (!t) return toast("اكتب الجملة أول");
+      if (botBad(t)) { await botWarn(t); return; }
       b.disabled = true;
       if (await submitPriv({ text: t, truth: b.dataset.truth === "1" })) { ui.tSent = room.round; render(false); } else b.disabled = false;
     });
@@ -2574,7 +2667,7 @@ const ROOM_VIEWS = {
     const my = votes[me.uid]?.round === room.round ? votes[me.uid].target : null;
     const n = voters.filter(u => votes[u]?.round === room.round).length;
     V.innerHTML = `<section>${statusBar()}
-      <div class="card prompt pop tf-card"><span class="eyebrow">${atL(teller)} يقول:</span><span class="mid">«${esc(room.tText)}»</span></div>
+      <div class="card prompt pop tf-card"><span class="eyebrow">${atL(teller)} يقول:</span><span class="mid">«${esc(censor(room.tText))}»</span></div>
       ${teller === me.uid ? `<p class="hint center">خلهم يصوتون 😏 لا تفضح نفسك بوجهك</p>`
         : ps.includes(me.uid) ? `<div class="tf-btns"><button class="tfb t" data-tv="t" aria-pressed="${my === "t"}">صح ✅</button><button class="tfb f" data-tv="f" aria-pressed="${my === "f"}">كذب ❌</button></div>`
         : `<p class="hint">انتظر الجولة الجاية.</p>`}
@@ -2588,7 +2681,7 @@ const ROOM_VIEWS = {
     const r = room.result || {};
     V.innerHTML = `<section>${statusBar()}
       <div class="card ${r.truth ? "safe" : "imposter"} pop tf-card"><span class="eyebrow">${atL(room.teller)} قال:</span>
-        <span class="mid">«${esc(room.tText)}»</span><span class="big">${r.truth ? "صح ✅" : "كذب ❌"}</span></div>
+        <span class="mid">«${esc(censor(room.tText))}»</span><span class="big">${r.truth ? "صح ✅" : "كذب ❌"}</span></div>
       <div class="field"><span class="label">عرفوها (+١)</span><p class="lead">${r.right?.length ? r.right.map(atL).join("، ") : "ولا أحد 😅"}</p></div>
       ${r.wrong?.length ? `<div class="field"><span class="label">انخدعوا (+${ar(r.wrong.length)} لـ ${atL(room.teller)})</span><p class="lead">${r.wrong.map(atL).join("، ")}</p></div>` : ""}
       <div class="field"><span class="label">النقاط</span>${scoreBoard(order())}</div>
@@ -2878,7 +2971,7 @@ if (configured) {
     try {
       const s = await getDoc(doc(db, "users", user.uid));
       if (!s.exists()) { me = { uid: user.uid }; go("username"); return; }
-      me = { uid: user.uid, username: s.data().username, photo: s.data().photo || "", bio: s.data().bio || "", renamedAt: s.data().usernameChangedAt || null };
+      me = { uid: user.uid, username: s.data().username, photo: s.data().photo || "", bio: s.data().bio || "", renamedAt: s.data().usernameChangedAt || null, warns: s.data().warns || 0, mutedUntil: s.data().mutedUntil || 0 };
       startGlobal();
       const b = await getDoc(doc(db, "bans", user.uid)).catch(() => null);
       if (b?.exists()) { banned = true; go("banned"); return; }
