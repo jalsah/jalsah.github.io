@@ -1,15 +1,16 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
-  onAuthStateChanged, signOut
+  onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot,
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js";
-import { WORDS, MOST, FIVE } from "./content.js";
-import { ICONS } from "./icons.js";
+import { firebaseConfig } from "./firebase-config.js?v=6";
+import { WORDS, MOST, FIVE } from "./content.js?v=6";
+import { ICONS } from "./icons.js?v=6";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -37,11 +38,13 @@ function confirmTap(btn, label) {
   return false;
 }
 
-const USER_RE = /^[a-z0-9_-]{3,20}$/;
+const USER_RE = /^[A-Za-z0-9_-]{3,20}$/;
+const HAS_UPPER = /[A-Z]/;
+const PW_MIN = 8;
 // صاحب اللعبة: يطلع جنب يوزره تاج
 const OWNER = "b_1";
 const RESERVED = new Set(["admin", "owner", "jalsah", "jalsa", "support", "official", "moderator", "mod", "staff", "team"]);
-const at = name => `@${esc(name)}${name === OWNER ? ' <span class="crown" title="صاحب اللعبة" aria-label="صاحب اللعبة">👑</span>' : ""}`;
+const at = name => `@${esc(name)}${String(name).toLowerCase() === OWNER ? ' <span class="crown" title="صاحب اللعبة" aria-label="صاحب اللعبة">👑</span>' : ""}`;
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const ONLINE_MS = 150000;
 const INVITE_MS = 15 * 60 * 1000;
@@ -109,6 +112,7 @@ function onAll(sel, fn) { V.querySelectorAll(sel).forEach(el => el.addEventListe
 
 const BACK = {
   friends: "home", profile: "home",
+  email: "auth",
   local: () => me?.username ? "home" : (configured ? "auth" : "setup"),
   "l-players": "local", "l-imp": "local", "l-pass": "local", "l-play": "local",
   "l-most": "local", "l-five": "local", "l-scores": "local"
@@ -171,7 +175,7 @@ function afterLogin() {
 
 async function claimUsername(name) {
   await runTransaction(db, async tx => {
-    const ref = doc(db, "usernames", name);
+    const ref = doc(db, "usernames", name.toLowerCase());
     const s = await tx.get(ref);
     if (s.exists()) throw { code: "taken" };
     tx.set(ref, { uid: me.uid });
@@ -222,13 +226,17 @@ function err(e) { console.error(e); }
 
 /* ================= friends ================= */
 async function sendRequest(raw) {
-  const name = raw.trim().toLowerCase().replace(/^@/, "");
-  if (!USER_RE.test(name)) return toast("اكتب يوزر صحيح");
-  if (name === me.username) return toast("هذا يوزرك أنت 😄");
+  const typed = raw.trim().replace(/^@/, "");
+  const key = typed.toLowerCase();
+  if (!USER_RE.test(typed)) return toast("اكتب يوزر صحيح");
+  if (key === me.username.toLowerCase()) return toast("هذا يوزرك أنت 😄");
   try {
-    const s = await getDoc(doc(db, "usernames", name));
+    const s = await getDoc(doc(db, "usernames", key));
     if (!s.exists()) return toast("ما لقينا هذا اليوزر");
     const to = s.data().uid;
+    const u = await getDoc(doc(db, "users", to));
+    if (!u.exists()) return toast("ما لقينا هذا اليوزر");
+    const name = u.data().username;
     if (friends.has(to)) return toast("هو صديقك من قبل");
     const back = await getDoc(doc(db, "friendRequests", to + "_" + me.uid));
     if (back.exists()) { await acceptRequest(to); return; }
@@ -395,38 +403,127 @@ VIEWS.setup = () => {
 
 VIEWS.auth = () => {
   V.innerHTML = `<section>
-    <div><h2>أهلًا في جلسة</h2><p class="lead">العب مع أصحابك أونلاين، كل واحد من جواله، أو بجوال واحد في الجلسة.</p></div>
-    <div class="card"><span class="big">جلسة</span><span class="hint">سجّل دخول، اختر يوزرك، وأضف أصحابك</span></div>
-    <div class="foot"><button class="btn" id="login">سجّل دخول بحساب قوقل</button>
-    <button class="btn ghost" id="local">العب بجوال واحد بدون حساب</button></div></section>`;
+    <div class="hero">
+      <div class="hero-icons" aria-hidden="true">
+        <span class="hi hi1">${ICONS.imp}</span><span class="hi hi2">${ICONS.most}</span><span class="hi hi3">${ICONS.five}</span>
+      </div>
+      <h2>أهلًا في جلسة</h2>
+      <p class="lead">ألعاب جلسات تلعبها مع أصحابك. أونلاين كل واحد من جواله، أو بجوال واحد يتمرر بينكم.</p>
+      <ul class="perks"><li>الدخيل</li><li>مين أكثر واحد</li><li>خمسة بعشر</li></ul>
+    </div>
+    <div class="foot">
+      <button class="btn google" id="login"><span class="g-logo" aria-hidden="true">${GOOGLE_G}</span>كمّل بحساب قوقل</button>
+      <button class="btn ghost" id="byEmail">سجّل بالإيميل</button>
+      <div class="or"><span>أو</span></div>
+      <button class="btn ghost" id="local">العب بدون حساب</button>
+      <p class="hint center">بدون حساب تلعبون بجوال واحد. للعب أونلاين وإضافة الأصحاب تحتاج حساب.</p>
+    </div></section>`;
   on("login", "click", login);
+  on("byEmail", "click", () => { ui.emailMode = "signup"; go("email"); });
   on("local", "click", () => go("local"));
 };
+
+const GOOGLE_G = `<svg viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>`;
+
+const AUTH_ERR = {
+  "auth/email-already-in-use": "هذا الإيميل مسجّل من قبل. سجّل دخول بدل ما تسوي حساب.",
+  "auth/invalid-email": "الإيميل مكتوب غلط.",
+  "auth/weak-password": "كلمة السر لازم ٨ خانات أو أكثر، وفيها حرف كبير واحد على الأقل.",
+  "auth/invalid-credential": "الإيميل أو كلمة السر غلط.",
+  "auth/wrong-password": "الإيميل أو كلمة السر غلط.",
+  "auth/user-not-found": "ما فيه حساب بهذا الإيميل. سوّ حساب جديد.",
+  "auth/too-many-requests": "محاولات كثيرة. انتظر شوي وجرّب مرة ثانية.",
+  "auth/network-request-failed": "فيه مشكلة في الإنترنت.",
+  "auth/operation-not-allowed": "التسجيل بالإيميل مو مفعّل في إعدادات اللعبة."
+};
+
+VIEWS.email = () => {
+  const signup = ui.emailMode !== "login";
+  V.innerHTML = `<section>
+    <div><h2>${signup ? "سوّ حساب جديد" : "سجّل دخول"}</h2>
+    <p class="lead">${signup ? "بعدها تختار يوزرك وتبدأ تضيف أصحابك." : "ادخل بالإيميل وكلمة السر اللي سجلت فيها."}</p></div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tSignup" aria-selected="${signup}">حساب جديد</button>
+      <button class="tab" role="tab" id="tLogin" aria-selected="${!signup}">عندي حساب</button>
+    </div>
+    <form class="field" id="emailF" novalidate>
+      <label class="label" for="em">الإيميل</label>
+      <input class="txt" id="em" type="email" dir="ltr" autocomplete="email" autocapitalize="none" inputmode="email" placeholder="name@gmail.com">
+      <label class="label" for="pw">كلمة السر</label>
+      <input class="txt" id="pw" type="password" dir="ltr" autocomplete="${signup ? "new-password" : "current-password"}" placeholder="${signup ? "مثال: Dalp2026" : ""}">
+      ${signup ? `<p class="hint" id="pwHint">٨ خانات أو أكثر، وفيها حرف إنجليزي كبير واحد على الأقل.</p>` : ""}
+      ${signup ? `<label class="label" for="pw2">أكّد كلمة السر</label>
+      <input class="txt" id="pw2" type="password" dir="ltr" autocomplete="new-password">` : ""}
+      <p class="hint msg-bad" id="emMsg" role="alert"></p>
+      <button class="btn" id="emGo">${signup ? "سوّ الحساب" : "دخول"}</button>
+      ${signup ? "" : `<button type="button" class="link center" id="forgot">نسيت كلمة السر؟</button>`}
+    </form>
+    <div class="foot"><button class="btn ghost" id="gInstead"><span class="g-logo" aria-hidden="true">${GOOGLE_G}</span>أو كمّل بقوقل</button></div>
+  </section>`;
+  const msg = document.getElementById("emMsg");
+  const pwIn = document.getElementById("pw"), pwHint = document.getElementById("pwHint");
+  if (pwHint) pwIn.addEventListener("input", () => {
+    const v = pwIn.value, okLen = v.length >= PW_MIN, okUp = HAS_UPPER.test(v);
+    pwHint.className = "hint " + (!v ? "" : okLen && okUp ? "msg-ok" : "msg-bad");
+    pwHint.textContent = !v ? "٨ خانات أو أكثر، وفيها حرف إنجليزي كبير واحد على الأقل."
+      : (okLen ? "✓ ٨ خانات" : "✗ ٨ خانات أو أكثر") + "  ·  " + (okUp ? "✓ حرف كبير" : "✗ حرف كبير (A-Z)");
+  });
+  on("tSignup", "click", () => { ui.emailMode = "signup"; render(false); });
+  on("tLogin", "click", () => { ui.emailMode = "login"; render(false); });
+  on("gInstead", "click", login);
+  on("forgot", "click", async () => {
+    const em = document.getElementById("em").value.trim();
+    if (!em) { msg.textContent = "اكتب إيميلك فوق، وبعدها اضغط نسيت كلمة السر."; return; }
+    try { await sendPasswordResetEmail(auth, em); msg.className = "hint msg-ok"; msg.textContent = "أرسلنا لك رابط تغيير كلمة السر على الإيميل."; }
+    catch (e) { msg.className = "hint msg-bad"; msg.textContent = AUTH_ERR[e.code] || "ما قدرنا نرسل الرابط."; }
+  });
+  on("emailF", "submit", async e => {
+    e.preventDefault();
+    msg.className = "hint msg-bad"; msg.textContent = "";
+    const em = document.getElementById("em").value.trim();
+    const pw = document.getElementById("pw").value;
+    if (!/^\S+@\S+\.\S+$/.test(em)) { msg.textContent = AUTH_ERR["auth/invalid-email"]; return; }
+    if (signup && (pw.length < PW_MIN || !HAS_UPPER.test(pw))) { msg.textContent = AUTH_ERR["auth/weak-password"]; return; }
+    if (!signup && !pw) { msg.textContent = "اكتب كلمة السر."; return; }
+    if (signup && pw !== document.getElementById("pw2").value) { msg.textContent = "كلمتين السر مو نفس بعض."; return; }
+    const btn = document.getElementById("emGo"); btn.disabled = true; btn.textContent = "لحظة…";
+    try {
+      if (signup) await createUserWithEmailAndPassword(auth, em, pw);
+      else await signInWithEmailAndPassword(auth, em, pw);
+    } catch (err) {
+      btn.disabled = false; btn.textContent = signup ? "سوّ الحساب" : "دخول";
+      msg.textContent = AUTH_ERR[err.code] || "ما زبط، جرّب مرة ثانية.";
+    }
+  });
+};
+
+const UNAME_HINT = "حروف إنجليزية وأرقام و _ و - ، من ٣ إلى ٢٠ خانة، وفيه حرف كبير واحد على الأقل.";
 
 VIEWS.username = () => {
   V.innerHTML = `<section>
     <div><h2>اختر يوزرك</h2><p class="lead">أصحابك يضيفونك فيه. ما تقدر تغيّره بعدين، فاختره زين.</p></div>
     <div class="field"><label class="label" for="uname">اليوزر</label>
-      <div class="uinput"><span>@</span><input id="uname" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="20" placeholder="ihr4g_r7h-a9d9"></div>
-      <p class="hint" id="unameMsg">حروف إنجليزية صغيرة وأرقام و _ و - ، من ٣ إلى ٢٠ خانة، بدون مسافات.</p></div>
+      <div class="uinput"><span>@</span><input id="uname" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="20" placeholder="D-A-L-P"></div>
+      <p class="hint" id="unameMsg">${UNAME_HINT}</p></div>
     <div class="foot"><button class="btn" id="claim" disabled>اعتمد اليوزر</button>
     <button class="btn ghost" id="logout">تسجيل خروج</button></div></section>`;
   const inp = document.getElementById("uname"), msg = document.getElementById("unameMsg"), btn = document.getElementById("claim");
   const check = () => {
-    const v = inp.value.toLowerCase().replace(/\s+/g, "");
+    const v = inp.value.replace(/\s+/g, "");
     if (v !== inp.value) inp.value = v;
-    const ok = USER_RE.test(v);
+    const ok = USER_RE.test(v) && HAS_UPPER.test(v) && !RESERVED.has(v.toLowerCase());
     btn.disabled = !ok;
-    if (!v) { msg.className = "hint"; msg.textContent = "حروف إنجليزية صغيرة وأرقام و _ و - ، من ٣ إلى ٢٠ خانة، بدون مسافات."; }
-    else if (/[^a-z0-9_-]/.test(v)) { msg.className = "hint msg-bad"; msg.textContent = "مسموح بس: a-z و 0-9 و _ و -"; }
+    if (!v) { msg.className = "hint"; msg.textContent = UNAME_HINT; }
+    else if (/[^A-Za-z0-9_-]/.test(v)) { msg.className = "hint msg-bad"; msg.textContent = "مسموح بس: حروف إنجليزية وأرقام و _ و -"; }
     else if (v.length < 3) { msg.className = "hint msg-bad"; msg.textContent = "اليوزر لازم يكون ٣ خانات أو أكثر"; }
-    else if (RESERVED.has(v)) { btn.disabled = true; msg.className = "hint msg-bad"; msg.textContent = "هذا اليوزر محجوز، جرّب غيره"; }
+    else if (!HAS_UPPER.test(v)) { msg.className = "hint msg-bad"; msg.textContent = "لازم فيه حرف كبير واحد على الأقل، مثل D-A-L-P"; }
+    else if (RESERVED.has(v.toLowerCase())) { msg.className = "hint msg-bad"; msg.textContent = "هذا اليوزر محجوز، جرّب غيره"; }
     else { msg.className = "hint msg-ok"; msg.textContent = "@" + v + " شكله حلو"; }
   };
   inp.addEventListener("input", check); check();
   btn.addEventListener("click", async () => {
     const name = inp.value;
-    if (!USER_RE.test(name) || RESERVED.has(name)) return;
+    if (!USER_RE.test(name) || !HAS_UPPER.test(name) || RESERVED.has(name.toLowerCase())) return;
     btn.disabled = true; btn.textContent = "لحظة…";
     try {
       await claimUsername(name);
