@@ -90,9 +90,9 @@ export function cardSVG(c, back = "classic") {
 // ---------- ظهر الورقة: أشكال تنفتح بالمستوى ----------
 export const BACKS = {
   classic: { name: "كلاسيك", lvl: 1 },
-  sadu: { name: "سدو", lvl: 2 },
-  night: { name: "ليل", lvl: 4 },
-  gold: { name: "ذهبي", lvl: 7 }
+  sadu: { name: "سدو", lvl: 3 },
+  night: { name: "ليل", lvl: 8 },
+  gold: { name: "ذهبي", lvl: 20 }
 };
 function backSVG(id, back) {
   const word = (fill, stroke = "#1a1426") => `<text x="30" y="51" text-anchor="middle" ${FONT} font-size="18" fill="${fill}" stroke="${stroke}" stroke-linejoin="round" paint-order="stroke" stroke-width="2.4" transform="rotate(-30 30 45)">جلسة</text>`;
@@ -124,10 +124,10 @@ function backSVG(id, back) {
 // ---------- الطاولة: خشب + جوخ، وأشكال تنفتح بالمستوى ----------
 export const TABLES = {
   felt: { name: "جوخ أخضر", lvl: 1, rim: ["#9a5f2e", "#6e3d1a", "#8a5226", "#4f2a10"], felt: ["#23735a", "#155240", "#0c3529"], line: "#f2c46b", mark: "rgba(255,240,200,.08)", noise: 1 },
-  sadu: { name: "سدو", lvl: 3, rim: ["#7a4a24", "#4f2a10", "#6e3d1a", "#2e1708"], felt: ["#b23a3d", "#842530", "#4e1218"], line: "#f2b134", mark: "rgba(255,240,200,.1)", noise: 1, sadu: 1 },
-  night: { name: "ليل", lvl: 5, rim: ["#4a3a7c", "#271d4a", "#3b2e66", "#140e2a"], felt: ["#3d2f7a", "#251c52", "#140f30"], line: "#c9b8ff", mark: "rgba(255,255,255,.07)", noise: 1, stars: 1 },
-  marble: { name: "رخام", lvl: 8, rim: ["#f0dfa8", "#b89a4e", "#dcc581", "#8e7232"], felt: ["#f6f3ec", "#e2ddd2", "#c7c0b2"], line: "#b89a4e", mark: "rgba(80,60,20,.09)", veins: 1 },
-  gold: { name: "ذهبي", lvl: 12, rim: ["#f7d77a", "#b8862b", "#e8c25a", "#7a5512"], felt: ["#2e2e33", "#18181b", "#060607"], line: "#e8c25a", mark: "rgba(232,194,90,.1)", noise: 1 }
+  sadu: { name: "سدو", lvl: 5, rim: ["#7a4a24", "#4f2a10", "#6e3d1a", "#2e1708"], felt: ["#b23a3d", "#842530", "#4e1218"], line: "#f2b134", mark: "rgba(255,240,200,.1)", noise: 1, sadu: 1 },
+  night: { name: "ليل", lvl: 10, rim: ["#4a3a7c", "#271d4a", "#3b2e66", "#140e2a"], felt: ["#3d2f7a", "#251c52", "#140f30"], line: "#c9b8ff", mark: "rgba(255,255,255,.07)", noise: 1, stars: 1 },
+  marble: { name: "رخام", lvl: 15, rim: ["#f0dfa8", "#b89a4e", "#dcc581", "#8e7232"], felt: ["#f6f3ec", "#e2ddd2", "#c7c0b2"], line: "#b89a4e", mark: "rgba(80,60,20,.09)", veins: 1 },
+  gold: { name: "ذهبي", lvl: 30, rim: ["#f7d77a", "#b8862b", "#e8c25a", "#7a5512"], felt: ["#2e2e33", "#18181b", "#060607"], line: "#e8c25a", mark: "rgba(232,194,90,.1)", noise: 1 }
 };
 export function tableSVG(key = "felt") {
   const t = TABLES[key] || TABLES.felt, k = "t" + key;

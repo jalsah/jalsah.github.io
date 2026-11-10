@@ -14,7 +14,7 @@ import { getMessaging, getToken, isSupported as pushSupported } from "https://ww
 import { firebaseConfig, authUrl } from "./firebase-config.js?v=27";
 import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=27";
 import { ICONS } from "./icons.js?v=27";
-import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, tableSVG, TABLES, BACKS, seatSpots, isWild, cColor, cVal } from "./uno.js?v=29";
+import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, tableSVG, TABLES, BACKS, seatSpots, isWild, cColor, cVal } from "./uno.js?v=30";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -61,15 +61,19 @@ const lvlTag = p => `<span class="lvl ${STAFF(p?.username) ? "max" : ""}" title=
 const ACH = [
   { id: "first", tier: "b", svg: '<path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/>', t: "أول جلسة", d: "العب أول جولة", ok: s => (s.games || 0) >= 1 },
   { id: "g50", tier: "s", svg: '<path d="M12 3c1 4 5 5.5 5 10.5a5 5 0 0 1-10 0c0-3 2-4 2-6.5 1 1.2 2 2 3 2 0-2-1-4 0-6z"/>', t: "مدمن جلسات", d: "العب ٥٠ جولة", ok: s => (s.games || 0) >= 50 },
-  { id: "g200", tier: "g", svg: '<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/>', t: "أسطورة الجلسات", d: "العب ٢٠٠ جولة", ok: s => (s.games || 0) >= 200 },
+  { id: "g200", tier: "g", svg: '<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/>', t: "أسطورة الجلسات", d: "العب ٣٠٠ جولة", ok: s => (s.games || 0) >= 300 },
   { id: "win1", tier: "b", svg: '<path d="M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8"/>', t: "أول فوز", d: "اكسب نقاط في جولة", ok: s => (s.wins || 0) >= 1 },
-  { id: "win25", tier: "g", svg: '<path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>', t: "ما ينغلب", d: "افز في ٢٥ جولة", ok: s => (s.wins || 0) >= 25 },
+  { id: "win25", tier: "s", svg: '<path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>', t: "ما ينغلب", d: "افز في ٢٥ جولة", ok: s => (s.wins || 0) >= 25 },
   { id: "uno", tier: "s", svg: '<path d="M9 3h9a1 1 0 0 1 1 1v13"/><rect x="5" y="6" width="11" height="15" rx="1.5"/>', t: "ملك الأونو", d: "افز بالأونو ١٠ مرات", ok: s => (s.w_uno || 0) >= 10 },
   { id: "imp", tier: "s", svg: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/>', t: "صياد الدخلاء", d: "افز في الدخيل ١٠ مرات", ok: s => (s.w_imp || 0) >= 10 },
   { id: "draw", tier: "s", svg: '<path d="M4 20l4-1L19 8a2.1 2.1 0 0 0-3-3L5 16z"/><path d="M14 7l3 3"/>', t: "فنان الجلسة", d: "افز في ارسم وخمّن ١٠ مرات", ok: s => (s.w_draw || 0) >= 10 },
   { id: "all", tier: "s", svg: '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>', t: "جرّب كل شي", d: "العب ٥ ألعاب مختلفة", ok: s => ["uno", "imp", "most", "hhnj", "who", "tf", "draw"].filter(g => s["g_" + g]).length >= 5 },
   { id: "night", tier: "b", svg: '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>', t: "سهران", d: "العب بين ٢ و٥ الفجر", ok: s => (s.night || 0) >= 1 },
-  { id: "lvl10", tier: "g", svg: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3l-5.5 2.9 1-6.2L3 9.6l6.2-.9z"/>', t: "نجم جلسة", d: "وصّل المستوى ١٠", ok: (s, xp) => lvlOf(xp) >= 10 }
+  { id: "lvl10", tier: "s", svg: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3l-5.5 2.9 1-6.2L3 9.6l6.2-.9z"/>', t: "نجم صاعد", d: "وصّل المستوى ١٠", ok: (s, xp) => lvlOf(xp) >= 10 },
+  { id: "lvl25", tier: "g", svg: '<circle cx="12" cy="12" r="9.5"/><path d="M12 6.5l1.7 3.5 3.8.5-2.8 2.7.7 3.8L12 15.2 8.6 17l.7-3.8-2.8-2.7 3.8-.5z"/>', t: "نجم جلسة", d: "وصّل المستوى ٢٥", ok: (s, xp) => lvlOf(xp) >= 25 },
+  { id: "lvl50", tier: "g", svg: '<path d="M6.5 4h11l3.5 5-9 11L3 9z"/><path d="M3 9h18M9.5 4L12 20l2.5-16"/>', t: "خرافي", d: "وصّل المستوى ٥٠", ok: (s, xp) => lvlOf(xp) >= 50 },
+  { id: "g1000", tier: "g", svg: '<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>', t: "ساكن جلسة", d: "العب ١٠٠٠ جولة", ok: s => (s.games || 0) >= 1000 },
+  { id: "win100", tier: "g", svg: '<circle cx="12" cy="9" r="6"/><path d="M8.5 14L7 21l5-2.5 5 2.5-1.5-7"/><path d="M12 6.5v5M10 8.5h4" />', t: "الملك", d: "افز في ١٠٠ جولة", ok: s => (s.wins || 0) >= 100 }
 ];
 const TIER_RANK = { g: 3, s: 2, b: 1 };
 const medal = (x, on = true) => `<span class="medal ${on ? "t-" + x.tier : "off"}" title="${esc(x.t)}"><svg viewBox="0 0 24 24" aria-hidden="true">${on ? x.svg : '<rect x="6" y="11" width="12" height="9" rx="2"/><path d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3"/>'}</svg></span>`;
