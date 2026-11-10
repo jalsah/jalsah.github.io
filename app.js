@@ -67,10 +67,10 @@ const GAMES = { draw: "ارسم وخمّن", who: "مين قالها؟", tf: "ص
 const CATALOG = [
   { id: "draw", icon: "draw", title: "ارسم وخمّن", desc: "واحد يرسم كلمة سرية، والباقين يخمّنونها بأسرع وقت. كل جولة يرسم واحد.", online: true, local: null, min: 2, hot: true },
   { id: "who", icon: "who", title: "مين قالها؟", desc: "سؤال، وكل واحد يكتب جوابه بالسر. بعدها تطلع الأجوبة وتخمّنون مين كاتب كل جواب.", online: true, local: null, min: 3, hot: true },
-  { id: "tf", icon: "tf", title: "صح ولا خطأ", desc: "كل جولة واحد يكتب شي عن نفسه، والباقين يخمّنون: صح ولا كذب؟", online: true, local: null, min: 3, hot: true },
+  { id: "tf", icon: "tf", title: "صح ولا خطأ", desc: "كل جولة واحد يكتب شي عن نفسه، والباقين يخمّنون: صح ولا كذب؟ تنفع حتى لو أنتم اثنين.", online: true, local: null, min: 2, hot: true },
   { id: "uno", icon: "uno", title: "أونو جلسة", desc: "الأونو اللي تعرفه، بأوراق وطاولة جلسة. من ٢ إلى ٨ لاعبين، كل واحد من جواله.", online: true, local: null, min: 2 },
   { id: "imp", icon: "imp", title: "الدخيل", desc: "الكل يعرف الكلمة إلا واحد. اكشفوه قبل ما يكشف الكلمة.", online: true, local: "l-imp", min: 3 },
-  { id: "most", icon: "most", title: "مين أكثر واحد؟", desc: "سؤال، وكل واحد يصوّت على واحد من الشلة.", online: true, local: "l-most", min: 3 },
+  { id: "most", icon: "most", title: "مين أكثر واحد؟", desc: "سؤال، وكل واحد يصوّت على واحد من الشلة.", online: true, local: "l-most", min: 2 },
   { id: "hhnj", icon: "hhnj", title: "إنسان حيوان نبات جماد", desc: "حرف عشوائي، واكتب أربع كلمات تبدأ فيه قبل يخلص الوقت.", online: true, local: "l-hhnj", min: 2 },
   { id: "five", icon: "five", title: "خمسة بعشر", desc: "اذكر خمسة أشياء من الفئة خلال عشر ثواني.", online: false, local: "l-five", min: 2 }
 ];
@@ -481,7 +481,7 @@ async function impGuessed() {
 // ---- مين أكثر واحد أونلاين (المضيف) ----
 async function startMost() {
   const ps = order();
-  if (ps.length < 3) return toast("تحتاجون ٣ لاعبين على الأقل");
+  if (ps.length < 2) return toast("تحتاجون لاعبين على الأقل");
   if (!mostDeck.length) mostDeck = shuffle(MOST);
   const names = {}; ps.forEach(u => names[u] = pname(u));
   await setRoom({ game: "most", phase: "mq", round: (room.round || 0) + 1, prompt: mostDeck.pop(), roundPlayers: ps, names, result: null });
@@ -825,7 +825,7 @@ async function whoNext() {
 // ---- صح ولا خطأ (المضيف) ----
 async function startTf() {
   const ps = order();
-  if (ps.length < 3) return toast("تحتاجون ٣ لاعبين على الأقل");
+  if (ps.length < 2) return toast("تحتاجون لاعبين على الأقل");
   const t = ((room.tTurn ?? -1) + 1) % ps.length;
   const names = {}; ps.forEach(u => names[u] = pname(u));
   await setRoom({ game: "tf", phase: "tw", round: (room.round || 0) + 1, teller: ps[t], tTurn: t, tText: "", roundPlayers: ps, names, result: null });
@@ -2153,7 +2153,7 @@ const ROOM_VIEWS = {
         <div class="li"><i class="dot on"></i><span class="nm" dir="ltr">${at(f.username)}</span><button class="btn small" data-inv="${esc(u)}">اعزمه</button></div>`).join("")}</div></div>` : ""}
       ${hasScores ? `<div class="field"><span class="label">النقاط</span>${scoreBoard(ps)}</div>` : ""}
       <div class="foot">
-        ${host ? `<button class="btn" id="start" ${n < minPlayers(room.game) ? "disabled" : ""}>${n < minPlayers(room.game) ? `تحتاجون ${ar(minPlayers(room.game))} لاعبين على الأقل` : "ابدأ"}</button>` : ""}
+        ${host ? `<button class="btn" id="start" ${n < minPlayers(room.game) ? "disabled" : ""}>${n < minPlayers(room.game) ? (minPlayers(room.game) === 2 ? "تحتاجون لاعبين على الأقل" : `تحتاجون ${ar(minPlayers(room.game))} لاعبين على الأقل`) : "ابدأ"}</button>` : ""}
         ${leaveBtn()}
       </div></section>`;
     on("copyLink", "click", () => copyText(location.origin + location.pathname + "?r=" + roomCode, "انسخ رابط الدعوة"));
@@ -2549,7 +2549,7 @@ VIEWS["l-players"] = () => {
       `<input class="txt" id="ln${i}" maxlength="14" placeholder="اللاعب ${ar(i + 1)}" value="${esc(L.names[i] || "")}" aria-label="اسم اللاعب ${ar(i + 1)}">`).join("")}</div></div>
     <div class="foot"><button class="btn" id="done">تم</button></div></section>`;
   V.querySelectorAll(".name-list input").forEach((inp, i) => inp.addEventListener("input", () => { L.names[i] = inp.value; store.set("names", L.names); }));
-  on("pm", "click", () => { L.count = Math.max(3, L.count - 1); store.set("players", L.count); render(true); });
+  on("pm", "click", () => { L.count = Math.max(2, L.count - 1); store.set("players", L.count); render(true); });
   on("pp", "click", () => { L.count = Math.min(12, L.count + 1); store.set("players", L.count); render(true); });
   on("done", "click", () => go("local"));
 };
@@ -2584,6 +2584,7 @@ function lPickWord(c) {
   return w;
 }
 function lNewRound() {
+  if (L.count < 3) { toast("الدخيل يحتاج ٣ لاعبين على الأقل"); return; }
   const c = L.cat === "عشوائي" || !WORDS[L.cat] ? pick(Object.keys(WORDS)) : L.cat;
   L.round = { cat: c, word: lPickWord(c), imps: shuffle([...Array(L.count).keys()]).slice(0, Math.min(L.imps, lmaxImps())), i: 0, shown: false, starter: Math.floor(Math.random() * L.count), stage: "play" };
   go("l-pass");
