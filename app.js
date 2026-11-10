@@ -928,7 +928,6 @@ async function startDraw() {
   const b = writeBatch(db);
   b.set(doc(db, "rooms", roomCode, "secrets", drawer), { round, role: "draw", word });
   b.set(doc(db, "rooms", roomCode, "hidden", "draw"), { round, word });
-  b.set(doc(db, "rooms", roomCode, "canvas", "live"), { round, s: "" });
   b.update(roomRef(), { game: "draw", phase: "dq", round, drawer, dTurn: t, deadline: Date.now() + DRAW_SECS * 1000, dMask: word.split(" ").map(x => x.length), dgot: {}, dfeed: [], roundPlayers: ps, names, result: null });
   try { await b.commit(); } catch (e) { console.error(e); toast("ما قدرنا نبدأ الجولة"); }
 }
