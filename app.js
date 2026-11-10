@@ -10,10 +10,10 @@ import {
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
   getCountFromServer, Timestamp, orderBy, limit, addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, authUrl } from "./firebase-config.js?v=25";
-import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=25";
-import { ICONS } from "./icons.js?v=25";
-import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=25";
+import { firebaseConfig, authUrl } from "./firebase-config.js?v=26";
+import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=26";
+import { ICONS } from "./icons.js?v=26";
+import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=26";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -47,8 +47,10 @@ const PW_MIN = 8;
 // صاحب اللعبة: يطلع جنب يوزره تاج
 const OWNER = "b_1";
 const RESERVED = new Set(["admin", "owner", "jalsah", "jalsa", "support", "official", "moderator", "mod", "staff", "team"]);
-const isOwner = () => String(me?.username || "").toLowerCase() === OWNER;
-const at = name => `@${esc(name)}${String(name).toLowerCase() === OWNER ? ' <span class="crown" title="صاحب اللعبة" aria-label="صاحب اللعبة">👑</span>' : ""}`;
+const OFFICIAL = "jalsah"; // حساب جلسة الرسمي (@Jalsah)، تحت تصرف المالك
+const isOwner = () => [OWNER, OFFICIAL].includes(String(me?.username || "").toLowerCase());
+const at = name => { const k = String(name).toLowerCase();
+  return `@${esc(name)}${k === OWNER ? ' <span class="crown" title="صاحب اللعبة" aria-label="صاحب اللعبة">👑</span>' : k === OFFICIAL ? ' <span class="verified" title="الحساب الرسمي" aria-label="الحساب الرسمي">✓</span>' : ""}`; };
 // صورة البروفايل: صورة اللاعب، أو أول حرف من يوزره بلون ثابت
 const AV_COLORS = ["#ef6f6c", "#f2b134", "#74d6b8", "#8f7bea", "#5fb0f0", "#f08a24", "#e66aa8", "#4fc48a"];
 const avColor = name => { let h = 0; for (const c of String(name || "")) h = (h * 31 + c.charCodeAt(0)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; };
@@ -262,7 +264,71 @@ async function login() {
   }
 }
 
+/* ================= تبديل الحسابات ================= */
+const accounts = () => { const a = store.get("accounts", []); return Array.isArray(a) ? a : []; };
+function rememberAccount() {
+  const u = auth.currentUser; if (!u || !me?.username) return;
+  const google = u.providerData.some(p => p.providerId === "google.com");
+  const list = accounts().filter(a => a.uid !== u.uid);
+  list.unshift({ uid: u.uid, username: me.username, email: u.email || "", google, photo: me.photo || "" });
+  store.set("accounts", list.slice(0, 6));
+}
+function openSwitcher() {
+  document.getElementById("swSheet")?.remove();
+  const list = accounts(), cur = me?.uid;
+  const el = document.createElement("div");
+  el.id = "swSheet"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "بدّل الحساب");
+  el.innerHTML = `<div class="sheet"><b class="pf-name">🔄 بدّل الحساب</b>
+    <div class="list sw-list">${list.map(a => `<div class="sw-acc ${a.uid === cur ? "cur" : ""}">
+      <button class="sw-main" data-sw="${esc(a.uid)}" ${a.uid === cur ? "disabled" : ""}>${avatar(a.username, a.photo, 42)}
+        <span class="sw-t"><span class="nm" dir="ltr">${at(a.username)}</span><span class="hint" dir="ltr">${esc(a.email || "")}</span></span>
+        ${a.uid === cur ? `<span class="tag">الحالي</span>` : ""}</button>
+      ${a.uid === cur ? "" : `<button class="inst-x" data-swrm="${esc(a.uid)}" aria-label="شيله من القائمة">×</button>`}
+      ${a.google ? "" : `<form class="sw-pw" data-swf="${esc(a.uid)}" hidden><input class="txt" type="password" dir="ltr" autocomplete="current-password" placeholder="كلمة السر" aria-label="كلمة السر"><button class="btn small">ادخل</button></form>`}
+    </div>`).join("")}</div>
+    <p class="hint" id="swMsg" role="status"></p>
+    <button class="btn ghost" id="swAdd">➕ أضف حساب</button>
+    <button class="btn ghost" id="swX">إغلاق</button></div>`;
+  document.body.appendChild(el);
+  const close = () => el.remove(), msg = el.querySelector("#swMsg");
+  el.addEventListener("click", e => { if (e.target === el) close(); });
+  el.querySelector("#swX").addEventListener("click", close);
+  el.querySelector("#swAdd").addEventListener("click", async () => {
+    close(); if (roomCode) await leaveRoom(true).catch(() => {});
+    ui.emailMode = "login"; await signOut(auth); go("auth");
+  });
+  el.querySelectorAll("[data-swrm]").forEach(b => b.addEventListener("click", () => {
+    store.set("accounts", accounts().filter(a => a.uid !== b.dataset.swrm)); close(); openSwitcher();
+  }));
+  const doSwitch = async (fn) => {
+    try { if (roomCode) await leaveRoom(true).catch(() => {}); await fn(); close(); toast("بدّلت الحساب 👌"); }
+    catch (e) {
+      console.error(e); msg.className = "hint msg-bad";
+      msg.textContent = ["auth/wrong-password", "auth/invalid-credential"].includes(e.code) ? "كلمة السر غلط."
+        : ["auth/popup-closed-by-user", "auth/cancelled-popup-request"].includes(e.code) ? "" : "ما زبط التبديل، جرّب مرة ثانية.";
+    }
+  };
+  el.querySelectorAll("[data-sw]").forEach(b => b.addEventListener("click", () => {
+    const a = accounts().find(x => x.uid === b.dataset.sw); if (!a) return;
+    if (a.google) {
+      const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt: "select_account", ...(a.email ? { login_hint: a.email } : {}) });
+      doSwitch(() => signInWithPopup(auth, p));
+    } else {
+      const f = el.querySelector(`[data-swf="${CSS.escape(a.uid)}"]`);
+      el.querySelectorAll("[data-swf]").forEach(x => x.hidden = x !== f);
+      f.hidden = false; f.querySelector("input").focus();
+    }
+  }));
+  el.querySelectorAll("[data-swf]").forEach(f => f.addEventListener("submit", e => {
+    e.preventDefault();
+    const a = accounts().find(x => x.uid === f.dataset.swf), pw = f.querySelector("input").value;
+    if (!a || !pw) return;
+    doSwitch(() => signInWithEmailAndPassword(auth, a.email, pw));
+  }));
+}
+
 function afterLogin() {
+  rememberAccount();
   if (pendingJoin) {
     const c = pendingJoin; pendingJoin = null;
     history.replaceState(null, "", location.pathname);
@@ -1447,6 +1513,10 @@ VIEWS.admin = () => {
         : `<p class="hint">${adm.repLoaded ? "ما فيه بلاغات 👌" : "…"}</p>`}
     </div>
 
+    <div class="field"><span class="label">الحساب الرسمي <span dir="ltr">@Jalsah</span> <span class="verified">✓</span></span>
+      <form class="addf" id="offF"><input class="txt" id="offEmail" type="email" dir="ltr" autocomplete="off" placeholder="إيميل الحساب الرسمي" value="${esc(adm.officialEmail || "")}" aria-label="إيميل الحساب الرسمي"><button class="btn small">احفظ</button></form>
+      <p class="hint">حط الإيميل اللي بتسوي فيه الحساب الرسمي. بعدها سوّ حساب جديد بنفس الإيميل واختر اليوزر <b dir="ltr">Jalsah</b>. ومحد غير هالإيميل يقدر ياخذ اليوزر.</p></div>
+
     <div class="field"><span class="label">🤖 فك كتم / صفّر تحذيرات البوت</span>
       <form class="addf" id="unmuteF"><div class="uinput"><span>@</span><input id="unmuteName" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="يوزر اللاعب" aria-label="يوزر اللاعب"></div><button class="btn small good">صفّر</button></form>
       <p class="hint">البوت يحذّر اللي يسب، وبعد ٣ تحذيرات يكتمه ٢٤ ساعة. من هنا تفك كتمه وترجع تحذيراته صفر.</p></div>
@@ -1482,6 +1552,14 @@ VIEWS.admin = () => {
     banUser(document.getElementById("banName").value);
   });
   onAll("[data-unban]", b => unbanUser(b.dataset.unban));
+  if (adm.officialEmail === undefined) { adm.officialEmail = ""; getDoc(doc(db, "config", "official")).then(d => { if (d.exists()) { adm.officialEmail = d.data().email || ""; if (screen === "admin") render(false); } }).catch(() => {}); }
+  on("offF", "submit", async e => {
+    e.preventDefault();
+    const v = document.getElementById("offEmail").value.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(v)) return toast("اكتب إيميل صحيح");
+    try { await setDoc(doc(db, "config", "official"), { email: v }); adm.officialEmail = v; toast("انحفظ إيميل الحساب الرسمي ✅"); }
+    catch (err) { console.error(err); toast("ما انحفظ"); }
+  });
   on("unmuteF", "submit", async e => {
     e.preventDefault();
     const key = document.getElementById("unmuteName").value.trim().replace(/^@/, "").toLowerCase();
@@ -1819,27 +1897,29 @@ VIEWS.username = () => {
   const check = () => {
     const v = inp.value.replace(/\s+/g, "");
     if (v !== inp.value) inp.value = v;
-    const ok = USER_RE.test(v) && HAS_UPPER.test(v) && !RESERVED.has(v.toLowerCase());
+    const ok = USER_RE.test(v) && HAS_UPPER.test(v) && (!RESERVED.has(v.toLowerCase()) || v.toLowerCase() === OFFICIAL);
     btn.disabled = !ok;
     if (!v) { msg.className = "hint"; msg.textContent = UNAME_HINT; }
     else if (/[^A-Za-z0-9_-]/.test(v)) { msg.className = "hint msg-bad"; msg.textContent = "مسموح بس: حروف إنجليزية وأرقام و _ و -"; }
     else if (v.length < 3) { msg.className = "hint msg-bad"; msg.textContent = "اليوزر لازم يكون ٣ خانات أو أكثر"; }
     else if (!HAS_UPPER.test(v)) { msg.className = "hint msg-bad"; msg.textContent = "لازم فيه حرف كبير واحد على الأقل، مثل D-A-L-P"; }
+    else if (v.toLowerCase() === OFFICIAL) { msg.className = "hint"; msg.textContent = "هذا يوزر الحساب الرسمي، يشتغل بس على الإيميل اللي حدده المالك."; }
     else if (RESERVED.has(v.toLowerCase())) { msg.className = "hint msg-bad"; msg.textContent = "هذا اليوزر محجوز، جرّب غيره"; }
     else { msg.className = "hint msg-ok"; msg.textContent = "@" + v + " شكله حلو"; }
   };
   inp.addEventListener("input", check); check();
   btn.addEventListener("click", async () => {
     const name = inp.value;
-    if (!USER_RE.test(name) || !HAS_UPPER.test(name) || RESERVED.has(name.toLowerCase())) return;
+    if (!USER_RE.test(name) || !HAS_UPPER.test(name) || (RESERVED.has(name.toLowerCase()) && name.toLowerCase() !== OFFICIAL)) return;
     btn.disabled = true; btn.textContent = "لحظة…";
     try {
       await claimUsername(name);
       me.username = name;
-      startGlobal(); ui.slide = 0; go("welcome");
+      startGlobal(); rememberAccount(); ui.slide = 0; go("welcome");
     } catch (e) {
       btn.disabled = false; btn.textContent = "اعتمد اليوزر";
       if (e?.code === "taken") { msg.className = "hint msg-bad"; msg.textContent = "@" + name + " محجوز، جرّب غيره"; }
+      else if (name.toLowerCase() === OFFICIAL) { msg.className = "hint msg-bad"; msg.textContent = "هذا الإيميل مو إيميل الحساب الرسمي. حدده أول من لوحة المالك."; }
       else { console.error(e); toast("ما قدرنا نحفظ اليوزر"); }
     }
   });
@@ -2197,10 +2277,11 @@ VIEWS.profile = () => {
       <div class="li"><span class="nm" dir="ltr">@${esc(me.username)}</span><button class="btn small ghost" id="copy">انسخ</button>${isOwner() ? "" : `<button class="btn small ghost" id="rename">غيّر</button>`}</div>
       <p class="hint">أرسله لأصحابك عشان يضيفونك.</p></div>
 
-    <div class="foot"><button class="btn ghost" id="tour">شرح اللعبة</button><button class="btn ghost" id="out">تسجيل خروج</button>
+    <div class="foot"><button class="btn ghost" id="tour">شرح اللعبة</button><button class="btn ghost" id="switchAcc">🔄 بدّل الحساب</button><button class="btn ghost" id="out">تسجيل خروج</button>
       <div class="row legal"><a class="link" href="privacy.html" target="_blank" rel="noopener">سياسة الخصوصية</a>${isOwner() ? "" : `<button class="link danger-link" id="delAcc">احذف حسابي</button>`}</div></div></section>`;
   on("tour", "click", () => { ui.slide = 0; go("welcome"); });
   on("delAcc", "click", openDeleteAccount);
+  on("switchAcc", "click", openSwitcher);
   const bio = document.getElementById("bio"), save = document.getElementById("saveBio");
   bio.addEventListener("input", () => {
     ui.bioDraft = bio.value;

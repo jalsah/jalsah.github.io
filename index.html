@@ -530,6 +530,17 @@ body:has(#chatFab) main{padding-bottom:78px}
 .bot-sheet .bot-av{font-size:54px;line-height:1;width:84px;height:84px;display:grid;place-items:center;border-radius:50%;background:color-mix(in srgb,var(--saffron) 22%,var(--surface));border:2px solid var(--saffron)}
 .legal{justify-content:center;gap:18px;margin-top:6px}
 .danger-link{color:var(--rose)!important}
+.verified{display:inline-grid;place-items:center;width:1.15em;height:1.15em;border-radius:50%;background:#3b9cff;color:#fff;font-size:.72em;font-weight:700;vertical-align:middle;line-height:1;font-family:system-ui,sans-serif}
+.sw-list{width:100%;gap:8px}
+.sw-acc{display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:6px 8px}
+.sw-acc.cur{border-color:var(--saffron)}
+.sw-main{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:none;color:var(--ink);font:inherit;text-align:start;cursor:pointer;padding:4px}
+.sw-main:disabled{cursor:default}
+.sw-t{flex:1;min-width:0;display:flex;flex-direction:column}
+.sw-t .hint{text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sw-pw{display:flex;gap:8px;width:100%;padding:0 4px 6px}
+.sw-pw .txt{flex:1 1 auto;width:auto;min-width:0}
+.sw-pw .btn{width:auto;flex:none;padding-inline:18px}
 </style>
 </head>
 <body>
@@ -543,6 +554,6 @@ body:has(#chatFab) main{padding-bottom:78px}
   <main id="view"><div class="spinner" aria-label="جاري التحميل"></div></main>
 </div>
 <noscript><section style="padding:24px"><h1>جلسة: ألعاب الجلسات مع أصحابك</h1><p>ألعاب الجلسات مع الشلة من جوالك: ارسم وخمّن، الدخيل، أونو، مين قالها، صح ولا خطأ، ومين أكثر واحد. أونلاين أو بجوال واحد، ومجانية.</p><p>شغّل الجافاسكربت عشان تلعب.</p></section></noscript>
-<script type="module" src="./app.js?v=28"></script>
+<script type="module" src="./app.js?v=29"></script>
 </body>
 </html>
