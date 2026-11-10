@@ -9,9 +9,9 @@ import {
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
   getCountFromServer, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=9";
-import { WORDS, MOST, FIVE } from "./content.js?v=9";
-import { ICONS } from "./icons.js?v=9";
+import { firebaseConfig } from "./firebase-config.js?v=10";
+import { WORDS, MOST, FIVE } from "./content.js?v=10";
+import { ICONS } from "./icons.js?v=10";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -596,6 +596,10 @@ const AUTH_ERR = {
   "auth/operation-not-allowed": "التسجيل بالإيميل مو مفعّل في إعدادات اللعبة."
 };
 
+const EYE_ON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg>`;
+const EYE_OFF = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/><path d="M4 4l16 16" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+const eyeBtn = id => `<button type="button" class="eye" data-for="${id}" aria-label="إظهار كلمة السر" aria-pressed="false">${EYE_ON}</button>`;
+
 VIEWS.email = () => {
   const signup = ui.emailMode !== "login";
   V.innerHTML = `<section>
@@ -609,10 +613,10 @@ VIEWS.email = () => {
       <label class="label" for="em">الإيميل</label>
       <input class="txt" id="em" type="email" dir="ltr" autocomplete="email" autocapitalize="none" inputmode="email" placeholder="name@gmail.com">
       <label class="label" for="pw">كلمة السر</label>
-      <input class="txt" id="pw" type="password" dir="ltr" autocomplete="${signup ? "new-password" : "current-password"}" placeholder="${signup ? "مثال: Dalp2026" : ""}">
+      <div class="pwbox"><input class="txt" id="pw" type="password" dir="ltr" autocomplete="${signup ? "new-password" : "current-password"}" placeholder="${signup ? "مثال: Dalp2026" : ""}">${eyeBtn("pw")}</div>
       ${signup ? `<p class="hint" id="pwHint">٨ خانات أو أكثر، وفيها حرف إنجليزي كبير واحد على الأقل.</p>` : ""}
       ${signup ? `<label class="label" for="pw2">أكّد كلمة السر</label>
-      <input class="txt" id="pw2" type="password" dir="ltr" autocomplete="new-password">` : ""}
+      <div class="pwbox"><input class="txt" id="pw2" type="password" dir="ltr" autocomplete="new-password">${eyeBtn("pw2")}</div>` : ""}
       <p class="hint msg-bad" id="emMsg" role="alert"></p>
       <button class="btn" id="emGo">${signup ? "سوّ الحساب" : "دخول"}</button>
       ${signup ? "" : `<button type="button" class="link center" id="forgot">نسيت كلمة السر؟</button>`}
@@ -620,6 +624,14 @@ VIEWS.email = () => {
     <div class="foot"><button class="btn ghost" id="gInstead"><span class="g-logo" aria-hidden="true">${GOOGLE_G}</span>أو كمّل بقوقل</button></div>
   </section>`;
   const msg = document.getElementById("emMsg");
+  V.querySelectorAll(".eye").forEach(b => b.addEventListener("click", () => {
+    const inp = document.getElementById(b.dataset.for);
+    const show = inp.type === "password";
+    inp.type = show ? "text" : "password";
+    b.setAttribute("aria-pressed", show);
+    b.setAttribute("aria-label", show ? "إخفاء كلمة السر" : "إظهار كلمة السر");
+    b.innerHTML = show ? EYE_OFF : EYE_ON;
+  }));
   const pwIn = document.getElementById("pw"), pwHint = document.getElementById("pwHint");
   if (pwHint) pwIn.addEventListener("input", () => {
     const v = pwIn.value, okLen = v.length >= PW_MIN, okUp = HAS_UPPER.test(v);
