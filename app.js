@@ -3,17 +3,17 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
   onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword,
   sendPasswordResetEmail, signInAnonymously, deleteUser, reauthenticateWithPopup,
-  reauthenticateWithCredential, EmailAuthProvider
+  reauthenticateWithCredential, EmailAuthProvider, updateCurrentUser
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot,
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
   getCountFromServer, Timestamp, orderBy, limit, addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, authUrl } from "./firebase-config.js?v=26";
-import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=26";
-import { ICONS } from "./icons.js?v=26";
-import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=26";
+import { firebaseConfig, authUrl } from "./firebase-config.js?v=27";
+import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=27";
+import { ICONS } from "./icons.js?v=27";
+import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=27";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -266,8 +266,15 @@ async function login() {
 
 /* ================= تبديل الحسابات ================= */
 const accounts = () => { const a = store.get("accounts", []); return Array.isArray(a) ? a : []; };
+// كل حساب له جلسة محفوظة لحاله، عشان التبديل يصير بدون كلمة سر
+const accAuths = new Map();
+function accAuth(uid) {
+  if (!accAuths.has(uid)) accAuths.set(uid, getAuth(initializeApp(firebaseConfig, "acc_" + uid)));
+  return accAuths.get(uid);
+}
 function rememberAccount() {
   const u = auth.currentUser; if (!u || !me?.username) return;
+  updateCurrentUser(accAuth(u.uid), u).catch(e => console.error(e));
   const google = u.providerData.some(p => p.providerId === "google.com");
   const list = accounts().filter(a => a.uid !== u.uid);
   list.unshift({ uid: u.uid, username: me.username, email: u.email || "", google, photo: me.photo || "" });
@@ -298,6 +305,7 @@ function openSwitcher() {
     ui.emailMode = "login"; await signOut(auth); go("auth");
   });
   el.querySelectorAll("[data-swrm]").forEach(b => b.addEventListener("click", () => {
+    signOut(accAuth(b.dataset.swrm)).catch(() => {});
     store.set("accounts", accounts().filter(a => a.uid !== b.dataset.swrm)); close(); openSwitcher();
   }));
   const doSwitch = async (fn) => {
@@ -308,8 +316,13 @@ function openSwitcher() {
         : ["auth/popup-closed-by-user", "auth/cancelled-popup-request"].includes(e.code) ? "" : "ما زبط التبديل، جرّب مرة ثانية.";
     }
   };
-  el.querySelectorAll("[data-sw]").forEach(b => b.addEventListener("click", () => {
+  el.querySelectorAll("[data-sw]").forEach(b => b.addEventListener("click", async () => {
     const a = accounts().find(x => x.uid === b.dataset.sw); if (!a) return;
+    // أول شي: الجلسة المحفوظة (بدون كلمة سر)
+    try {
+      const saved = accAuth(a.uid); await saved.authStateReady();
+      if (saved.currentUser) return doSwitch(() => updateCurrentUser(auth, saved.currentUser));
+    } catch (e) { console.error(e); }
     if (a.google) {
       const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt: "select_account", ...(a.email ? { login_hint: a.email } : {}) });
       doSwitch(() => signInWithPopup(auth, p));
@@ -2311,7 +2324,7 @@ VIEWS.profile = () => {
   });
   on("copy", "click", () => copyText("@" + me.username, "انسخ اليوزر"));
   on("rename", "click", () => go("rename"));
-  on("out", "click", async e => { if (!confirmTap(e.currentTarget)) return; await leaveRoom(true); signOut(auth); });
+  on("out", "click", async e => { if (!confirmTap(e.currentTarget)) return; await leaveRoom(true); signOut(accAuth(me.uid)).catch(() => {}); signOut(auth); });
 };
 
 /* ================= حذف الحساب ================= */
@@ -2354,6 +2367,8 @@ function openDeleteAccount() {
       await b.commit();
       ["welcomed:" + me.uid, "blocked", "instHide"].forEach(k => { try { localStorage.removeItem("jalsa:" + k); } catch (e) {} });
       offAll();
+      signOut(accAuth(user.uid)).catch(() => {});
+      store.set("accounts", accounts().filter(a => a.uid !== user.uid));
       await deleteUser(user);
       close(); toast("انحذف حسابك. الله يحييك أي وقت 👋");
     } catch (err) {
