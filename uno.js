@@ -164,8 +164,8 @@ export function tableSVG(key = "felt") {
   <rect x="40" y="41" width="320" height="320" rx="68" fill="url(#${k}felt)"/>
   ${t.noise ? `<rect x="40" y="41" width="320" height="320" rx="68" fill="#000" filter="url(#${k}n)"/>` : ""}
   ${deco.join("")}
-  ${t.shine ? `<defs><linearGradient id="${k}sh" x1="0" y1="0" x2="1" y2="0" gradientUnits="objectBoundingBox"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/><animateTransform attributeName="gradientTransform" type="translate" from="-1 0" to="1 0" dur="3.2s" repeatCount="indefinite"/></linearGradient></defs>
-  <rect x="10" y="10" width="380" height="380" rx="92" fill="none" stroke="url(#${k}sh)" stroke-width="26"/>` : ""}
+  ${t.shine ? `<defs><linearGradient id="${k}sh" x1="-160" y1="0" x2="0" y2="160" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".6"/><stop offset="1" stop-color="#fff" stop-opacity="0"/><animateTransform attributeName="gradientTransform" type="translate" values="-100 -100;560 560" dur="3.4s" repeatCount="indefinite"/></linearGradient></defs>
+  <rect x="23" y="23" width="354" height="354" rx="80" fill="none" stroke="url(#${k}sh)" stroke-width="24"/>` : ""}
   <rect x="40" y="41" width="320" height="320" rx="68" fill="none" stroke="rgba(0,0,0,.45)" stroke-width="6"/>
   <rect x="56" y="57" width="288" height="288" rx="54" fill="none" stroke="${t.line}" stroke-opacity=".4" stroke-width="1.5" stroke-dasharray="5 5"/>
   <text x="200" y="312" text-anchor="middle" font-family="Lalezar,Tahoma,sans-serif" font-size="28" fill="${t.mark}">جلسة</text>

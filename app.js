@@ -14,7 +14,7 @@ import { getMessaging, getToken, isSupported as pushSupported } from "https://ww
 import { firebaseConfig, authUrl } from "./firebase-config.js?v=27";
 import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=27";
 import { ICONS } from "./icons.js?v=27";
-import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, tableSVG, TABLES, BACKS, seatSpots, isWild, cColor, cVal } from "./uno.js?v=31";
+import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, tableSVG, TABLES, BACKS, seatSpots, isWild, cColor, cVal } from "./uno.js?v=32";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -80,13 +80,14 @@ const medal = (x, on = true) => `<span class="medal ${on ? "t-" + x.tier : "off"
 const achGot = (s, xp, name) => STAFF(name) ? ACH : ACH.filter(x => x.ok(s || {}, xp || 0));
 /* ================= متجر جلسة ================= */
 const SHOP = [
-  { id: "king", name: "باقة الملك", desc: "كل الحصريات + VIP سنة كاملة", price: 399, grants: ["t_royal", "b_royal", "f_gold", "f_fire", "f_sadu"], days: 365, hot: 1 },
+  { id: "king", name: "باقة الملك", desc: "كل الحصريات + VIP سنة كاملة", price: 399, grants: ["t_royal", "b_royal", "f_gold", "f_fire", "f_sadu", "e_royal"], days: 365, hot: 1 },
   { id: "vip365", name: "VIP سنة", desc: "شارة VIP وكل الحصريات لمدة سنة", price: 249, grants: [], days: 365 },
   { id: "vip30", name: "VIP شهر", desc: "شارة VIP وكل الحصريات لمدة شهر", price: 39, grants: [], days: 30 },
   { id: "t_royal", name: "الطاولة الملكية", desc: "مخمل أحمر وإطار ذهبي يلمع", price: 39, grants: ["t_royal"], days: 0 },
   { id: "f_gold", name: "إطار ذهبي", desc: "إطار يدور حول صورتك ويشوفه الكل", price: 25, grants: ["f_gold"], days: 0 },
   { id: "f_fire", name: "إطار ناري", desc: "إطار يدور حول صورتك ويشوفه الكل", price: 25, grants: ["f_fire"], days: 0 },
   { id: "f_sadu", name: "إطار سدو", desc: "إطار يدور حول صورتك ويشوفه الكل", price: 25, grants: ["f_sadu"], days: 0 },
+  { id: "e_royal", name: "الدخلة الملكية", desc: "لما تدخل أي غرفة يطلع للكل إعلان دخولك 👑", price: 29, grants: ["e_royal"], days: 0 },
   { id: "b_royal", name: "ظهر الورق الملكي", desc: "عنابي بتاج ذهبي", price: 19, grants: ["b_royal"], days: 0 }
 ];
 const FRAMES = { f_gold: "ذهبي", f_fire: "ناري", f_sadu: "سدو" };
@@ -418,6 +419,7 @@ async function claimUsername(name) {
 
 /* ================= live data ================= */
 function startGlobal() {
+  setTimeout(claimStreak, 1500);
   if (pushState() === "granted") setTimeout(() => pushSaveToken(true), 3000);
   const ping = () => updateDoc(doc(db, "users", me.uid), { lastSeen: serverTimestamp() }).catch(() => {});
   ping();
@@ -431,7 +433,7 @@ function startGlobal() {
     for (const uid of ids) if (!subs.has("f:" + uid)) {
       friends.set(uid, { username: "…", lastSeen: null });
       sub("f:" + uid, onSnapshot(doc(db, "users", uid), s => {
-        if (s.exists()) { const d = s.data(); friends.set(uid, { username: d.username, lastSeen: d.lastSeen, photo: d.photo || "", bio: d.bio || "" }); }
+        if (s.exists()) { const d = s.data(); friends.set(uid, { ...d, username: d.username, lastSeen: d.lastSeen, photo: d.photo || "", bio: d.bio || "" }); }
         refresh();
       }));
     }
@@ -1454,7 +1456,15 @@ async function saveAnnounce(text) {
 const EMOJIS = ["😂", "🤣", "😅", "😍", "😎", "🤔", "😮", "😡", "😭", "👍", "👏", "🙏", "🔥", "❤️", "💯", "🎉", "👀", "🕵️", "🤝", "✋"];
 const cleanMsg = t => String(t || "").replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, "").trim();
 const timeOf = ts => { const d = ts?.toDate?.(); return d ? d.toLocaleTimeString("ar-SA", { hour: "numeric", minute: "2-digit" }) : ""; };
+const GIFT_RE = /^🎁GIFT:([a-z_0-9]{2,12}):([A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})$/;
 function msgHtml(m, mine, showName) {
+  const g = GIFT_RE.exec(m.text || "");
+  if (g) {
+    const it = SHOP.find(x => x.id === g[1]);
+    return `<div class="msg ${mine ? "me" : ""}"><div class="bub gift"><span class="gift-ic" aria-hidden="true">🎁</span>
+      <b>${mine ? "أهديت" : "جاتك هدية!"}</b><span>${esc(it ? it.name : "هدية من المتجر")}</span>
+      ${mine ? "" : `<button class="btn small" data-gift="${esc(g[2])}">افتح الهدية</button>`}<span class="msg-time">${timeOf(m.at)}</span></div></div>`;
+  }
   return `<div class="msg ${mine ? "me" : ""}">
     ${mine ? "" : `<button class="msg-av" data-who="${esc(m.uid || m.from || "")}" aria-label="بروفايل ${esc(m.name || "")}">${avatar(m.name || "", prof(m.uid || m.from)?.photo, 28)}</button>`}
     <div class="bub">${showName && !mine ? `<span class="msg-n" dir="ltr">${at(m.name || "")}</span>` : ""}<span class="msg-t" dir="auto">${esc(censor(m.text))}</span><span class="msg-time">${timeOf(m.at)}</span></div>
@@ -1566,7 +1576,7 @@ function updateDmList() {
 }
 async function sendDm(uid, text) {
   const pid = chatId(uid), b = writeBatch(db);
-  b.set(doc(db, "chats", pid), { members: pid.split("_"), last: text.slice(0, 80), lastAt: serverTimestamp(), lastFrom: me.uid, read: { [me.uid]: serverTimestamp() } }, { merge: true });
+  b.set(doc(db, "chats", pid), { members: pid.split("_"), last: GIFT_RE.test(text) ? "🎁 هدية" : text.slice(0, 80), lastAt: serverTimestamp(), lastFrom: me.uid, read: { [me.uid]: serverTimestamp() } }, { merge: true });
   b.set(doc(collection(db, "chats", pid, "msgs")), { from: me.uid, text, at: serverTimestamp() });
   await b.commit();
   pushNotify(uid, "dm");
@@ -1607,6 +1617,7 @@ VIEWS.dm = () => {
   </section>`;
   bindEmoji(V);
   on("dmWho", "click", () => showProfile(uid));
+  document.getElementById("dmList").addEventListener("click", e => { const b = e.target.closest("[data-gift]"); if (b) redeemCode(b.dataset.gift); });
   on("dmF", "submit", async e => {
     e.preventDefault();
     const inp = document.getElementById("dmIn"), text = cleanMsg(inp.value).slice(0, 500);
@@ -2301,6 +2312,68 @@ async function enablePush() {
 }
 const showPushCard = () => me?.uid && ["default", "ios"].includes(pushState()) && Date.now() - store.get("pushHide", 0) > 3 * 864e5;
 
+function sheet(html) {
+  document.getElementById("gSheet")?.remove();
+  const el = document.createElement("div");
+  el.id = "gSheet"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true");
+  el.innerHTML = `<div class="sheet">${html}</div>`;
+  document.body.appendChild(el);
+  el.addEventListener("click", e => { if (e.target === el || e.target.closest("[data-close]")) el.remove(); });
+  return el;
+}
+/* ================= سلسلة الأيام ================= */
+const dayKey = ms => new Date(ms + 3 * 3600e3).toISOString().slice(0, 10); // بتوقيت السعودية
+const streakNow = () => { const last = me?.streakAt?.toMillis?.() || 0; if (!last) return 0; const d = (Date.parse(dayKey(Date.now())) - Date.parse(dayKey(last))) / 864e5; return d <= 1 ? me.streak || 0 : 0; };
+async function claimStreak() {
+  if (!me?.uid || ui.streakBusy) return;
+  const last = me.streakAt?.toMillis?.() || 0, now = Date.now();
+  if (last && dayKey(last) === dayKey(now)) return;           // أخذها اليوم
+  if (last && now - last < 12 * 3600e3) return;                 // نرجع لها بعدين
+  const gap = last ? (Date.parse(dayKey(now)) - Date.parse(dayKey(last))) / 864e5 : 99;
+  const streak = gap === 1 ? (me.streak || 0) + 1 : 1;
+  const add = 10 + Math.min(streak, 7) * 5 + (streak % 7 === 0 ? 50 : 0);
+  ui.streakBusy = true;
+  try {
+    await updateDoc(doc(db, "users", me.uid), { streak, streakAt: serverTimestamp(), xp: (me.xp || 0) + add, xpAt: serverTimestamp() });
+    me.streak = streak; me.streakAt = { toMillis: () => Date.now() }; me.xp = (me.xp || 0) + add;
+    showStreak(streak, add, gap > 1 && last);
+    if (screen === "home" || screen === "profile") render(false);
+  } catch (e) { console.warn("streak", e); }
+  ui.streakBusy = false;
+}
+function showStreak(streak, add, broke) {
+  const pos = ((streak - 1) % 7) + 1;
+  const dots = Array.from({ length: 7 }, (_, i) => `<span class="sk-d ${i < pos ? "on" : ""} ${i === pos - 1 ? "now" : ""}">${i === 6 ? "🎁" : ar(i + 1)}</span>`).join("");
+  sheet(`<div class="streak-s">
+    <div class="sk-fire" aria-hidden="true">🔥</div>
+    <h3>${streak === 1 ? (broke ? "بدأت سلسلة جديدة" : "أول يوم في سلسلتك") : `سلسلة ${ar(streak)} ${streak <= 10 ? "أيام" : "يوم"}!`}</h3>
+    <div class="sk-row">${dots}</div>
+    <p class="sk-xp">+${ar(add)} خبرة ⭐${streak % 7 === 0 ? " · هدية الأسبوع 🎁" : ""}</p>
+    <p class="hint">افتح جلسة كل يوم عشان ما تنقطع السلسلة. اليوم السابع هديته أكبر.</p>
+    <button class="btn" data-close>يلا نلعب</button></div>`);
+}
+
+/* ================= الدخلة الملكية ================= */
+function entranceCheck() {
+  if (!room || !roomCode) return;
+  const ids = Object.keys(room.players || {});
+  if (!ui.ent || ui.ent.room !== roomCode) { ui.ent = { room: roomCode, seen: new Set(ids) }; return; }
+  ids.filter(u => !ui.ent.seen.has(u)).forEach(u => {
+    ui.ent.seen.add(u);
+    let tries = 0;
+    const go_ = () => { const p = prof(u); if (p) { if (owns(p, "e_royal")) showEntrance(p); } else if (++tries < 6) setTimeout(go_, 400); };
+    go_();
+  });
+}
+function showEntrance(p) {
+  const el = document.createElement("div");
+  el.className = "entr"; el.setAttribute("role", "status");
+  el.innerHTML = `<span class="entr-c" aria-hidden="true">👑</span>${avF(p, 44)}<span class="entr-t"><b dir="ltr">${at(p.username)}</b><span>دخل الجلسة</span></span>`;
+  document.body.appendChild(el);
+  setTimeout(() => el.classList.add("out"), 3200);
+  setTimeout(() => el.remove(), 3800);
+}
+
 /* ================= صفحة المتجر ================= */
 const shopBase = () => /^https:\/\//.test(shopCfg?.base || "") ? shopCfg.base : "https://jalsah.rmz.gg";
 const shopLink = id => { const l = shopCfg?.links?.[id]; return /^https:\/\//.test(l || "") ? l : shopBase(); };
@@ -2309,6 +2382,7 @@ function shopPreview(it) {
   if (it.id === "king") return `<span class="sp-king">👑</span>`;
   if (it.days && !g.length) return `<span class="sp-vip">VIP</span>`;
   if (g[0] === "t_royal") return tableSVG("royal");
+  if (g[0] === "e_royal") return `<span class="sp-ent"><span>👑</span>${avF(prof(me.uid), 40)}<b>دخل الجلسة</b></span>`;
   if (g[0] === "b_royal") return `<span class="sp-back">${cardSVG(null, "royal")}</span>`;
   if (FRAMES[g[0]]) return `<span class="fr ${g[0]}" style="--fs:4px">${avatar(me.username, me.photo, 64)}</span>`;
   return "";
@@ -2358,6 +2432,13 @@ VIEWS.shop = () => {
       <div class="row"><input class="txt" id="codeIn" dir="ltr" maxlength="14" placeholder="XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="الكود">
       <button class="btn small">فعّل</button></div>
     </form>
+    <details class="giftbox"><summary>🎁 أهدِ صديق</summary>
+      <p class="hint">اشترِ أي شي من المتجر، وبدل ما تفعّل الكود لنفسك أرسله هدية لواحد من أصحابك. توصله رسالة فيها زر «افتح الهدية».</p>
+      ${friends.size ? `<form id="giftF" class="giftf">
+        <select class="txt" id="giftTo" aria-label="لمين؟">${[...friends.entries()].map(([u, f]) => `<option value="${esc(u)}">@${esc(f.username)}</option>`).join("")}</select>
+        <input class="txt" id="giftCode" dir="ltr" maxlength="14" placeholder="XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="الكود">
+        <button class="btn small">أرسل الهدية 🎁</button></form>` : `<p class="hint">ضيف أصحابك أول عشان تقدر تهديهم.</p>`}
+    </details>
     ${vip ? `<div class="vipbox">👑 أنت VIP لين <b>${new Date(p.vipUntil).toLocaleDateString("ar-SA", { day: "numeric", month: "long", year: "numeric" })}</b>، وكل الحصريات مفتوحة لك.</div>` : ""}
     <div class="shop">${SHOP.map(it => {
       const mine = it.grants.length && it.grants.every(g => owns(p, g)) && !it.days;
@@ -2372,6 +2453,20 @@ VIEWS.shop = () => {
   const inp = document.getElementById("codeIn");
   inp.addEventListener("input", () => { const v = fmtCode(inp.value); if (v !== inp.value) inp.value = v; });
   on("codeF", "submit", e => { e.preventDefault(); redeemCode(inp.value); });
+  const gin = document.getElementById("giftCode");
+  gin?.addEventListener("input", () => { const v = fmtCode(gin.value); if (v !== gin.value) gin.value = v; });
+  on("giftF", "submit", async e => {
+    e.preventDefault();
+    const code = fmtCode(gin.value), to = document.getElementById("giftTo").value;
+    if (code.length !== 14) return toast("اكتب الكود كامل");
+    try {
+      const c = await getDoc(doc(db, "codes", code));
+      if (!c.exists()) return toast("الكود غلط، تأكد منه");
+      if (c.data().by) return toast("هذا الكود مستخدم من قبل");
+      await sendDm(to, `🎁GIFT:${c.data().item}:${code}`);
+      gin.value = ""; toast("انرسلت الهدية 🎁"); 
+    } catch (err) { console.error(err); toast("ما انرسلت، جرّب مرة ثانية"); }
+  });
 };
 
 /* ================= ثبّت جلسة على الشاشة ================= */
@@ -2421,7 +2516,7 @@ VIEWS.home = () => {
   V.innerHTML = `<section>
     <div class="hello">
       <button class="hello-av" id="hProf" aria-label="بروفايلي">${avF(prof(me.uid), 56)}</button>
-      <div class="hello-t"><span class="hint">هلا والله</span><b dir="ltr">${at(me.username)}</b></div>
+      <div class="hello-t"><span class="hint">هلا والله</span><b dir="ltr">${at(me.username)}</b></div>${streakNow() ? `<span class="sk-chip" title="سلسلة الأيام">🔥 ${ar(streakNow())}</span>` : ""}
     </div>
 
     ${showInstallCard() ? `<div class="inst"><img src="icon-180.png" alt="" width="52" height="52">
@@ -2779,7 +2874,7 @@ function bindLeave() { on("leave", "click", e => { if (confirmTap(e.currentTarge
 VIEWS.room = () => {
   if (!room) { V.innerHTML = `<div class="spinner" aria-label="جاري التحميل"></div>`; return; }
   if (room.phase === "hq") { if (!subs.has("hdone")) watchHhnjDone(); } else if (subs.has("hdone")) { off("hdone"); ui.hDoneCount = 0; }
-  awardXp();
+  awardXp(); entranceCheck();
   if (room.phase === "uno" && isHost()) { if (!subs.has("umoves")) watchUnoMoves(); unoCleanup(); } else if (subs.has("umoves")) off("umoves");
   if (room.phase !== "uno" && room.phase !== "unoend") { UNO.st = null; UNO.processed = {}; }
   const host = isHost();
@@ -3479,7 +3574,7 @@ if (configured) {
     try {
       const s = await getDoc(doc(db, "users", user.uid));
       if (!s.exists()) { me = { uid: user.uid }; go("username"); return; }
-      me = { uid: user.uid, username: s.data().username, photo: s.data().photo || "", bio: s.data().bio || "", xp: s.data().xp || 0, stats: s.data().stats || {}, look: s.data().look || null, owned: s.data().owned || [], vipUntil: s.data().vipUntil || 0, frame: s.data().frame || "", renamedAt: s.data().usernameChangedAt || null, warns: s.data().warns || 0, mutedUntil: s.data().mutedUntil || 0 };
+      me = { uid: user.uid, username: s.data().username, photo: s.data().photo || "", bio: s.data().bio || "", xp: s.data().xp || 0, stats: s.data().stats || {}, look: s.data().look || null, owned: s.data().owned || [], vipUntil: s.data().vipUntil || 0, frame: s.data().frame || "", streak: s.data().streak || 0, streakAt: s.data().streakAt || null, renamedAt: s.data().usernameChangedAt || null, warns: s.data().warns || 0, mutedUntil: s.data().mutedUntil || 0 };
       startGlobal();
       const b = await getDoc(doc(db, "bans", user.uid)).catch(() => null);
       if (b?.exists()) { banned = true; go("banned"); return; }
