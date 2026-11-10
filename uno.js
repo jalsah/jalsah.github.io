@@ -92,7 +92,8 @@ export const BACKS = {
   classic: { name: "كلاسيك", lvl: 1 },
   sadu: { name: "سدو", lvl: 3 },
   night: { name: "ليل", lvl: 8 },
-  gold: { name: "ذهبي", lvl: 20 }
+  gold: { name: "ذهبي", lvl: 20 },
+  royal: { name: "ملكي", lvl: 9999, shop: "b_royal" }
 };
 function backSVG(id, back) {
   const word = (fill, stroke = "#1a1426") => `<text x="30" y="51" text-anchor="middle" ${FONT} font-size="18" fill="${fill}" stroke="${stroke}" stroke-linejoin="round" paint-order="stroke" stroke-width="2.4" transform="rotate(-30 30 45)">جلسة</text>`;
@@ -108,6 +109,16 @@ function backSVG(id, back) {
     return `<svg viewBox="0 0 60 90" class="ucard-svg" aria-hidden="true">${frame(id, "#3e2f8a", "#120c2e")}${stars}
       <path d="M38 24 a12 12 0 1 0 6 20 a10 10 0 1 1 -6 -20z" fill="#f7c948"/>
       <text x="30" y="68" text-anchor="middle" ${FONT} font-size="15" fill="#fff" stroke="#120c2e" stroke-width="2" paint-order="stroke">جلسة</text>${gloss(id)}</svg>`;
+  }
+  if (back === "royal") {
+    return `<svg viewBox="0 0 60 90" class="ucard-svg" aria-hidden="true">${frame(id, "#8e1430", "#3a0612")}
+      <defs><linearGradient id="${id}au" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff1b8"/><stop offset=".5" stop-color="#f2c14e"/><stop offset="1" stop-color="#b8862b"/></linearGradient></defs>
+      <rect x="7" y="7" width="46" height="76" rx="4" fill="none" stroke="url(#${id}au)" stroke-width="1.6"/>
+      ${[[11, 11], [49, 11], [11, 79], [49, 79]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.6" fill="url(#${id}au)"/>`).join("")}
+      <path d="M17 44 l4 -12 l9 8 l9 -8 l4 12 z" fill="url(#${id}au)" stroke="#3a0612" stroke-width=".8" stroke-linejoin="round"/>
+      <rect x="17" y="45" width="26" height="4" rx="1" fill="url(#${id}au)"/>
+      <circle cx="21" cy="31" r="1.8" fill="#fff1b8"/><circle cx="30" cy="38" r="1.8" fill="#fff1b8"/><circle cx="39" cy="31" r="1.8" fill="#fff1b8"/>
+      <text x="30" y="64" text-anchor="middle" ${FONT} font-size="13" fill="url(#${id}au)">جلسة</text>${gloss(id)}</svg>`;
   }
   if (back === "gold") {
     return `<svg viewBox="0 0 60 90" class="ucard-svg" aria-hidden="true">${frame(id, "#1d1d22", "#050506")}
@@ -127,6 +138,7 @@ export const TABLES = {
   sadu: { name: "سدو", lvl: 5, rim: ["#7a4a24", "#4f2a10", "#6e3d1a", "#2e1708"], felt: ["#b23a3d", "#842530", "#4e1218"], line: "#f2b134", mark: "rgba(255,240,200,.1)", noise: 1, sadu: 1 },
   night: { name: "ليل", lvl: 10, rim: ["#4a3a7c", "#271d4a", "#3b2e66", "#140e2a"], felt: ["#3d2f7a", "#251c52", "#140f30"], line: "#c9b8ff", mark: "rgba(255,255,255,.07)", noise: 1, stars: 1 },
   marble: { name: "رخام", lvl: 15, rim: ["#f0dfa8", "#b89a4e", "#dcc581", "#8e7232"], felt: ["#f6f3ec", "#e2ddd2", "#c7c0b2"], line: "#b89a4e", mark: "rgba(80,60,20,.09)", veins: 1 },
+  royal: { name: "الملكية", lvl: 9999, shop: "t_royal", rim: ["#fff1b8", "#c9952f", "#f2c14e", "#7a5512"], felt: ["#9e1838", "#6d0d24", "#3a0612"], line: "#f2c14e", mark: "rgba(255,225,150,.12)", noise: 1, shine: 1 },
   gold: { name: "ذهبي", lvl: 30, rim: ["#f7d77a", "#b8862b", "#e8c25a", "#7a5512"], felt: ["#2e2e33", "#18181b", "#060607"], line: "#e8c25a", mark: "rgba(232,194,90,.1)", noise: 1 }
 };
 export function tableSVG(key = "felt") {
@@ -152,6 +164,8 @@ export function tableSVG(key = "felt") {
   <rect x="40" y="41" width="320" height="320" rx="68" fill="url(#${k}felt)"/>
   ${t.noise ? `<rect x="40" y="41" width="320" height="320" rx="68" fill="#000" filter="url(#${k}n)"/>` : ""}
   ${deco.join("")}
+  ${t.shine ? `<defs><linearGradient id="${k}sh" x1="0" y1="0" x2="1" y2="0" gradientUnits="objectBoundingBox"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/><animateTransform attributeName="gradientTransform" type="translate" from="-1 0" to="1 0" dur="3.2s" repeatCount="indefinite"/></linearGradient></defs>
+  <rect x="10" y="10" width="380" height="380" rx="92" fill="none" stroke="url(#${k}sh)" stroke-width="26"/>` : ""}
   <rect x="40" y="41" width="320" height="320" rx="68" fill="none" stroke="rgba(0,0,0,.45)" stroke-width="6"/>
   <rect x="56" y="57" width="288" height="288" rx="54" fill="none" stroke="${t.line}" stroke-opacity=".4" stroke-width="1.5" stroke-dasharray="5 5"/>
   <text x="200" y="312" text-anchor="middle" font-family="Lalezar,Tahoma,sans-serif" font-size="28" fill="${t.mark}">جلسة</text>

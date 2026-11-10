@@ -14,7 +14,7 @@ import { getMessaging, getToken, isSupported as pushSupported } from "https://ww
 import { firebaseConfig, authUrl } from "./firebase-config.js?v=27";
 import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=27";
 import { ICONS } from "./icons.js?v=27";
-import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, tableSVG, TABLES, BACKS, seatSpots, isWild, cColor, cVal } from "./uno.js?v=30";
+import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, tableSVG, TABLES, BACKS, seatSpots, isWild, cColor, cVal } from "./uno.js?v=31";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -78,7 +78,28 @@ const ACH = [
 const TIER_RANK = { g: 3, s: 2, b: 1 };
 const medal = (x, on = true) => `<span class="medal ${on ? "t-" + x.tier : "off"}" title="${esc(x.t)}"><svg viewBox="0 0 24 24" aria-hidden="true">${on ? x.svg : '<rect x="6" y="11" width="12" height="9" rx="2"/><path d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3"/>'}</svg></span>`;
 const achGot = (s, xp, name) => STAFF(name) ? ACH : ACH.filter(x => x.ok(s || {}, xp || 0));
-const myLook = () => ({ t: TABLES[me?.look?.t] && myLvl() >= TABLES[me.look.t].lvl ? me.look.t : "felt", b: BACKS[me?.look?.b] && myLvl() >= BACKS[me.look.b].lvl ? me.look.b : "classic" });
+/* ================= متجر جلسة ================= */
+const SHOP = [
+  { id: "king", name: "باقة الملك", desc: "كل الحصريات + VIP سنة كاملة", price: 399, grants: ["t_royal", "b_royal", "f_gold", "f_fire", "f_sadu"], days: 365, hot: 1 },
+  { id: "vip365", name: "VIP سنة", desc: "شارة VIP وكل الحصريات لمدة سنة", price: 249, grants: [], days: 365 },
+  { id: "vip30", name: "VIP شهر", desc: "شارة VIP وكل الحصريات لمدة شهر", price: 39, grants: [], days: 30 },
+  { id: "t_royal", name: "الطاولة الملكية", desc: "مخمل أحمر وإطار ذهبي يلمع", price: 39, grants: ["t_royal"], days: 0 },
+  { id: "f_gold", name: "إطار ذهبي", desc: "إطار يدور حول صورتك ويشوفه الكل", price: 25, grants: ["f_gold"], days: 0 },
+  { id: "f_fire", name: "إطار ناري", desc: "إطار يدور حول صورتك ويشوفه الكل", price: 25, grants: ["f_fire"], days: 0 },
+  { id: "f_sadu", name: "إطار سدو", desc: "إطار يدور حول صورتك ويشوفه الكل", price: 25, grants: ["f_sadu"], days: 0 },
+  { id: "b_royal", name: "ظهر الورق الملكي", desc: "عنابي بتاج ذهبي", price: 19, grants: ["b_royal"], days: 0 }
+];
+const FRAMES = { f_gold: "ذهبي", f_fire: "ناري", f_sadu: "سدو" };
+const SHOP_URL = "https://slt1.store";
+let shopCfg = null; // روابط المنتجات في متجر سايلنت
+const vipOn = p => (p?.vipUntil || 0) > Date.now();
+const owns = (p, id) => STAFF(p?.username) || vipOn(p) || (p?.owned || []).includes(id);
+const lookOpen = (t, p = me) => t.shop ? owns(p, t.shop) : lvlOfP(p) >= t.lvl;
+const myLook = () => ({ t: TABLES[me?.look?.t] && lookOpen(TABLES[me.look.t]) ? me.look.t : "felt", b: BACKS[me?.look?.b] && lookOpen(BACKS[me.look.b]) ? me.look.b : "classic" });
+const frameOf = p => p?.frame && FRAMES[p.frame] && owns(p, p.frame) ? p.frame : "";
+// الصورة مع الإطار (لو عنده)
+const avF = (p, size) => { const f = frameOf(p), av = avatar(p?.username, p?.photo, size); return f ? `<span class="fr ${f}" style="--fs:${Math.max(3, Math.round(size / 18))}px">${av}</span>` : av; };
+const vipTag = p => vipOn(p) && !STAFF(p?.username) ? `<span class="vip">VIP</span>` : "";
 
 const OFFICIAL = "jalsah"; // حساب جلسة الرسمي (@Jalsah)، تحت تصرف المالك
 const isOwner = () => [OWNER, OFFICIAL].includes(String(me?.username || "").toLowerCase());
@@ -147,7 +168,7 @@ let roomChat = [];            // شات الغرفة
 const profiles = new Map();   // uid -> { username, photo, bio }
 const profWant = new Set();
 function prof(uid) {
-  if (uid === me?.uid) return { username: me.username, photo: me.photo, bio: me.bio, xp: me.xp, stats: me.stats };
+  if (uid === me?.uid) return { username: me.username, photo: me.photo, bio: me.bio, xp: me.xp, stats: me.stats, owned: me.owned, vipUntil: me.vipUntil, frame: me.frame };
   const f = friends.get(uid); if (f && f.username !== "…") return f;
   if (profiles.has(uid)) return profiles.get(uid);
   if (db && me && !profWant.has(uid)) {
@@ -162,7 +183,7 @@ const isOnline = f => { const t = f?.lastSeen?.toMillis?.(); return !!t && Date.
 const pairId = (a, b) => [a, b].sort().join("_");
 
 /* ================= navigation & rendering ================= */
-const REFRESH = new Set(["home", "friends", "room", "profile", "admin", "inbox"]);
+const REFRESH = new Set(["home", "friends", "room", "profile", "admin", "inbox", "shop"]);
 function go(name) {
   stopLocalTimers();
   if (screen === "dm" && name !== "dm") { off("dm"); ui.dmWith = null; }
@@ -193,7 +214,7 @@ function on(id, ev, fn) { const el = document.getElementById(id); if (el) el.add
 function onAll(sel, fn) { V.querySelectorAll(sel).forEach(el => el.addEventListener("click", e => fn(e.currentTarget, e))); }
 
 const BACK = {
-  pub: "home", friends: "home", profile: "home", admin: "home", rename: "profile", inbox: "home", dm: "inbox",
+  pub: "home", shop: "home", friends: "home", profile: "home", admin: "home", rename: "profile", inbox: "home", dm: "inbox",
   "l-hhnj": "local",
   email: "auth", forgot: () => (ui.emailMode = "login", "email"),
   local: () => me?.username ? "home" : (configured ? "auth" : "setup"),
@@ -1653,6 +1674,19 @@ VIEWS.admin = () => {
         : `<p class="hint">${adm.repLoaded ? "ما فيه بلاغات 👌" : "…"}</p>`}
     </div>
 
+    <div class="field"><span class="label">🛍️ أكواد المتجر</span>
+      <form class="codegen" id="genF">
+        <select class="txt" id="genItem" aria-label="المنتج">${SHOP.map(it => `<option value="${it.id}">${it.name} (${ar(it.price)} ريال)</option>`).join("")}</select>
+        <div class="row"><input class="txt" id="genN" type="number" min="1" max="100" value="10" dir="ltr" aria-label="كم كود"><button class="btn small">ولّد الأكواد</button></div>
+      </form>
+      ${adm.codes ? `<div class="codes-out"><p class="hint">${ar(adm.codes.list.length)} كود لـ «${esc(adm.codes.name)}». انسخها وحطها في المنتج حقها في متجرك (كل كود في سطر).</p>
+        <textarea class="txt" id="genOut" rows="6" dir="ltr" readonly>${adm.codes.list.join("\n")}</textarea>
+        <button class="btn small" id="genCopy">انسخ الأكواد</button></div>` : ""}
+      <details class="links"><summary>روابط المنتجات في متجرك</summary>
+        <p class="hint">حط رابط كل منتج من slt1.store عشان زر «اشترِ» يفتحه على طول. إذا خليته فاضي يفتح الصفحة الرئيسية للمتجر.</p>
+        ${SHOP.map(it => `<label class="lk"><span>${it.name}</span><input class="txt" data-link="${it.id}" dir="ltr" placeholder="https://slt1.store/..." value="${esc(shopCfg?.links?.[it.id] || "")}"></label>`).join("")}
+        <button class="btn small" id="saveLinks">احفظ الروابط</button></details></div>
+
     <div class="field"><span class="label">🤖 فك كتم / صفّر تحذيرات البوت</span>
       <form class="addf" id="unmuteF"><div class="uinput"><span>@</span><input id="unmuteName" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="يوزر اللاعب" aria-label="يوزر اللاعب"></div><button class="btn small good">صفّر</button></form>
       <p class="hint">البوت يحذّر اللي يسب، وبعد ٣ تحذيرات يكتمه ٢٤ ساعة. من هنا تفك كتمه وترجع تحذيراته صفر.</p></div>
@@ -1688,6 +1722,23 @@ VIEWS.admin = () => {
     banUser(document.getElementById("banName").value);
   });
   onAll("[data-unban]", b => unbanUser(b.dataset.unban));
+  on("genF", "submit", async e => {
+    e.preventDefault();
+    const it = SHOP.find(x => x.id === document.getElementById("genItem").value); if (!it) return;
+    const n = Math.max(1, Math.min(100, parseInt(document.getElementById("genN").value, 10) || 1));
+    const rnd = () => { const b = crypto.getRandomValues(new Uint8Array(12)); return fmtCode([...b].map(x => CODE_CHARS[x % CODE_CHARS.length]).join("")); };
+    const list = [...new Set(Array.from({ length: n }, rnd))];
+    const b = writeBatch(db);
+    list.forEach(c => b.set(doc(db, "codes", c), { item: it.id, grants: it.grants, days: it.days, by: null, at: serverTimestamp() }));
+    try { await b.commit(); adm.codes = { name: it.name, list }; toast(`انسوت ${ar(list.length)} أكواد ✅`); render(true); }
+    catch (err) { console.error(err); toast("ما انسوت الأكواد"); }
+  });
+  on("genCopy", "click", () => copyText(adm.codes.list.join("\n"), "انسخت الأكواد"));
+  on("saveLinks", "click", async () => {
+    const links = {};
+    V.querySelectorAll("[data-link]").forEach(i => { const v = i.value.trim(); if (/^https:\/\//.test(v)) links[i.dataset.link] = v; });
+    try { await setDoc(doc(db, "config", "shop"), { links }); toast("انحفظت الروابط ✅"); } catch (err) { console.error(err); toast("ما انحفظت"); }
+  });
   on("unmuteF", "submit", async e => {
     e.preventDefault();
     const key = document.getElementById("unmuteName").value.trim().replace(/^@/, "").toLowerCase();
@@ -2249,6 +2300,78 @@ async function enablePush() {
 }
 const showPushCard = () => me?.uid && ["default", "ios"].includes(pushState()) && Date.now() - store.get("pushHide", 0) > 3 * 864e5;
 
+/* ================= صفحة المتجر ================= */
+const shopLink = id => { const l = shopCfg?.links?.[id]; return /^https:\/\//.test(l || "") ? l : SHOP_URL; };
+function shopPreview(it) {
+  const g = it.grants || [];
+  if (it.id === "king") return `<span class="sp-king">👑</span>`;
+  if (it.days && !g.length) return `<span class="sp-vip">VIP</span>`;
+  if (g[0] === "t_royal") return tableSVG("royal");
+  if (g[0] === "b_royal") return `<span class="sp-back">${cardSVG(null, "royal")}</span>`;
+  if (FRAMES[g[0]]) return `<span class="fr ${g[0]}" style="--fs:4px">${avatar(me.username, me.photo, 64)}</span>`;
+  return "";
+}
+function fmtCode(raw) {
+  const s = String(raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+  return s.match(/.{1,4}/g)?.join("-") || "";
+}
+async function redeemCode(raw) {
+  const code = fmtCode(raw);
+  if (code.length !== 14) return toast("اكتب الكود كامل (١٢ حرف ورقم)");
+  try {
+    let got = null;
+    await runTransaction(db, async tx => {
+      const cref = doc(db, "codes", code), uref = doc(db, "users", me.uid);
+      const c = await tx.get(cref);
+      if (!c.exists()) throw { code: "nf" };
+      if (c.data().by) throw { code: "used" };
+      const u = await tx.get(uref);
+      const cur = u.data() || {};
+      const owned = [...new Set([...(cur.owned || []), ...(c.data().grants || [])])];
+      const base = Math.max(cur.vipUntil || 0, Date.now());
+      const days = c.data().days || 0;
+      const upd = { owned, lastCode: code };
+      if (days) upd.vipUntil = base + days * 864e5 - 5 * 60e3;
+      tx.update(uref, upd);
+      tx.update(cref, { by: me.uid, usedAt: serverTimestamp() });
+      got = { item: c.data().item, owned, vipUntil: upd.vipUntil };
+    });
+    me.owned = got.owned; if (got.vipUntil) me.vipUntil = got.vipUntil;
+    const it = SHOP.find(x => x.id === got.item);
+    toast(`🎉 انفتح لك: ${it ? it.name : "الشي اللي شريته"}`);
+    const inp = document.getElementById("codeIn"); if (inp) inp.value = "";
+    render(false);
+  } catch (e) {
+    if (e?.code === "nf") toast("الكود غلط، تأكد منه");
+    else if (e?.code === "used") toast("هذا الكود مستخدم من قبل");
+    else { console.error(e); toast("ما زبط، جرّب مرة ثانية"); }
+  }
+}
+VIEWS.shop = () => {
+  const p = prof(me.uid), vip = vipOn(p);
+  V.innerHTML = `<section>
+    <div><h2>متجر جلسة 🛍️</h2><p class="lead">تميّز قدام أصحابك. تشتري من متجر <b>Silent Store</b>، ويوصلك كود تكتبه هنا.</p></div>
+    <form class="redeem" id="codeF">
+      <span class="label">عندك كود؟</span>
+      <div class="row"><input class="txt" id="codeIn" dir="ltr" maxlength="14" placeholder="XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="الكود">
+      <button class="btn small">فعّل</button></div>
+    </form>
+    ${vip ? `<div class="vipbox">👑 أنت VIP لين <b>${new Date(p.vipUntil).toLocaleDateString("ar-SA", { day: "numeric", month: "long", year: "numeric" })}</b>، وكل الحصريات مفتوحة لك.</div>` : ""}
+    <div class="shop">${SHOP.map(it => {
+      const mine = it.grants.length && it.grants.every(g => owns(p, g)) && !it.days;
+      return `<div class="sitem ${it.hot ? "hot" : ""}">
+        ${it.hot ? `<span class="s-hot">الأقوى 🔥</span>` : ""}
+        <div class="s-pv">${shopPreview(it)}</div>
+        <b class="s-name">${it.name}</b><span class="s-desc">${it.desc}</span>
+        ${mine ? `<span class="s-own">✓ عندك</span>` : `<a class="btn small" href="${esc(shopLink(it.id))}" target="_blank" rel="noopener"><span>اشترِ</span><span class="s-price">${ar(it.price)} ريال</span></a>`}
+      </div>`; }).join("")}</div>
+    <p class="hint center">بعد الدفع يوصلك الكود من المتجر. انسخه واكتبه فوق في «عندك كود؟».</p>
+  </section>`;
+  const inp = document.getElementById("codeIn");
+  inp.addEventListener("input", () => { const v = fmtCode(inp.value); if (v !== inp.value) inp.value = v; });
+  on("codeF", "submit", e => { e.preventDefault(); redeemCode(inp.value); });
+};
+
 /* ================= ثبّت جلسة على الشاشة ================= */
 let installEvt = null;
 const isStandalone = () => window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true;
@@ -2295,7 +2418,7 @@ VIEWS.home = () => {
   const onl = [...friends.entries()].filter(([, f]) => isOnline(f));
   V.innerHTML = `<section>
     <div class="hello">
-      <button class="hello-av" id="hProf" aria-label="بروفايلي">${avatar(me.username, me.photo, 56)}</button>
+      <button class="hello-av" id="hProf" aria-label="بروفايلي">${avF(prof(me.uid), 56)}</button>
       <div class="hello-t"><span class="hint">هلا والله</span><b dir="ltr">${at(me.username)}</b></div>
     </div>
 
@@ -2312,6 +2435,7 @@ VIEWS.home = () => {
       <button class="bigbtn create" id="create"><span class="bb-ic">${ICONS.create}</span><b>${roomCode ? "ارجع لغرفتك" : "غرفة جديدة"}</b><span>واعزم أصحابك</span></button>
       <button class="bigbtn join" id="joinBtn"><span class="bb-ic">${ICONS.join}</span><b>ادخل بكود</b><span>عندك كود غرفة؟</span></button>
     </div>
+    <button class="shopbtn" id="shopBtn"><span class="sb-ic" aria-hidden="true">🛍️</span><span class="pb-t"><b>متجر جلسة</b><span>أشكال حصرية واشتراك VIP</span></span><span class="pb-go">←</span></button>
     <button class="pubbtn" id="pubBtn"><span class="pb-ic">${ICONS.pub}</span><span class="pb-t"><b>غرف عامة</b><span>ادخل والعب مع ناس جدد</span></span><span class="pb-go">←</span></button>
     <form class="joinrow" id="joinF" ${ui.showJoin ? "" : "hidden"}>
       <input id="code" dir="ltr" maxlength="5" placeholder="K7M2P" autocomplete="off" autocapitalize="characters" aria-label="كود الغرفة">
@@ -2335,6 +2459,7 @@ VIEWS.home = () => {
   on("pushGo", "click", enablePush);
   on("pushHide", "click", () => { store.set("pushHide", Date.now()); render(false); });
   on("pubBtn", "click", () => go("pub"));
+  on("shopBtn", "click", () => go("shop"));
   on("instHide", "click", () => { store.set("instHide", Date.now()); render(false); });
   on("create", "click", () => roomCode ? go("room") : createRoom());
   onAll("[data-game-card]", b => gameSheet(b.dataset.gameCard));
@@ -2390,11 +2515,11 @@ function showProfile(uid) {
   const modRow = `<div class="row pf-mod"><button class="btn small ghost" id="pfRep">🚩 بلّغ</button><button class="btn small ghost" id="pfBlk">${isBlocked(uid) ? "فك الحظر" : "🚫 احظر"}</button></div>`;
   el.innerHTML = `<div class="pcard">
     <div class="pcard-cover" style="--c:${col}" aria-hidden="true"><span class="pc-sadu"></span></div>
-    <div class="pcard-av">${avatar(p.username, p.photo, 104)}</div>
+    <div class="pcard-av">${avF(p, 104)}</div>
     <div class="pcard-body">
       <b class="pf-name" dir="ltr">${at(p.username)}</b>
       ${f ? `<span class="chip-st ${isOnline(f) ? "on" : ""}">${isOnline(f) ? "أونلاين الحين" : "مو أونلاين"}</span>` : ""}
-      ${lvlTag(p)}
+      <div class="row tags">${lvlTag(p)}${vipTag(p)}</div>
       ${p.bio ? `<p class="pcard-bio">${esc(p.bio)}</p>` : ""}
       ${(() => { const g = achGot(p.stats, p.xp, p.username); if (!g.length) return ""; const top = [...g].sort((q, r) => TIER_RANK[r.tier] - TIER_RANK[q.tier]).slice(0, 3);
         return `<div class="ach-mini" aria-label="الإنجازات">${top.map(x => medal(x)).join("")}<span class="ach-n">${ar(g.length)} ${g.length > 2 && g.length < 11 ? "إنجازات" : "إنجاز"}</span></div>`; })()}
@@ -2434,7 +2559,7 @@ VIEWS.profile = () => {
   const draft = ui.bioDraft ?? me.bio ?? "";
   V.innerHTML = `<section>
     <div class="pf-head">
-      <div class="pf-av">${avatar(me.username, me.photo, 112)}
+      <div class="pf-av">${avF(prof(me.uid), 112)}
         <label class="pf-cam" for="photoIn" aria-label="غيّر الصورة">📷</label>
         <input type="file" id="photoIn" accept="image/*" hidden>
       </div>
@@ -2463,11 +2588,15 @@ VIEWS.profile = () => {
 
     <div class="field"><span class="label">🎨 أشكالك</span>
       <span class="hint">شكل الطاولة</span>
-      <div class="looks">${Object.entries(TABLES).map(([k, t]) => { const open = myLvl() >= t.lvl, sel = myLook().t === k;
-        return `<button class="look ${sel ? "sel" : ""}" data-lt="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><span class="look-pv">${tableSVG(k)}</span><b>${t.name}</b><span class="hint">${open ? (sel ? "مختار ✓" : "متاح") : "🔒 مستوى " + ar(t.lvl)}</span></button>`; }).join("")}</div>
+      <div class="looks">${Object.entries(TABLES).map(([k, t]) => { const open = lookOpen(t), sel = myLook().t === k;
+        return `<button class="look ${sel ? "sel" : ""} ${t.shop ? "excl" : ""}" data-lt="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><span class="look-pv">${tableSVG(k)}</span><b>${t.name}</b><span class="hint">${open ? (sel ? "مختار ✓" : "متاح") : t.shop ? "🛍️ من المتجر" : "🔒 مستوى " + ar(t.lvl)}</span></button>`; }).join("")}</div>
       <span class="hint">ظهر الورق</span>
-      <div class="looks">${Object.entries(BACKS).map(([k, t]) => { const open = myLvl() >= t.lvl, sel = myLook().b === k;
-        return `<button class="look back ${sel ? "sel" : ""}" data-lb="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><span class="look-pv">${cardSVG(null, k)}</span><b>${t.name}</b><span class="hint">${open ? (sel ? "مختار ✓" : "متاح") : "🔒 مستوى " + ar(t.lvl)}</span></button>`; }).join("")}</div></div>
+      <div class="looks">${Object.entries(BACKS).map(([k, t]) => { const open = lookOpen(t), sel = myLook().b === k;
+        return `<button class="look back ${sel ? "sel" : ""} ${t.shop ? "excl" : ""}" data-lb="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><span class="look-pv">${cardSVG(null, k)}</span><b>${t.name}</b><span class="hint">${open ? (sel ? "مختار ✓" : "متاح") : t.shop ? "🛍️ من المتجر" : "🔒 مستوى " + ar(t.lvl)}</span></button>`; }).join("")}</div>
+      <span class="hint">إطار الصورة</span>
+      <div class="looks">${[["", "بدون"], ...Object.entries(FRAMES)].map(([k, n]) => { const open = !k || owns(prof(me.uid), k), sel = (frameOf(prof(me.uid)) || "") === k;
+        return `<button class="look frm ${sel ? "sel" : ""} ${k ? "excl" : ""}" data-lf="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><span class="look-pv">${k ? `<span class="fr ${k}" style="--fs:4px">${avatar(me.username, me.photo, 56)}</span>` : avatar(me.username, me.photo, 56)}</span><b>${n}</b><span class="hint">${open ? (sel ? "مختار ✓" : "متاح") : "🛍️ من المتجر"}</span></button>`; }).join("")}</div>
+      <button class="btn ghost" id="toShop">🛍️ متجر جلسة</button></div>
 
     <div class="field"><span class="label">يوزرك</span>
       <div class="li"><span class="nm" dir="ltr">@${esc(me.username)}</span><button class="btn small ghost" id="copy">انسخ</button>${isOwner() ? "" : `<button class="btn small ghost" id="rename">غيّر</button>`}</div>
@@ -2478,13 +2607,20 @@ VIEWS.profile = () => {
   on("tour", "click", () => { ui.slide = 0; go("welcome"); });
   on("delAcc", "click", openDeleteAccount);
   const setLook = async (kind, k, list) => {
-    if (myLvl() < list[k].lvl) return toast(`يفتح لك في المستوى ${ar(list[k].lvl)} ⭐`);
+    if (!lookOpen(list[k])) { if (list[k].shop) { toast("هذا من متجر جلسة 🛍️"); go("shop"); return; } return toast(`يفتح لك في المستوى ${ar(list[k].lvl)} ⭐`); }
     const look = { ...myLook(), [kind]: k };
     me.look = look; render(false);
     try { await updateDoc(doc(db, "users", me.uid), { look }); } catch (e) { console.error(e); }
   };
   onAll("[data-lt]", b => setLook("t", b.dataset.lt, TABLES));
   onAll("[data-lb]", b => setLook("b", b.dataset.lb, BACKS));
+  onAll("[data-lf]", async b => {
+    const k = b.dataset.lf;
+    if (k && !owns(prof(me.uid), k)) { toast("هذا من متجر جلسة 🛍️"); go("shop"); return; }
+    me.frame = k; render(false);
+    try { await updateDoc(doc(db, "users", me.uid), { frame: k }); } catch (e) { console.error(e); }
+  });
+  on("toShop", "click", () => go("shop"));
   on("switchAcc", "click", openSwitcher);
   on("pushOn", "click", enablePush);
   on("pushRe", "click", async () => { toast(await pushSaveToken() ? "تمام، الإشعارات شغالة 🔔" : "ما زبط، جرّب مرة ثانية"); });
@@ -2712,7 +2848,7 @@ const ROOM_VIEWS = {
         <div class="row inv-row"><a class="btn small wa" id="waInv" href="${esc(waLink())}" target="_blank" rel="noopener">${ICONS.wa} ادعُ بالواتساب</a>
         <button class="btn small ghost" id="copyLink">انسخ الرابط</button></div></div>
       <div class="field"><span class="label">اللاعبين (${ar(n)} من ١٢)</span><div class="list">${ps.map(u => `
-        <div class="li"><button class="li-who" data-pf="${esc(u)}">${avatar(pname(u), prof(u)?.photo, 36)}<span class="nm" dir="ltr">${at(pname(u))}</span>${prof(u) ? lvlTag(prof(u)) : ""}</button>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}${host && u !== me.uid ? `<button class="btn small ghost kick" data-kick="${esc(u)}" aria-label="اطرد ${esc(pname(u))}">اطرد</button>` : ""}</div>`).join("")}</div></div>
+        <div class="li"><button class="li-who" data-pf="${esc(u)}">${prof(u) ? avF(prof(u), 36) : avatar(pname(u), "", 36)}<span class="nm" dir="ltr">${at(pname(u))}</span>${prof(u) ? lvlTag(prof(u)) + vipTag(prof(u)) : ""}</button>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}${host && u !== me.uid ? `<button class="btn small ghost kick" data-kick="${esc(u)}" aria-label="اطرد ${esc(pname(u))}">اطرد</button>` : ""}</div>`).join("")}</div></div>
       ${host ? `
         <div class="field"><span class="label">نوع الغرفة</span><div class="chips">
           <button class="chip" data-pub="0" aria-pressed="${!room.public}">خاصة 🔒</button>
@@ -2878,7 +3014,7 @@ const ROOM_VIEWS = {
       <div class="utable" style="--cur:${col.fill}">
         ${tableSVG(myLook().t)}
         ${others.map((u, i) => `<button class="useat ${u === turnU ? "turn" : ""} ${uno.flash === u ? "flash" : ""}" style="left:${spots[i][0]}%;top:${spots[i][1]}%" data-pf="${esc(u)}">
-          ${avatar(pname(u), prof(u)?.photo, 40)}<span class="us-n" dir="ltr">${esc(pname(u))}</span><span class="us-c">🃏 ${ar(uno.counts[u] || 0)}</span></button>`).join("")}
+          ${prof(u) ? avF(prof(u), 40) : avatar(pname(u), "", 40)}<span class="us-n" dir="ltr">${esc(pname(u))}</span><span class="us-c">🃏 ${ar(uno.counts[u] || 0)}</span></button>`).join("")}
         <div class="ucenter">
           <button class="upile ${canDraw ? "go" : ""}" id="uDraw" ${canDraw ? "" : "disabled"} aria-label="اسحب ورقة">${cardSVG(null, myLook().b)}<span class="up-n">${ar(uno.deck)}</span></button>
           <div class="udisc" id="uDisc" aria-label="الورقة اللي فوق: ${esc(cardName(uno.top))}"><span class="ring"></span>${under.map(t => `<span class="ucard old" style="--r:${t.r}deg;--x:${t.x}px;--y:${t.y}px">${cardSVG(t.c)}</span>`).join("")}<span class="ucard top" data-v="${uno.v}" style="--r:${topT.r}deg;--x:${topT.x}px;--y:${topT.y}px">${cardSVG(uno.top)}</span></div>
@@ -3320,6 +3456,7 @@ if (configured) {
     announce = s.exists() ? s.data() : null; renderBanner(); if (screen === "admin") render(false);
   }, err);
   getRedirectResult(auth).catch(() => {});
+  onSnapshot(doc(db, "config", "shop"), s => { shopCfg = s.exists() ? s.data() : null; if (screen === "shop" || screen === "admin") render(false); }, () => {});
   onSnapshot(doc(db, "config", "banner"), s => {
     promo = s.exists() ? s.data() : null; renderBanner(); if (screen === "admin") render(false);
   }, err);
@@ -3340,7 +3477,7 @@ if (configured) {
     try {
       const s = await getDoc(doc(db, "users", user.uid));
       if (!s.exists()) { me = { uid: user.uid }; go("username"); return; }
-      me = { uid: user.uid, username: s.data().username, photo: s.data().photo || "", bio: s.data().bio || "", xp: s.data().xp || 0, stats: s.data().stats || {}, look: s.data().look || null, renamedAt: s.data().usernameChangedAt || null, warns: s.data().warns || 0, mutedUntil: s.data().mutedUntil || 0 };
+      me = { uid: user.uid, username: s.data().username, photo: s.data().photo || "", bio: s.data().bio || "", xp: s.data().xp || 0, stats: s.data().stats || {}, look: s.data().look || null, owned: s.data().owned || [], vipUntil: s.data().vipUntil || 0, frame: s.data().frame || "", renamedAt: s.data().usernameChangedAt || null, warns: s.data().warns || 0, mutedUntil: s.data().mutedUntil || 0 };
       startGlobal();
       const b = await getDoc(doc(db, "bans", user.uid)).catch(() => null);
       if (b?.exists()) { banned = true; go("banned"); return; }

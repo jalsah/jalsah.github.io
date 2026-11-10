@@ -585,6 +585,56 @@ body:has(#chatFab) main{padding-bottom:78px}
 .sw-pw{display:flex;gap:8px;width:100%;padding:0 4px 6px}
 .sw-pw .txt{flex:1 1 auto;width:auto;min-width:0}
 .sw-pw .btn{width:auto;flex:none;padding-inline:18px}
+
+/* متجر جلسة */
+.shopbtn{display:flex;align-items:center;gap:14px;width:100%;text-align:start;background:linear-gradient(120deg,color-mix(in srgb,#9e1838 45%,var(--surface)),color-mix(in srgb,var(--saffron) 22%,var(--surface)));border:1px solid color-mix(in srgb,var(--saffron) 50%,var(--line));border-radius:22px;padding:14px 16px;color:var(--ink);font:inherit;cursor:pointer}
+.shopbtn .sb-ic{width:60px;height:60px;flex:none;display:grid;place-items:center;font-size:34px;border-radius:16px;background:linear-gradient(145deg,#f2c14e,#b8862b);box-shadow:0 6px 14px rgba(0,0,0,.35)}
+.shopbtn .pb-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.shopbtn b{font-family:var(--display);font-weight:400;font-size:24px}
+.shopbtn .pb-t span{color:var(--muted);font-size:13.5px}
+.shopbtn .pb-go{font-size:22px;color:var(--saffron)}
+.redeem{display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px}
+.redeem .row{display:flex;gap:8px}
+.redeem .txt{flex:1;min-width:0;font-family:ui-monospace,Menlo,monospace;letter-spacing:.12em;text-align:center;text-transform:uppercase}
+.vipbox{background:linear-gradient(120deg,color-mix(in srgb,var(--saffron) 25%,var(--surface)),var(--surface));border:1px solid color-mix(in srgb,var(--saffron) 55%,var(--line));border-radius:16px;padding:12px 14px;font-size:14px}
+.shop{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.sitem{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px 10px 12px}
+.sitem.hot{grid-column:1/-1;border-color:color-mix(in srgb,var(--saffron) 60%,var(--line));background:linear-gradient(160deg,color-mix(in srgb,#9e1838 30%,var(--surface)),var(--surface))}
+.s-hot{position:absolute;top:10px;inset-inline-start:10px;font-size:11.5px;font-weight:700;background:var(--rose);color:#fff;border-radius:999px;padding:1px 9px}
+.s-pv{height:92px;display:grid;place-items:center}
+.s-pv>svg{width:92px;height:92px}
+.sp-back{display:block;width:58px;height:88px}
+.sp-back svg{width:100%;height:100%;display:block}
+.sp-king{font-size:62px;filter:drop-shadow(0 6px 12px rgba(242,193,78,.5))}
+.sp-vip{font-family:var(--display);font-size:40px;color:#1a1426;background:linear-gradient(135deg,#fff1b8,#f2c14e 50%,#b8862b);border-radius:18px;padding:6px 18px;box-shadow:0 6px 14px rgba(0,0,0,.35)}
+.s-name{font-size:15px}
+.s-desc{font-size:12px;color:var(--muted);line-height:1.4;min-height:2.8em}
+.s-own{font-size:13px;font-weight:700;color:var(--mint)}
+.sitem .btn{width:100%;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px}
+.s-price{opacity:.85;font-weight:800}
+.vip{display:inline-flex;align-items:center;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:#1a1426;background:linear-gradient(135deg,#fff1b8,#f2c14e 50%,#b8862b);border-radius:6px;padding:1px 6px;margin-inline-start:6px;flex:none}
+.row.tags{justify-content:center;gap:6px}
+.look.excl{border-style:dashed;border-color:color-mix(in srgb,var(--saffron) 45%,var(--line))}
+.look.frm .look-pv{width:64px;height:84px;display:grid;place-items:center}
+.codegen{display:flex;flex-direction:column;gap:8px}
+.codegen .row{display:flex;gap:8px}
+.codegen input{flex:1;min-width:0}
+.codes-out{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.codes-out textarea{font-family:ui-monospace,Menlo,monospace;font-size:13px}
+.links{margin-top:10px}
+.links summary{cursor:pointer;color:var(--saffron);font-weight:700;font-size:14px}
+.links .lk{display:flex;flex-direction:column;gap:4px;margin-top:8px;font-size:13px}
+.links .btn{margin-top:10px}
+/* إطارات الصورة */
+.fr{position:relative;display:inline-grid;place-items:center;border-radius:50%;padding:var(--fs,3px);flex:none;isolation:isolate}
+.fr::before{content:"";position:absolute;inset:0;border-radius:50%;z-index:-1;animation:spin 5s linear infinite}
+.fr>.av{box-shadow:0 0 0 2px var(--bg)}
+.fr.f_gold::before{background:conic-gradient(#fff1b8,#f2c14e,#b8862b,#f2c14e,#fff1b8,#b8862b,#fff1b8)}
+.fr.f_gold{filter:drop-shadow(0 0 6px rgba(242,193,78,.55))}
+.fr.f_fire::before{background:conic-gradient(#ffd166,#ff7a1a,#e8303a,#ff7a1a,#ffd166,#e8303a,#ffd166);animation-duration:2.4s}
+.fr.f_fire{filter:drop-shadow(0 0 8px rgba(255,110,40,.6))}
+.fr.f_sadu::before{background:repeating-conic-gradient(#b8323a 0 15deg,#f2b134 15deg 30deg,#1a1426 30deg 45deg,#fff3e0 45deg 60deg);animation-duration:9s}
+@media (prefers-reduced-motion:reduce){.fr::before{animation:none}}
 </style>
 </head>
 <body>
@@ -598,6 +648,6 @@ body:has(#chatFab) main{padding-bottom:78px}
   <main id="view"><div class="spinner" aria-label="جاري التحميل"></div></main>
 </div>
 <noscript><section style="padding:24px"><h1>جلسة: ألعاب الجلسات مع أصحابك</h1><p>ألعاب الجلسات مع الشلة من جوالك: ارسم وخمّن، الدخيل، أونو، مين قالها، صح ولا خطأ، ومين أكثر واحد. أونلاين أو بجوال واحد، ومجانية.</p><p>شغّل الجافاسكربت عشان تلعب.</p></section></noscript>
-<script type="module" src="./app.js?v=39"></script>
+<script type="module" src="./app.js?v=40"></script>
 </body>
 </html>
