@@ -9,6 +9,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { WORDS, MOST, FIVE } from "./content.js";
+import { ICONS } from "./icons.js";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -446,11 +447,11 @@ VIEWS.home = () => {
     <div><h2>وش نلعب الليلة؟</h2>
     <p class="lead">${online ? `${ar(online)} من أصحابك أونلاين الحين.` : "العب أونلاين مع أصحابك، أو بجوال واحد."}</p></div>
     <div class="modes">
-      <button class="mode" id="create"><span class="glyph" style="background:var(--saffron)">+</span><b>غرفة جديدة</b><span>سوّ غرفة واعزم أصحابك، كل واحد يلعب من جواله.</span></button>
-      <div class="mode joinbox"><span class="glyph" style="background:var(--mint)">#</span><b>ادخل بكود</b>
+      <button class="mode" id="create"><span class="glyph">${ICONS.create}</span><b>غرفة جديدة</b><span>سوّ غرفة واعزم أصحابك، كل واحد يلعب من جواله.</span></button>
+      <div class="mode joinbox"><span class="glyph">${ICONS.join}</span><b>ادخل بكود</b>
         <form class="row" id="joinF"><input id="code" dir="ltr" maxlength="5" placeholder="K7M2P" autocomplete="off" autocapitalize="characters" aria-label="كود الغرفة"><button class="btn small">دخول</button></form></div>
-      <button class="mode" id="fr"><span class="glyph" style="background:var(--rose)">@</span><b>الأصدقاء${reqIn.length ? `<span class="badge">${ar(reqIn.length)}</span>` : ""}</b><span>أضف أصحابك بيوزراتهم وشوف مين أونلاين.</span></button>
-      <button class="mode" id="local"><span class="glyph" style="background:var(--line);color:var(--ink)">☝</span><b>بجوال واحد</b><span>الدخيل، مين أكثر واحد، خمسة بعشر. مرّروا الجوال بينكم.</span></button>
+      <button class="mode" id="fr"><span class="glyph">${ICONS.friends}</span><b>الأصدقاء${reqIn.length ? `<span class="badge">${ar(reqIn.length)}</span>` : ""}</b><span>أضف أصحابك بيوزراتهم وشوف مين أونلاين.</span></button>
+      <button class="mode" id="local"><span class="glyph">${ICONS.local}</span><b>بجوال واحد</b><span>الدخيل، مين أكثر واحد، خمسة بعشر. مرّروا الجوال بينكم.</span></button>
     </div></section>`;
   on("create", "click", () => roomCode ? go("room") : createRoom());
   on("joinF", "submit", e => { e.preventDefault(); joinRoom(document.getElementById("code").value); });
@@ -664,9 +665,9 @@ VIEWS.local = () => {
     <div><h2>بجوال واحد</h2><p class="lead">مرّروا الجوال بينكم وخلوا السوالف تبدأ.</p></div>
     <button class="roster" id="roster"><b>${ar(L.count)} لاعبين</b><span class="names">${esc(Array.from({ length: L.count }, (_, i) => lname(i)).join("، "))}</span><span class="edit">تعديل</span></button>
     <div class="modes">
-      <button class="mode" id="m1"><span class="glyph" style="background:var(--rose)">؟</span><b>الدخيل</b><span>الكل يعرف الكلمة إلا واحد. اكشفوه قبل ما يكشف الكلمة.</span></button>
-      <button class="mode" id="m2"><span class="glyph" style="background:var(--saffron)">☝</span><b>مين أكثر واحد؟</b><span>سؤال على الشاشة، وعلى العد الكل يأشر على واحد.</span></button>
-      <button class="mode" id="m3"><span class="glyph" style="background:var(--mint)">٥</span><b>خمسة بعشر</b><span>اذكر خمسة أشياء من الفئة خلال عشر ثواني.</span></button>
+      <button class="mode" id="m1"><span class="glyph">${ICONS.imp}</span><b>الدخيل</b><span>الكل يعرف الكلمة إلا واحد. اكشفوه قبل ما يكشف الكلمة.</span></button>
+      <button class="mode" id="m2"><span class="glyph">${ICONS.most}</span><b>مين أكثر واحد؟</b><span>سؤال على الشاشة، وعلى العد الكل يأشر على واحد.</span></button>
+      <button class="mode" id="m3"><span class="glyph">${ICONS.five}</span><b>خمسة بعشر</b><span>اذكر خمسة أشياء من الفئة خلال عشر ثواني.</span></button>
     </div>
     <div class="foot"><button class="btn ghost" id="ls">النقاط</button></div></section>`;
   on("roster", "click", () => go("l-players"));
