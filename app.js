@@ -353,7 +353,11 @@ async function claimUsername(name) {
   await runTransaction(db, async tx => {
     const ref = doc(db, "usernames", name.toLowerCase());
     const s = await tx.get(ref);
-    if (s.exists()) throw { code: "taken" };
+    if (s.exists()) {
+      // الحساب الرسمي: إيميله الرسمي يقدر يسترجع اليوزر من الحساب القديم
+      if (name.toLowerCase() !== OFFICIAL || s.data().uid === me.uid) throw { code: "taken" };
+      tx.delete(doc(db, "users", s.data().uid));
+    }
     tx.set(ref, { uid: me.uid });
     tx.set(doc(db, "users", me.uid), { username: name, createdAt: serverTimestamp(), lastSeen: serverTimestamp() });
   });
@@ -1526,10 +1530,6 @@ VIEWS.admin = () => {
         : `<p class="hint">${adm.repLoaded ? "ما فيه بلاغات 👌" : "…"}</p>`}
     </div>
 
-    <div class="field"><span class="label">الحساب الرسمي <span dir="ltr">@Jalsah</span> <span class="verified">✓</span></span>
-      <form class="addf" id="offF"><input class="txt" id="offEmail" type="email" dir="ltr" autocomplete="off" placeholder="إيميل الحساب الرسمي" value="${esc(adm.officialEmail || "")}" aria-label="إيميل الحساب الرسمي"><button class="btn small">احفظ</button></form>
-      <p class="hint">حط الإيميل اللي بتسوي فيه الحساب الرسمي. بعدها سوّ حساب جديد بنفس الإيميل واختر اليوزر <b dir="ltr">Jalsah</b>. ومحد غير هالإيميل يقدر ياخذ اليوزر.</p></div>
-
     <div class="field"><span class="label">🤖 فك كتم / صفّر تحذيرات البوت</span>
       <form class="addf" id="unmuteF"><div class="uinput"><span>@</span><input id="unmuteName" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="يوزر اللاعب" aria-label="يوزر اللاعب"></div><button class="btn small good">صفّر</button></form>
       <p class="hint">البوت يحذّر اللي يسب، وبعد ٣ تحذيرات يكتمه ٢٤ ساعة. من هنا تفك كتمه وترجع تحذيراته صفر.</p></div>
@@ -1565,14 +1565,6 @@ VIEWS.admin = () => {
     banUser(document.getElementById("banName").value);
   });
   onAll("[data-unban]", b => unbanUser(b.dataset.unban));
-  if (adm.officialEmail === undefined) { adm.officialEmail = ""; getDoc(doc(db, "config", "official")).then(d => { if (d.exists()) { adm.officialEmail = d.data().email || ""; if (screen === "admin") render(false); } }).catch(() => {}); }
-  on("offF", "submit", async e => {
-    e.preventDefault();
-    const v = document.getElementById("offEmail").value.trim().toLowerCase();
-    if (!/^\S+@\S+\.\S+$/.test(v)) return toast("اكتب إيميل صحيح");
-    try { await setDoc(doc(db, "config", "official"), { email: v }); adm.officialEmail = v; toast("انحفظ إيميل الحساب الرسمي ✅"); }
-    catch (err) { console.error(err); toast("ما انحفظ"); }
-  });
   on("unmuteF", "submit", async e => {
     e.preventDefault();
     const key = document.getElementById("unmuteName").value.trim().replace(/^@/, "").toLowerCase();
@@ -1916,7 +1908,7 @@ VIEWS.username = () => {
     else if (/[^A-Za-z0-9_-]/.test(v)) { msg.className = "hint msg-bad"; msg.textContent = "مسموح بس: حروف إنجليزية وأرقام و _ و -"; }
     else if (v.length < 3) { msg.className = "hint msg-bad"; msg.textContent = "اليوزر لازم يكون ٣ خانات أو أكثر"; }
     else if (!HAS_UPPER.test(v)) { msg.className = "hint msg-bad"; msg.textContent = "لازم فيه حرف كبير واحد على الأقل، مثل D-A-L-P"; }
-    else if (v.toLowerCase() === OFFICIAL) { msg.className = "hint"; msg.textContent = "هذا يوزر الحساب الرسمي، يشتغل بس على الإيميل اللي حدده المالك."; }
+    else if (v.toLowerCase() === OFFICIAL) { msg.className = "hint"; msg.textContent = "هذا يوزر الحساب الرسمي، يشتغل بس على الإيميل الرسمي."; }
     else if (RESERVED.has(v.toLowerCase())) { msg.className = "hint msg-bad"; msg.textContent = "هذا اليوزر محجوز، جرّب غيره"; }
     else { msg.className = "hint msg-ok"; msg.textContent = "@" + v + " شكله حلو"; }
   };
@@ -1932,7 +1924,7 @@ VIEWS.username = () => {
     } catch (e) {
       btn.disabled = false; btn.textContent = "اعتمد اليوزر";
       if (e?.code === "taken") { msg.className = "hint msg-bad"; msg.textContent = "@" + name + " محجوز، جرّب غيره"; }
-      else if (name.toLowerCase() === OFFICIAL) { msg.className = "hint msg-bad"; msg.textContent = "هذا الإيميل مو إيميل الحساب الرسمي. حدده أول من لوحة المالك."; }
+      else if (name.toLowerCase() === OFFICIAL) { msg.className = "hint msg-bad"; msg.textContent = "هذا اليوزر للحساب الرسمي بس، ويشتغل على إيميله الرسمي."; }
       else { console.error(e); toast("ما قدرنا نحفظ اليوزر"); }
     }
   });
