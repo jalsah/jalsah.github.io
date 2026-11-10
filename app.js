@@ -9,10 +9,10 @@ import {
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
   getCountFromServer, Timestamp, orderBy, limit, addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, authUrl } from "./firebase-config.js?v=17";
-import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=17";
-import { ICONS } from "./icons.js?v=17";
-import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=17";
+import { firebaseConfig, authUrl } from "./firebase-config.js?v=18";
+import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=18";
+import { ICONS } from "./icons.js?v=18";
+import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=18";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -1785,6 +1785,48 @@ VIEWS.username = () => {
   on("logout", "click", () => signOut(auth));
 };
 
+/* ================= ثبّت جلسة على الشاشة ================= */
+let installEvt = null;
+const isStandalone = () => window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true;
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const inAppBrowser = () => /Snapchat|Instagram|FBAN|FBAV|WhatsApp|TikTok|musical_ly|Twitter/i.test(navigator.userAgent);
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; if (screen === "home") render(false); });
+window.addEventListener("appinstalled", () => { installEvt = null; store.set("instHide", Date.now()); toast("انثبّتت جلسة 🎉"); if (screen === "home") render(false); });
+if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
+function showInstallCard() {
+  if (isStandalone()) return false;
+  const hid = store.get("instHide", 0);
+  if (hid && Date.now() - hid < 7 * 864e5) return false;
+  return !!installEvt || isIOS();
+}
+const SHARE_IC = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+const ADD_IC = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 8v8M8 12h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+async function doInstall() {
+  if (installEvt) {
+    installEvt.prompt();
+    try { const r = await installEvt.userChoice; if (r?.outcome === "accepted") store.set("instHide", Date.now()); } catch (e) {}
+    installEvt = null; render(false); return;
+  }
+  document.getElementById("instSheet")?.remove();
+  const el = document.createElement("div");
+  el.id = "instSheet"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "ثبّت جلسة");
+  el.innerHTML = `<div class="sheet"><img src="icon-180.png" alt="" width="72" height="72" style="border-radius:18px">
+    <b class="pf-name">ثبّت جلسة على شاشتك</b>
+    ${inAppBrowser() ? `<p class="pf-bio">أنت فاتحها من داخل تطبيق (سناب أو واتساب…). افتح الرابط في <b>Safari</b> أول، بعدين سوّ الخطوات.</p>` : ""}
+    <ol class="ios-steps">
+      <li>${SHARE_IC}<span>اضغط زر <b>المشاركة</b> تحت الشاشة (المربع اللي فيه سهم لفوق)</span></li>
+      <li>${ADD_IC}<span>انزل واختر <b>«إضافة إلى الشاشة الرئيسية»</b></span></li>
+      <li><span>اضغط <b>«إضافة»</b> فوق، وتطلع لك أيقونة جلسة 🎉</span></li>
+    </ol>
+    ${inAppBrowser() ? `<button class="btn" id="instCopy">انسخ الرابط</button>` : ""}
+    <button class="btn ghost" id="instX">تمام</button></div>`;
+  document.body.appendChild(el);
+  const close = () => el.remove();
+  el.addEventListener("click", e => { if (e.target === el) close(); });
+  el.querySelector("#instX").addEventListener("click", close);
+  el.querySelector("#instCopy")?.addEventListener("click", () => copyText(appLink(), "انسخ الرابط، الصقه في Safari"));
+}
+
 VIEWS.home = () => {
   const onl = [...friends.entries()].filter(([, f]) => isOnline(f));
   V.innerHTML = `<section>
@@ -1792,6 +1834,10 @@ VIEWS.home = () => {
       <button class="hello-av" id="hProf" aria-label="بروفايلي">${avatar(me.username, me.photo, 56)}</button>
       <div class="hello-t"><span class="hint">هلا والله</span><b dir="ltr">${at(me.username)}</b></div>
     </div>
+
+    ${showInstallCard() ? `<div class="inst"><img src="icon-180.png" alt="" width="52" height="52">
+      <div class="inst-t"><b>ثبّت جلسة على شاشتك</b><span class="hint">تفتح بضغطة مثل التطبيق، وبدون متصفح</span></div>
+      <button class="btn small" id="instGo">ثبّت</button><button class="inst-x" id="instHide" aria-label="إخفاء">×</button></div>` : ""}
 
     <h2>وش نلعب الليلة؟</h2>
     <div class="big2">
@@ -1816,6 +1862,8 @@ VIEWS.home = () => {
     <button class="mode wide" id="local"><span class="glyph">${ICONS.local}</span><b>بجوال واحد</b><span>كل الألعاب على جوال واحد يتمرر بينكم.</span></button>
   </section>`;
   on("hProf", "click", () => go("profile"));
+  on("instGo", "click", doInstall);
+  on("instHide", "click", () => { store.set("instHide", Date.now()); render(false); });
   on("create", "click", () => roomCode ? go("room") : createRoom());
   onAll("[data-game-card]", b => gameSheet(b.dataset.gameCard));
   on("joinBtn", "click", () => { ui.showJoin = true; const f = document.getElementById("joinF"); f.hidden = false; document.getElementById("code").focus(); });

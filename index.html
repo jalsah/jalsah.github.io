@@ -6,6 +6,13 @@
 <title>جلسة | ألعاب الجلسات مع أصحابك</title>
 <meta name="description" content="جلسة: ألعاب جلسات عربية تلعبها مع أصحابك أونلاين أو بجوال واحد. ارسم وخمّن، مين قالها، صح ولا خطأ، أونو، الدخيل، ومين أكثر واحد.">
 <meta name="theme-color" content="#1c1530">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="جلسة">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lalezar&family=IBM+Plex+Sans+Arabic:wght@400;500;700&display=swap">
 <style>
@@ -469,6 +476,15 @@ body:has(#chatFab) main{padding-bottom:78px}
 .dfi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:6px 12px;font-size:15px;overflow-wrap:anywhere}
 .dfi.ok{border-color:var(--mint);color:var(--mint)}
 :is(.dcol,.dsz):focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+.inst{display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,color-mix(in srgb,var(--saffron) 22%,var(--surface)),var(--surface));border:1px solid color-mix(in srgb,var(--saffron) 55%,var(--line));border-radius:20px;padding:12px 14px}
+.inst img{width:52px;height:52px;border-radius:14px;flex:none}
+.inst-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.inst-t b{font-family:var(--display);font-weight:400;font-size:20px}
+.inst-x{background:none;border:none;color:var(--muted);font-size:22px;padding:6px;cursor:pointer;flex:none}
+.ios-steps{display:flex;flex-direction:column;gap:12px;width:100%;text-align:start;margin:0;padding:0;list-style:none;counter-reset:s}
+.ios-steps li{display:flex;align-items:center;gap:12px;background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:12px;counter-increment:s}
+.ios-steps li::before{content:counter(s,arabic-indic);flex:none;width:30px;height:30px;border-radius:50%;background:var(--saffron);color:var(--bg);display:grid;place-items:center;font-weight:700}
+.ios-steps svg{width:24px;height:24px;flex:none;color:#5fb0f0}
 </style>
 </head>
 <body>
@@ -481,6 +497,6 @@ body:has(#chatFab) main{padding-bottom:78px}
   <div id="banner"></div>
   <main id="view"><div class="spinner" aria-label="جاري التحميل"></div></main>
 </div>
-<script type="module" src="./app.js?v=17"></script>
+<script type="module" src="./app.js?v=18"></script>
 </body>
 </html>
