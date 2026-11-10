@@ -53,11 +53,11 @@ h2{font-family:var(--display);font-weight:400;font-size:28px;line-height:1.25;ma
 .tag{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:1px 10px;color:var(--muted);white-space:nowrap}
 .field{display:flex;flex-direction:column;gap:8px}
 .label{font-size:14px;color:var(--muted);font-weight:500}
-input.txt,.uinput input,.joinbox input{width:100%;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px;color:var(--ink);font:inherit;font-size:17px}
+input.txt,textarea.txt,.uinput input,.joinbox input{width:100%;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px;color:var(--ink);font:inherit;font-size:17px}
 .uinput{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:4px 4px 4px 12px;direction:ltr;flex:1;min-width:0}
 .uinput span{color:var(--muted);font-weight:700;padding-left:8px}
 .uinput input{border:none;background:transparent;padding:10px 4px;letter-spacing:.02em}
-.uinput:focus-within,input.txt:focus,.joinbox input:focus{outline:2px solid var(--saffron);outline-offset:1px}
+.uinput:focus-within,input.txt:focus,textarea.txt:focus,.joinbox input:focus{outline:2px solid var(--saffron);outline-offset:1px}
 input::placeholder{color:var(--muted);opacity:.7}
 .msg-ok{color:var(--mint)}.msg-bad{color:var(--rose)}
 .addf{display:flex;gap:8px;align-items:stretch}
@@ -162,6 +162,19 @@ input::placeholder{color:var(--muted);opacity:.7}
 .pop{animation:pop .25s ease-out}
 @keyframes pop{from{transform:scale(.94);opacity:.6}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.stat{display:flex;flex-direction:column;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px}
+.stat .n{font-family:var(--display);font-size:34px;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--ink)}
+.stat .l{font-size:13px;color:var(--muted)}
+.stat.good{border-color:var(--mint)}
+.stat.good .n{color:var(--mint)}
+.row-h{display:flex;align-items:center;justify-content:space-between;gap:8px}
+textarea.txt{resize:vertical;min-height:84px;line-height:1.6}
+.ann{display:flex;align-items:flex-start;gap:10px;background:var(--surface);border:1px solid var(--saffron);border-radius:16px;padding:12px 12px;margin-bottom:12px}
+.ann .txt{flex:1;min-width:0;font-weight:500;font-size:15px;white-space:pre-wrap;overflow-wrap:anywhere}
+.ann-ic{font-size:18px;line-height:1.4}
+.ann-x{background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:2px 4px}
 </style>
 </head>
 <body>
@@ -174,6 +187,6 @@ input::placeholder{color:var(--muted);opacity:.7}
   <div id="banner"></div>
   <main id="view"><div class="spinner" aria-label="جاري التحميل"></div></main>
 </div>
-<script type="module" src="./app.js?v=6"></script>
+<script type="module" src="./app.js?v=7"></script>
 </body>
 </html>

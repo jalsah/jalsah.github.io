@@ -6,11 +6,12 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot,
-  collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField
+  collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
+  getCountFromServer, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=6";
-import { WORDS, MOST, FIVE } from "./content.js?v=6";
-import { ICONS } from "./icons.js?v=6";
+import { firebaseConfig } from "./firebase-config.js?v=7";
+import { WORDS, MOST, FIVE } from "./content.js?v=7";
+import { ICONS } from "./icons.js?v=7";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -44,6 +45,7 @@ const PW_MIN = 8;
 // صاحب اللعبة: يطلع جنب يوزره تاج
 const OWNER = "b_1";
 const RESERVED = new Set(["admin", "owner", "jalsah", "jalsa", "support", "official", "moderator", "mod", "staff", "team"]);
+const isOwner = () => String(me?.username || "").toLowerCase() === OWNER;
 const at = name => `@${esc(name)}${String(name).toLowerCase() === OWNER ? ' <span class="crown" title="صاحب اللعبة" aria-label="صاحب اللعبة">👑</span>' : ""}`;
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const ONLINE_MS = 150000;
@@ -77,13 +79,14 @@ function sub(k, unsub) { off(k); subs.set(k, unsub); }
 function off(k) { const u = subs.get(k); if (u) { u(); subs.delete(k); } }
 function offAll() { [...subs.keys()].forEach(off); }
 
+let announce = null, banned = false;
 let pendingJoin = (new URLSearchParams(location.search).get("r") || "").toUpperCase() || null;
 
 const isOnline = f => { const t = f?.lastSeen?.toMillis?.(); return !!t && Date.now() - t < ONLINE_MS; };
 const pairId = (a, b) => [a, b].sort().join("_");
 
 /* ================= navigation & rendering ================= */
-const REFRESH = new Set(["home", "friends", "room", "profile"]);
+const REFRESH = new Set(["home", "friends", "room", "profile", "admin"]);
 function go(name) {
   stopLocalTimers();
   screen = name;
@@ -97,21 +100,21 @@ function render(fresh) {
   // نحافظ على اللي مكتوب في الحقول لو انعاد الرسم
   const saved = {}; let focusId = null;
   if (!fresh) {
-    V.querySelectorAll("input[id]").forEach(i => saved[i.id] = i.value);
+    V.querySelectorAll("input[id], textarea[id]").forEach(i => saved[i.id] = i.value);
     focusId = document.activeElement?.id || null;
   }
   renderHeader(); renderBanner();
   (VIEWS[screen] || VIEWS.loading)();
   if (!fresh) {
     for (const id in saved) { const el = document.getElementById(id); if (el) el.value = saved[id]; }
-    if (focusId) { const el = document.getElementById(focusId); if (el && el.tagName === "INPUT") el.focus(); }
+    if (focusId) { const el = document.getElementById(focusId); if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) el.focus(); }
   }
 }
 function on(id, ev, fn) { const el = document.getElementById(id); if (el) el.addEventListener(ev, fn); return el; }
 function onAll(sel, fn) { V.querySelectorAll(sel).forEach(el => el.addEventListener("click", e => fn(e.currentTarget, e))); }
 
 const BACK = {
-  friends: "home", profile: "home",
+  friends: "home", profile: "home", admin: "home",
   email: "auth",
   local: () => me?.username ? "home" : (configured ? "auth" : "setup"),
   "l-players": "local", "l-imp": "local", "l-pass": "local", "l-play": "local",
@@ -125,12 +128,14 @@ function renderHeader() {
   if (me?.username && !back && screen !== "room") {
     h += `<button class="pill" id="hFriends">الأصدقاء${reqIn.length ? `<span class="badge">${ar(reqIn.length)}</span>` : ""}</button>`;
     h += `<button class="pill" id="hMe" dir="ltr">${at(me.username)}</button>`;
+    if (isOwner()) h += `<button class="pill hot" id="hAdmin">لوحة المالك</button>`;
   }
   HDR.innerHTML = h;
   HDR.querySelector("#hRoom")?.addEventListener("click", () => go("room"));
   HDR.querySelector("#hBack")?.addEventListener("click", () => go(typeof back === "function" ? back() : back));
   HDR.querySelector("#hFriends")?.addEventListener("click", () => go("friends"));
   HDR.querySelector("#hMe")?.addEventListener("click", () => go("profile"));
+  HDR.querySelector("#hAdmin")?.addEventListener("click", () => go("admin"));
 }
 function renderBanner() {
   const now = Date.now();
@@ -138,7 +143,9 @@ function renderBanner() {
     const t = i.at?.toMillis?.() ?? now;
     return now - t < INVITE_MS && i.code !== roomCode;
   });
-  BANNER.innerHTML = list.map(i => `
+  const ann = announce?.text && store.get("annSeen", "") !== annKey(announce)
+    ? `<div class="ann" role="status"><span class="ann-ic" aria-hidden="true">📢</span><span class="txt">${esc(announce.text)}</span><button class="ann-x" id="annX" aria-label="إخفاء الإعلان">✕</button></div>` : "";
+  BANNER.innerHTML = ann + list.map(i => `
     <div class="inv"><span class="txt"><span dir="ltr">${at(i.fromName)}</span> عزمك على غرفة</span>
     <button class="btn small" data-ij="${esc(i.id)}">ادخل</button>
     <button class="btn small ghost" data-ix="${esc(i.id)}">تجاهل</button></div>`).join("");
@@ -150,7 +157,9 @@ function renderBanner() {
   BANNER.querySelectorAll("[data-ix]").forEach(b => b.addEventListener("click", () => {
     deleteDoc(doc(db, "invites", b.dataset.ix)).catch(() => {});
   }));
+  BANNER.querySelector("#annX")?.addEventListener("click", () => { store.set("annSeen", annKey(announce)); renderBanner(); });
 }
+const annKey = a => (a?.at?.toMillis?.() || 0) + ":" + (a?.text || "");
 
 /* ================= auth ================= */
 async function login() {
@@ -209,6 +218,14 @@ function startGlobal() {
   sub("reqOut", onSnapshot(query(collection(db, "friendRequests"), where("from", "==", me.uid)), snap => {
     reqOut = snap.docs.map(d => d.data()); refresh();
   }, err));
+  sub("announce", onSnapshot(doc(db, "config", "announce"), s => {
+    announce = s.exists() ? s.data() : null; renderBanner(); if (screen === "admin") render(false);
+  }, err));
+  sub("ban", onSnapshot(doc(db, "bans", me.uid), s => {
+    const was = banned; banned = s.exists();
+    if (banned && !was) { if (roomCode) leaveRoom(true); go("banned"); }
+    else if (!banned && was && screen === "banned") go("home");
+  }, err));
   sub("invites", onSnapshot(query(collection(db, "invites"), where("to", "==", me.uid)), snap => {
     invites = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderBanner();
   }, err));
@@ -219,7 +236,7 @@ function onVisible() {
 function stopGlobal() {
   offAll(); clearInterval(presenceTimer); presenceTimer = null;
   document.removeEventListener("visibilitychange", onVisible);
-  friends.clear(); reqIn = []; reqOut = []; invites = [];
+  friends.clear(); reqIn = []; reqOut = []; invites = []; announce = null; banned = false;
   room = null; roomCode = null; votes = {}; secret = null;
 }
 function err(e) { console.error(e); }
@@ -389,7 +406,117 @@ async function vote(target) {
 }
 
 /* ================= views ================= */
+/* ================= owner tools ================= */
+const adm = { stats: null, loading: false, banned: [], bannedLoaded: false };
+async function loadStats() {
+  if (adm.loading) return;
+  adm.loading = true; render(false);
+  try {
+    const start = new Date(); start.setHours(0, 0, 0, 0);
+    const since = Timestamp.fromMillis(Date.now() - ONLINE_MS);
+    const [total, online, today, rooms, bans] = await Promise.all([
+      getCountFromServer(collection(db, "users")),
+      getCountFromServer(query(collection(db, "users"), where("lastSeen", ">", since))),
+      getCountFromServer(query(collection(db, "users"), where("createdAt", ">=", Timestamp.fromDate(start)))),
+      getCountFromServer(collection(db, "rooms")),
+      getDocs(collection(db, "bans"))
+    ]);
+    adm.stats = { total: total.data().count, online: online.data().count, today: today.data().count, rooms: rooms.data().count, at: new Date() };
+    adm.banned = bans.docs.map(d => ({ uid: d.id, ...d.data() }));
+  } catch (e) { console.error(e); toast("ما قدرنا نجيب الأرقام"); }
+  adm.loading = false; render(false);
+}
+async function banUser(raw) {
+  const typed = raw.trim().replace(/^@/, ""), key = typed.toLowerCase();
+  if (!USER_RE.test(typed)) return toast("اكتب يوزر صحيح");
+  if (key === OWNER) return toast("ما تقدر تحظر نفسك 😄");
+  try {
+    const s = await getDoc(doc(db, "usernames", key));
+    if (!s.exists()) return toast("ما لقينا هذا اليوزر");
+    const uid = s.data().uid;
+    const u = await getDoc(doc(db, "users", uid));
+    const name = u.exists() ? u.data().username : typed;
+    await setDoc(doc(db, "bans", uid), { name, at: serverTimestamp() });
+    adm.banned = [{ uid, name }, ...adm.banned.filter(b => b.uid !== uid)];
+    toast("انحظر @" + name);
+    const inp = document.getElementById("banName"); if (inp) inp.value = "";
+    render(false);
+  } catch (e) { console.error(e); toast("ما قدرنا نحظره"); }
+}
+async function unbanUser(uid) {
+  try {
+    await deleteDoc(doc(db, "bans", uid));
+    adm.banned = adm.banned.filter(b => b.uid !== uid);
+    toast("انفك الحظر"); render(false);
+  } catch (e) { console.error(e); toast("ما قدرنا نفك الحظر"); }
+}
+async function saveAnnounce(text) {
+  try {
+    if (!text.trim()) { await deleteDoc(doc(db, "config", "announce")); toast("انشال الإعلان"); return; }
+    await setDoc(doc(db, "config", "announce"), { text: text.trim().slice(0, 200), at: serverTimestamp() });
+    toast("انرسل الإعلان لكل اللاعبين");
+  } catch (e) { console.error(e); toast("ما قدرنا ننشر الإعلان"); }
+}
+
 const VIEWS = {};
+
+VIEWS.banned = () => {
+  V.innerHTML = `<section><div class="card imposter"><span class="big">محظور</span>
+    <span class="hint">حسابك موقوف من اللعب أونلاين. تقدر تلعب بجوال واحد بدون حساب.</span></div>
+    <div class="foot"><button class="btn ghost" id="local">العب بجوال واحد</button><button class="btn ghost" id="out">تسجيل خروج</button></div></section>`;
+  on("local", "click", () => go("local"));
+  on("out", "click", () => signOut(auth));
+};
+
+VIEWS.admin = () => {
+  if (!isOwner()) { go("home"); return; }
+  if (!adm.stats && !adm.loading) { loadStats(); }
+  const st = adm.stats;
+  const tile = (n, label, tone) => `<div class="stat ${tone || ""}"><span class="n">${st ? ar(n) : "…"}</span><span class="l">${label}</span></div>`;
+  V.innerHTML = `<section>
+    <div><h2>لوحة المالك 👑</h2><p class="lead">تشوفها أنت بس.</p></div>
+
+    <div class="field"><div class="row-h"><span class="label">الإحصائيات</span>
+      <button class="link" id="reload">${adm.loading ? "يحدّث…" : "تحديث"}</button></div>
+      <div class="stats">
+        ${tile(st?.online, "أونلاين الحين", "good")}
+        ${tile(st?.total, "كل اللاعبين")}
+        ${tile(st?.today, "سجّلوا اليوم")}
+        ${tile(st?.rooms, "غرف مفتوحة")}
+      </div>
+      ${st ? `<p class="hint">آخر تحديث ${esc(st.at.toLocaleTimeString("ar-SA", { hour: "numeric", minute: "2-digit" }))}</p>` : ""}
+    </div>
+
+    <div class="field"><span class="label">إعلان لكل اللاعبين</span>
+      <textarea class="txt" id="annText" rows="3" maxlength="200" placeholder="مثال: نزلت لعبة جديدة الليلة 🔥">${esc(announce?.text || "")}</textarea>
+      <div class="row"><button class="btn" id="annSend">انشر الإعلان</button>${announce?.text ? `<button class="btn ghost" id="annDel">شيل الإعلان</button>` : ""}</div>
+      <p class="hint">${announce?.text ? "فيه إعلان منشور الحين، ويطلع فوق الصفحة لكل اللاعبين." : "ما فيه إعلان منشور."}</p>
+    </div>
+
+    <div class="field"><span class="label">حظر لاعب</span>
+      <form class="addf" id="banF"><div class="uinput"><span>@</span><input id="banName" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="يوزر اللاعب" aria-label="يوزر اللاعب"></div><button class="btn small danger">احظر</button></form>
+      <p class="hint">المحظور ما يقدر يسوي غرف، ولا يدخلها، ولا يضيف أحد.</p>
+      ${adm.banned.length ? `<div class="list">${adm.banned.map(b => `
+        <div class="li"><span class="nm" dir="ltr">@${esc(b.name || "—")}</span><button class="btn small ghost" data-unban="${esc(b.uid)}">فك الحظر</button></div>`).join("")}</div>`
+        : (st ? `<p class="hint">ما فيه أحد محظور.</p>` : "")}
+    </div>
+  </section>`;
+  on("reload", "click", loadStats);
+  on("annSend", "click", e => {
+    const t = document.getElementById("annText").value;
+    if (!t.trim()) return toast("اكتب الإعلان أول");
+    if (!confirmTap(e.currentTarget, "بيطلع لكل اللاعبين، انشر؟")) return;
+    saveAnnounce(t);
+  });
+  on("annDel", "click", () => saveAnnounce(""));
+  on("banF", "submit", e => {
+    e.preventDefault();
+    const btn = e.currentTarget.querySelector("button");
+    if (!confirmTap(btn, "متأكد؟")) return;
+    banUser(document.getElementById("banName").value);
+  });
+  onAll("[data-unban]", b => unbanUser(b.dataset.unban));
+};
 
 VIEWS.loading = () => { V.innerHTML = `<div class="spinner" aria-label="جاري التحميل"></div>`; };
 
@@ -914,6 +1041,8 @@ if (configured) {
       if (!s.exists()) { me = { uid: user.uid }; go("username"); return; }
       me = { uid: user.uid, username: s.data().username };
       startGlobal();
+      const b = await getDoc(doc(db, "bans", user.uid)).catch(() => null);
+      if (b?.exists()) { banned = true; go("banned"); return; }
       afterLogin();
     } catch (e) {
       console.error(e); me = { uid: user.uid }; toast("فيه مشكلة في الاتصال"); go("username");
