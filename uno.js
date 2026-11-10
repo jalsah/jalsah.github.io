@@ -70,13 +70,9 @@ function frame(id, fill, dark) {
 }
 const gloss = id => `<rect x="3.5" y="3.5" width="53" height="83" rx="5" fill="url(#${id}g)" pointer-events="none"/>`;
 let uid = 0;
-export function cardSVG(c) {
+export function cardSVG(c, back = "classic") {
   const id = "u" + (++uid);
-  if (!c) { // ظهر الورقة
-    return `<svg viewBox="0 0 60 90" class="ucard-svg" aria-hidden="true">${frame(id, "#2a2140", "#0c0816")}
-      <g transform="translate(30 45) rotate(-30)"><ellipse rx="22" ry="34" fill="#e8483f" stroke="#1a1426" stroke-width="1"/><ellipse rx="19" ry="31" fill="none" stroke="#f2b134" stroke-width="1.2"/></g>
-      <text x="30" y="51" text-anchor="middle" ${FONT} font-size="18" fill="#f7c948" ${OUT} stroke-width="2.4" transform="rotate(-30 30 45)">جلسة</text>${gloss(id)}</svg>`;
-  }
+  if (!c) return backSVG(id, back);
   const k = cColor(c), v = cVal(c), wild = k === "w";
   const col = wild ? { fill: "#2a2140", dark: "#0c0816" } : UCOLORS[k];
   const corner = v === "W" ? "" : v === "F" ? "+٤" : v === "D" ? "+٢" : v === "S" ? "⊘" : v === "R" ? "⇄" : AD(v);
@@ -91,27 +87,77 @@ export function cardSVG(c) {
     ${gloss(id)}</svg>`;
 }
 
-// ---------- الطاولة: خشب + جوخ ----------
-export const TABLE_SVG = `<svg viewBox="0 0 400 400" class="utable-svg" aria-hidden="true">
+// ---------- ظهر الورقة: أشكال تنفتح بالمستوى ----------
+export const BACKS = {
+  classic: { name: "كلاسيك", lvl: 1 },
+  sadu: { name: "سدو", lvl: 2 },
+  night: { name: "ليل", lvl: 4 },
+  gold: { name: "ذهبي", lvl: 7 }
+};
+function backSVG(id, back) {
+  const word = (fill, stroke = "#1a1426") => `<text x="30" y="51" text-anchor="middle" ${FONT} font-size="18" fill="${fill}" stroke="${stroke}" stroke-linejoin="round" paint-order="stroke" stroke-width="2.4" transform="rotate(-30 30 45)">جلسة</text>`;
+  if (back === "sadu") {
+    const rows = [10, 22, 34, 46, 58, 70].map((y, i) => `<path d="${Array.from({ length: 7 }, (_, k) => `M${4 + k * 8} ${y + 8} l4 -8 l4 8z`).join(" ")}" fill="${i % 2 ? "#f2b134" : "#fff3e0"}" opacity=".9"/>`).join("");
+    return `<svg viewBox="0 0 60 90" class="ucard-svg" aria-hidden="true">${frame(id, "#b8323a", "#6d1420")}
+      <clipPath id="${id}c"><rect x="3.5" y="3.5" width="53" height="83" rx="5"/></clipPath><g clip-path="url(#${id}c)">${rows}<rect x="3.5" y="80" width="53" height="7" fill="#1a1426"/></g>
+      <rect x="10" y="33" width="40" height="24" rx="12" fill="#1a1426" stroke="#f2b134" stroke-width="1.2"/>
+      <text x="30" y="51" text-anchor="middle" ${FONT} font-size="16" fill="#f7c948">جلسة</text>${gloss(id)}</svg>`;
+  }
+  if (back === "night") {
+    const stars = [[12, 14], [46, 12], [20, 74], [50, 70], [9, 48], [52, 40], [38, 80], [28, 10]].map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="${i % 3 ? .8 : 1.3}" fill="#fff" opacity=".85"/>`).join("");
+    return `<svg viewBox="0 0 60 90" class="ucard-svg" aria-hidden="true">${frame(id, "#3e2f8a", "#120c2e")}${stars}
+      <path d="M38 24 a12 12 0 1 0 6 20 a10 10 0 1 1 -6 -20z" fill="#f7c948"/>
+      <text x="30" y="68" text-anchor="middle" ${FONT} font-size="15" fill="#fff" stroke="#120c2e" stroke-width="2" paint-order="stroke">جلسة</text>${gloss(id)}</svg>`;
+  }
+  if (back === "gold") {
+    return `<svg viewBox="0 0 60 90" class="ucard-svg" aria-hidden="true">${frame(id, "#1d1d22", "#050506")}
+      <rect x="7" y="7" width="46" height="76" rx="4" fill="none" stroke="#e8c25a" stroke-width="1.2"/>
+      <rect x="10" y="10" width="40" height="70" rx="3" fill="none" stroke="#e8c25a" stroke-width=".5" stroke-dasharray="2 2"/>
+      <g transform="translate(30 45) rotate(45)"><rect x="-13" y="-13" width="26" height="26" fill="none" stroke="#e8c25a" stroke-width="1.4"/></g>
+      ${word("#f7d77a", "#000")}${gloss(id)}</svg>`;
+  }
+  return `<svg viewBox="0 0 60 90" class="ucard-svg" aria-hidden="true">${frame(id, "#2a2140", "#0c0816")}
+      <g transform="translate(30 45) rotate(-30)"><ellipse rx="22" ry="34" fill="#e8483f" stroke="#1a1426" stroke-width="1"/><ellipse rx="19" ry="31" fill="none" stroke="#f2b134" stroke-width="1.2"/></g>
+      ${word("#f7c948")}${gloss(id)}</svg>`;
+}
+
+// ---------- الطاولة: خشب + جوخ، وأشكال تنفتح بالمستوى ----------
+export const TABLES = {
+  felt: { name: "جوخ أخضر", lvl: 1, rim: ["#9a5f2e", "#6e3d1a", "#8a5226", "#4f2a10"], felt: ["#23735a", "#155240", "#0c3529"], line: "#f2c46b", mark: "rgba(255,240,200,.08)", noise: 1 },
+  sadu: { name: "سدو", lvl: 3, rim: ["#7a4a24", "#4f2a10", "#6e3d1a", "#2e1708"], felt: ["#b23a3d", "#842530", "#4e1218"], line: "#f2b134", mark: "rgba(255,240,200,.1)", noise: 1, sadu: 1 },
+  night: { name: "ليل", lvl: 5, rim: ["#4a3a7c", "#271d4a", "#3b2e66", "#140e2a"], felt: ["#3d2f7a", "#251c52", "#140f30"], line: "#c9b8ff", mark: "rgba(255,255,255,.07)", noise: 1, stars: 1 },
+  marble: { name: "رخام", lvl: 8, rim: ["#f0dfa8", "#b89a4e", "#dcc581", "#8e7232"], felt: ["#f6f3ec", "#e2ddd2", "#c7c0b2"], line: "#b89a4e", mark: "rgba(80,60,20,.09)", veins: 1 },
+  gold: { name: "ذهبي", lvl: 12, rim: ["#f7d77a", "#b8862b", "#e8c25a", "#7a5512"], felt: ["#2e2e33", "#18181b", "#060607"], line: "#e8c25a", mark: "rgba(232,194,90,.1)", noise: 1 }
+};
+export function tableSVG(key = "felt") {
+  const t = TABLES[key] || TABLES.felt, k = "t" + key;
+  const deco = [];
+  if (t.sadu) deco.push(`<g opacity=".55">${[70, 318].map(y => `<path d="${Array.from({ length: 22 }, (_, i) => `M${70 + i * 12} ${y + 10} l6 -10 l6 10z`).join(" ")}" fill="#f2b134"/>`).join("")}</g>`);
+  if (t.stars) deco.push([[90, 110], [300, 96], [120, 280], [290, 300], [200, 80], [76, 200], [326, 190], [240, 330], [160, 120], [260, 140]].map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="${i % 3 ? 1.4 : 2.4}" fill="#fff" opacity="${i % 2 ? .5 : .8}"/>`).join("") + `<path d="M318 112 a22 22 0 1 0 12 38 a18 18 0 1 1 -12 -38z" fill="#f7c948" opacity=".7"/>`);
+  if (t.veins) deco.push(`<g fill="none" stroke="#9e9584" stroke-opacity=".35" stroke-width="1.4"><path d="M50 120 C120 140 140 90 210 120 S300 200 352 170"/><path d="M60 300 C130 260 170 330 240 280 S320 260 350 300"/><path d="M120 60 C140 140 100 200 150 260" stroke-width=".8"/><path d="M280 60 C260 130 310 170 280 240" stroke-width=".8"/></g>`);
+  return `<svg viewBox="0 0 400 400" class="utable-svg" aria-hidden="true">
   <defs>
-    <radialGradient id="felt" cx="50%" cy="48%" r="62%"><stop offset="0" stop-color="#23735a"/><stop offset=".7" stop-color="#155240"/><stop offset="1" stop-color="#0c3529"/></radialGradient>
-    <linearGradient id="wood" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9a5f2e"/><stop offset=".35" stop-color="#6e3d1a"/><stop offset=".65" stop-color="#8a5226"/><stop offset="1" stop-color="#4f2a10"/></linearGradient>
-    <linearGradient id="woodHi" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
-    <filter id="feltN" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" seed="4"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .22 0"/><feComposite in2="SourceGraphic" operator="in"/></filter>
-    <filter id="grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".012 .35" numOctaves="2" seed="9"/><feColorMatrix values="0 0 0 0 .1  0 0 0 0 .05  0 0 0 0 0  0 0 0 .35 0"/><feComposite in2="SourceGraphic" operator="in"/></filter>
+    <radialGradient id="${k}felt" cx="50%" cy="48%" r="62%"><stop offset="0" stop-color="${t.felt[0]}"/><stop offset=".7" stop-color="${t.felt[1]}"/><stop offset="1" stop-color="${t.felt[2]}"/></radialGradient>
+    <linearGradient id="${k}wood" x1="0" y1="0" x2="1" y2="1">${t.rim.map((c, i) => `<stop offset="${[0, .35, .65, 1][i]}" stop-color="${c}"/>`).join("")}</linearGradient>
+    <linearGradient id="${k}hi" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <filter id="${k}n" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" seed="4"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .22 0"/><feComposite in2="SourceGraphic" operator="in"/></filter>
+    <filter id="${k}g" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".012 .35" numOctaves="2" seed="9"/><feColorMatrix values="0 0 0 0 .1  0 0 0 0 .05  0 0 0 0 0  0 0 0 .3 0"/><feComposite in2="SourceGraphic" operator="in"/></filter>
   </defs>
   <rect x="14" y="22" width="372" height="372" rx="92" fill="rgba(0,0,0,.45)"/>
-  <rect x="10" y="10" width="380" height="380" rx="92" fill="url(#wood)"/>
-  <rect x="10" y="10" width="380" height="380" rx="92" fill="#000" filter="url(#grain)"/>
-  <rect x="10" y="10" width="380" height="380" rx="92" fill="url(#woodHi)"/>
-  <rect x="12" y="12" width="376" height="376" rx="90" fill="none" stroke="rgba(255,220,170,.25)" stroke-width="1.5"/>
+  <rect x="10" y="10" width="380" height="380" rx="92" fill="url(#${k}wood)"/>
+  ${key === "felt" || key === "sadu" ? `<rect x="10" y="10" width="380" height="380" rx="92" fill="#000" filter="url(#${k}g)"/>` : ""}
+  <rect x="10" y="10" width="380" height="380" rx="92" fill="url(#${k}hi)"/>
+  <rect x="12" y="12" width="376" height="376" rx="90" fill="none" stroke="rgba(255,230,180,.25)" stroke-width="1.5"/>
   <rect x="38" y="38" width="324" height="324" rx="70" fill="rgba(0,0,0,.5)"/>
-  <rect x="40" y="41" width="320" height="320" rx="68" fill="url(#felt)"/>
-  <rect x="40" y="41" width="320" height="320" rx="68" fill="#000" filter="url(#feltN)"/>
+  <rect x="40" y="41" width="320" height="320" rx="68" fill="url(#${k}felt)"/>
+  ${t.noise ? `<rect x="40" y="41" width="320" height="320" rx="68" fill="#000" filter="url(#${k}n)"/>` : ""}
+  ${deco.join("")}
   <rect x="40" y="41" width="320" height="320" rx="68" fill="none" stroke="rgba(0,0,0,.45)" stroke-width="6"/>
-  <rect x="56" y="57" width="288" height="288" rx="54" fill="none" stroke="#f2c46b" stroke-opacity=".35" stroke-width="1.5" stroke-dasharray="5 5"/>
-  <text x="200" y="312" text-anchor="middle" font-family="Lalezar,Tahoma,sans-serif" font-size="28" fill="rgba(255,240,200,.08)">جلسة</text>
+  <rect x="56" y="57" width="288" height="288" rx="54" fill="none" stroke="${t.line}" stroke-opacity=".4" stroke-width="1.5" stroke-dasharray="5 5"/>
+  <text x="200" y="312" text-anchor="middle" font-family="Lalezar,Tahoma,sans-serif" font-size="28" fill="${t.mark}">جلسة</text>
 </svg>`;
+}
+export const TABLE_SVG = tableSVG("felt");
 
 // أماكن اللاعبين حول الطاولة (نسبة مئوية)، بترتيب الدور بعدك
 export function seatSpots(n) {

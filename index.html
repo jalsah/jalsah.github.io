@@ -428,6 +428,28 @@ body:has(#chatFab) main{padding-bottom:78px}
 .ub-t{font-weight:700;min-width:0}
 .ub-col{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);flex:none}
 .ub-col i{width:14px;height:14px;border-radius:50%}
+.lvl{display:inline-flex;align-items:center;gap:3px;font-size:11.5px;font-weight:700;color:var(--saffron);background:color-mix(in srgb,var(--saffron) 14%,transparent);border:1px solid color-mix(in srgb,var(--saffron) 35%,transparent);border-radius:999px;padding:0 8px;white-space:nowrap;flex:none;font-variant-numeric:tabular-nums}
+.li-who .lvl{margin-inline-start:6px}
+.lvlbox{width:100%;max-width:360px;display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px}
+.lvlbar{height:10px;border-radius:999px;background:color-mix(in srgb,var(--ink) 10%,transparent);overflow:hidden}
+.lvlbar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--saffron),#ffd98a)}
+.achs{display:grid;grid-template-columns:repeat(auto-fill,minmax(98px,1fr));gap:8px}
+.ach{display:flex;flex-direction:column;align-items:center;text-align:center;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 6px;opacity:.5}
+.ach.on{opacity:1;border-color:color-mix(in srgb,var(--saffron) 45%,var(--line));background:color-mix(in srgb,var(--saffron) 8%,var(--surface))}
+.ach-ic{font-size:26px;line-height:1.2}
+.ach b{font-size:12.5px}
+.ach span:last-child{font-size:11px;color:var(--muted);line-height:1.35}
+.ach-mini{display:flex;flex-wrap:wrap;justify-content:center;gap:4px;font-size:20px}
+.looks{display:flex;gap:10px;overflow-x:auto;padding:4px 2px 8px;scrollbar-width:none}
+.look{flex:none;width:104px;display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--surface);border:2px solid var(--line);border-radius:16px;padding:8px;color:var(--ink);font:inherit;cursor:pointer}
+.look.sel{border-color:var(--saffron)}
+.look[aria-disabled="true"] .look-pv{filter:grayscale(.8) brightness(.6)}
+.look-pv{width:84px;height:84px;display:block}
+.look.back .look-pv{width:56px;height:84px}
+.look-pv{position:relative}
+.look-pv svg{position:static;width:100%;height:100%;display:block}
+.look b{font-size:13px}
+.look .hint{font-size:11px}
 .utime{height:6px;border-radius:999px;background:var(--surface);overflow:hidden;margin-top:-4px}
 .utime i{display:block;height:100%;background:var(--muted);border-radius:inherit;transform-origin:right;transform:scaleX(var(--s));animation:utime var(--d) linear forwards}
 .utime.mine i{background:var(--saffron)}
@@ -565,6 +587,6 @@ body:has(#chatFab) main{padding-bottom:78px}
   <main id="view"><div class="spinner" aria-label="جاري التحميل"></div></main>
 </div>
 <noscript><section style="padding:24px"><h1>جلسة: ألعاب الجلسات مع أصحابك</h1><p>ألعاب الجلسات مع الشلة من جوالك: ارسم وخمّن، الدخيل، أونو، مين قالها، صح ولا خطأ، ومين أكثر واحد. أونلاين أو بجوال واحد، ومجانية.</p><p>شغّل الجافاسكربت عشان تلعب.</p></section></noscript>
-<script type="module" src="./app.js?v=34"></script>
+<script type="module" src="./app.js?v=35"></script>
 </body>
 </html>

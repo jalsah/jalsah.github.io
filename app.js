@@ -13,7 +13,7 @@ import {
 import { firebaseConfig, authUrl } from "./firebase-config.js?v=27";
 import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=27";
 import { ICONS } from "./icons.js?v=27";
-import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=28";
+import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, tableSVG, TABLES, BACKS, seatSpots, isWild, cColor, cVal } from "./uno.js?v=29";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -47,6 +47,27 @@ const PW_MIN = 8;
 // صاحب اللعبة: يطلع جنب يوزره تاج
 const OWNER = "b_1";
 const RESERVED = new Set(["admin", "owner", "jalsah", "jalsa", "support", "official", "moderator", "mod", "staff", "team"]);
+/* ================= المستويات والإنجازات ================= */
+// المستوى L يحتاج 25×L×(L-1) نقطة خبرة: ٢=٥٠، ٣=١٥٠، ٥=٥٠٠، ١٠=٢٢٥٠
+const lvlOf = xp => Math.max(1, Math.floor((1 + Math.sqrt(1 + (xp || 0) * 4 / 25)) / 2));
+const lvlXp = L => 25 * L * (L - 1);
+const lvlTag = xp => `<span class="lvl" title="المستوى">⭐ ${ar(lvlOf(xp))}</span>`;
+const ACH = [
+  { id: "first", ic: "🎉", t: "أول جلسة", d: "العب أول جولة", ok: s => (s.games || 0) >= 1 },
+  { id: "g50", ic: "🔥", t: "مدمن جلسات", d: "العب ٥٠ جولة", ok: s => (s.games || 0) >= 50 },
+  { id: "g200", ic: "👑", t: "أسطورة الجلسات", d: "العب ٢٠٠ جولة", ok: s => (s.games || 0) >= 200 },
+  { id: "win1", ic: "🏆", t: "أول فوز", d: "اكسب نقاط في جولة", ok: s => (s.wins || 0) >= 1 },
+  { id: "win25", ic: "💪", t: "ما ينغلب", d: "افز في ٢٥ جولة", ok: s => (s.wins || 0) >= 25 },
+  { id: "uno", ic: "🃏", t: "ملك الأونو", d: "افز بالأونو ١٠ مرات", ok: s => (s.w_uno || 0) >= 10 },
+  { id: "imp", ic: "🕵️", t: "صياد الدخلاء", d: "افز في الدخيل ١٠ مرات", ok: s => (s.w_imp || 0) >= 10 },
+  { id: "draw", ic: "🎨", t: "فنان الجلسة", d: "افز في ارسم وخمّن ١٠ مرات", ok: s => (s.w_draw || 0) >= 10 },
+  { id: "all", ic: "🧭", t: "جرّب كل شي", d: "العب ٥ ألعاب مختلفة", ok: s => ["uno", "imp", "most", "hhnj", "who", "tf", "draw"].filter(g => s["g_" + g]).length >= 5 },
+  { id: "night", ic: "🌙", t: "سهران", d: "العب بين ٢ و٥ الفجر", ok: s => (s.night || 0) >= 1 },
+  { id: "lvl10", ic: "⭐", t: "نجم جلسة", d: "وصّل المستوى ١٠", ok: (s, xp) => lvlOf(xp) >= 10 }
+];
+const achGot = (s, xp) => ACH.filter(x => x.ok(s || {}, xp || 0));
+const myLook = () => ({ t: TABLES[me?.look?.t] && lvlOf(me?.xp) >= TABLES[me.look.t].lvl ? me.look.t : "felt", b: BACKS[me?.look?.b] && lvlOf(me?.xp) >= BACKS[me.look.b].lvl ? me.look.b : "classic" });
+
 const OFFICIAL = "jalsah"; // حساب جلسة الرسمي (@Jalsah)، تحت تصرف المالك
 const isOwner = () => [OWNER, OFFICIAL].includes(String(me?.username || "").toLowerCase());
 const at = name => { const k = String(name).toLowerCase();
@@ -114,7 +135,7 @@ let roomChat = [];            // شات الغرفة
 const profiles = new Map();   // uid -> { username, photo, bio }
 const profWant = new Set();
 function prof(uid) {
-  if (uid === me?.uid) return { username: me.username, photo: me.photo, bio: me.bio };
+  if (uid === me?.uid) return { username: me.username, photo: me.photo, bio: me.bio, xp: me.xp, stats: me.stats };
   const f = friends.get(uid); if (f && f.username !== "…") return f;
   if (profiles.has(uid)) return profiles.get(uid);
   if (db && me && !profWant.has(uid)) {
@@ -827,6 +848,37 @@ function unoTimerStart() {
     if (el) { el.textContent = "⏱ " + ar(Math.ceil(left)); el.classList.toggle("hot", left <= 5); }
     if (left <= 0 && isHost() && ui.unoKickV !== uno.v) { ui.unoKickV = uno.v; unoKick(); }
   }, 500);
+}
+// نقاط الخبرة: كل ما تخلص جولة لعبت فيها
+const END_PHASES = { result: "imp", hres: "hhnj", unoend: "uno", mresult: "most", wres: "who", tres: "tf", dres: "draw" };
+async function awardXp() {
+  if (!me?.uid || !room || !roomCode) return;
+  const myScore = room.scores?.[me.uid] || 0;
+  if (!ui.xpBase || ui.xpBase.room !== roomCode) ui.xpBase = { room: roomCode, score: myScore, done: new Set() };
+  const game = END_PHASES[room.phase];
+  if (!game) { ui.xpBase.score = myScore; return; }
+  const key = room.round + ":" + room.phase;
+  if (ui.xpBase.done.has(key)) return;
+  ui.xpBase.done.add(key);
+  if (!(room.roundPlayers || []).includes(me.uid)) return;
+  const gained = Math.max(0, myScore - ui.xpBase.score); ui.xpBase.score = myScore;
+  const won = game === "uno" ? room.uno?.winner === me.uid : gained > 0;
+  const add = Math.min(45, 10 + Math.min(gained, 4) * 5 + (game === "uno" && won ? 15 : 0));
+  const s = { ...(me.stats || {}) };
+  s.games = (s.games || 0) + 1; s["g_" + game] = (s["g_" + game] || 0) + 1;
+  if (won) { s.wins = (s.wins || 0) + 1; s["w_" + game] = (s["w_" + game] || 0) + 1; }
+  const h = new Date().getHours(); if (h >= 2 && h < 5) s.night = (s.night || 0) + 1;
+  const before = achGot(me.stats, me.xp).map(x => x.id), oldL = lvlOf(me.xp);
+  try {
+    await updateDoc(doc(db, "users", me.uid), { xp: (me.xp || 0) + add, xpAt: serverTimestamp(), stats: s });
+    me.xp = (me.xp || 0) + add; me.stats = s;
+    const fresh = achGot(s, me.xp).filter(x => !before.includes(x.id));
+    setTimeout(() => {
+      toast(`+${ar(add)} خبرة ⭐`);
+      if (lvlOf(me.xp) > oldL) setTimeout(() => toast(`🎉 وصلت المستوى ${ar(lvlOf(me.xp))}!`), 1400);
+      fresh.forEach((x, i) => setTimeout(() => toast(`${x.ic} إنجاز جديد: ${x.t}`), 2800 + i * 1400));
+    }, 600);
+  } catch (e) { console.warn("xp", e); }
 }
 async function unoKick() {
   const uno = unoState(); if (!uno || !isHost()) return;
@@ -2281,7 +2333,9 @@ function showProfile(uid) {
     <div class="pcard-body">
       <b class="pf-name" dir="ltr">${at(p.username)}</b>
       ${f ? `<span class="chip-st ${isOnline(f) ? "on" : ""}">${isOnline(f) ? "أونلاين الحين" : "مو أونلاين"}</span>` : ""}
+      ${lvlTag(p.xp)}
       ${p.bio ? `<p class="pcard-bio">${esc(p.bio)}</p>` : ""}
+      ${(() => { const g = achGot(p.stats, p.xp); return g.length ? `<div class="ach-mini" aria-label="الإنجازات">${g.map(x => `<span title="${esc(x.t)}">${x.ic}</span>`).join("")}</div>` : ""; })()}
       <div class="pcard-acts">${acts}</div>
       ${modRow}
       <button class="btn ghost" id="pfClose">إغلاق</button>
@@ -2323,6 +2377,8 @@ VIEWS.profile = () => {
         <input type="file" id="photoIn" accept="image/*" hidden>
       </div>
       <b class="pf-name" dir="ltr">${at(me.username)}</b>
+      ${(() => { const L = lvlOf(me.xp), a0 = lvlXp(L), a1 = lvlXp(L + 1), pc = Math.round(((me.xp || 0) - a0) / (a1 - a0) * 100);
+        return `<div class="lvlbox"><div class="row-h"><b>⭐ المستوى ${ar(L)}</b><span class="hint">${ar((me.xp || 0) - a0)} / ${ar(a1 - a0)} خبرة</span></div><div class="lvlbar"><i style="width:${pc}%"></i></div><span class="hint">العب جولات واكسب خبرة. الفوز يعطيك أكثر.</span></div>`; })()}
       <div class="row pf-acts">
         <label class="btn small ghost" for="photoIn">${me.photo ? "غيّر الصورة" : "أضف صورة"}</label>
         ${me.photo ? `<button class="btn small ghost" id="rmPhoto">شيل الصورة</button>` : ""}
@@ -2335,6 +2391,17 @@ VIEWS.profile = () => {
       <button class="btn small" id="saveBio" ${draft === (me.bio || "") ? "disabled" : ""}>احفظ</button></div>
     </div>
 
+    <div class="field"><span class="label">🎖️ إنجازاتك (${ar(achGot(me.stats, me.xp).length)} من ${ar(ACH.length)})</span>
+      <div class="achs">${ACH.map(x => { const ok = x.ok(me.stats || {}, me.xp || 0); return `<div class="ach ${ok ? "on" : ""}"><span class="ach-ic">${ok ? x.ic : "🔒"}</span><b>${x.t}</b><span>${x.d}</span></div>`; }).join("")}</div></div>
+
+    <div class="field"><span class="label">🎨 أشكالك</span>
+      <span class="hint">شكل الطاولة</span>
+      <div class="looks">${Object.entries(TABLES).map(([k, t]) => { const open = lvlOf(me.xp) >= t.lvl, sel = myLook().t === k;
+        return `<button class="look ${sel ? "sel" : ""}" data-lt="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><span class="look-pv">${tableSVG(k)}</span><b>${t.name}</b><span class="hint">${open ? (sel ? "مختار ✓" : "متاح") : "🔒 مستوى " + ar(t.lvl)}</span></button>`; }).join("")}</div>
+      <span class="hint">ظهر الورق</span>
+      <div class="looks">${Object.entries(BACKS).map(([k, t]) => { const open = lvlOf(me.xp) >= t.lvl, sel = myLook().b === k;
+        return `<button class="look back ${sel ? "sel" : ""}" data-lb="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><span class="look-pv">${cardSVG(null, k)}</span><b>${t.name}</b><span class="hint">${open ? (sel ? "مختار ✓" : "متاح") : "🔒 مستوى " + ar(t.lvl)}</span></button>`; }).join("")}</div></div>
+
     <div class="field"><span class="label">يوزرك</span>
       <div class="li"><span class="nm" dir="ltr">@${esc(me.username)}</span><button class="btn small ghost" id="copy">انسخ</button>${isOwner() ? "" : `<button class="btn small ghost" id="rename">غيّر</button>`}</div>
       <p class="hint">أرسله لأصحابك عشان يضيفونك.</p></div>
@@ -2343,6 +2410,14 @@ VIEWS.profile = () => {
       <div class="row legal"><a class="link" href="privacy.html" target="_blank" rel="noopener">سياسة الخصوصية</a>${isOwner() ? "" : `<button class="link danger-link" id="delAcc">احذف حسابي</button>`}</div></div></section>`;
   on("tour", "click", () => { ui.slide = 0; go("welcome"); });
   on("delAcc", "click", openDeleteAccount);
+  const setLook = async (kind, k, list) => {
+    if (lvlOf(me.xp) < list[k].lvl) return toast(`يفتح لك في المستوى ${ar(list[k].lvl)} ⭐`);
+    const look = { ...myLook(), [kind]: k };
+    me.look = look; render(false);
+    try { await updateDoc(doc(db, "users", me.uid), { look }); } catch (e) { console.error(e); }
+  };
+  onAll("[data-lt]", b => setLook("t", b.dataset.lt, TABLES));
+  onAll("[data-lb]", b => setLook("b", b.dataset.lb, BACKS));
   on("switchAcc", "click", openSwitcher);
   const bio = document.getElementById("bio"), save = document.getElementById("saveBio");
   bio.addEventListener("input", () => {
@@ -2496,6 +2571,7 @@ function bindLeave() { on("leave", "click", e => { if (confirmTap(e.currentTarge
 VIEWS.room = () => {
   if (!room) { V.innerHTML = `<div class="spinner" aria-label="جاري التحميل"></div>`; return; }
   if (room.phase === "hq") { if (!subs.has("hdone")) watchHhnjDone(); } else if (subs.has("hdone")) { off("hdone"); ui.hDoneCount = 0; }
+  awardXp();
   if (room.phase === "uno" && isHost()) { if (!subs.has("umoves")) watchUnoMoves(); unoCleanup(); } else if (subs.has("umoves")) off("umoves");
   if (room.phase !== "uno" && room.phase !== "unoend") { UNO.st = null; UNO.processed = {}; }
   const host = isHost();
@@ -2566,7 +2642,7 @@ const ROOM_VIEWS = {
         <div class="row inv-row"><a class="btn small wa" id="waInv" href="${esc(waLink())}" target="_blank" rel="noopener">${ICONS.wa} ادعُ بالواتساب</a>
         <button class="btn small ghost" id="copyLink">انسخ الرابط</button></div></div>
       <div class="field"><span class="label">اللاعبين (${ar(n)} من ١٢)</span><div class="list">${ps.map(u => `
-        <div class="li"><button class="li-who" data-pf="${esc(u)}">${avatar(pname(u), prof(u)?.photo, 36)}<span class="nm" dir="ltr">${at(pname(u))}</span></button>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}${host && u !== me.uid ? `<button class="btn small ghost kick" data-kick="${esc(u)}" aria-label="اطرد ${esc(pname(u))}">اطرد</button>` : ""}</div>`).join("")}</div></div>
+        <div class="li"><button class="li-who" data-pf="${esc(u)}">${avatar(pname(u), prof(u)?.photo, 36)}<span class="nm" dir="ltr">${at(pname(u))}</span>${prof(u) ? lvlTag(prof(u).xp) : ""}</button>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}${host && u !== me.uid ? `<button class="btn small ghost kick" data-kick="${esc(u)}" aria-label="اطرد ${esc(pname(u))}">اطرد</button>` : ""}</div>`).join("")}</div></div>
       ${host ? `
         <div class="field"><span class="label">نوع الغرفة</span><div class="chips">
           <button class="chip" data-pub="0" aria-pressed="${!room.public}">خاصة 🔒</button>
@@ -2730,11 +2806,11 @@ const ROOM_VIEWS = {
     V.innerHTML = `<section class="uno">
       ${statusBar()}
       <div class="utable" style="--cur:${col.fill}">
-        ${TABLE_SVG}
+        ${tableSVG(myLook().t)}
         ${others.map((u, i) => `<button class="useat ${u === turnU ? "turn" : ""} ${uno.flash === u ? "flash" : ""}" style="left:${spots[i][0]}%;top:${spots[i][1]}%" data-pf="${esc(u)}">
           ${avatar(pname(u), prof(u)?.photo, 40)}<span class="us-n" dir="ltr">${esc(pname(u))}</span><span class="us-c">🃏 ${ar(uno.counts[u] || 0)}</span></button>`).join("")}
         <div class="ucenter">
-          <button class="upile ${canDraw ? "go" : ""}" id="uDraw" ${canDraw ? "" : "disabled"} aria-label="اسحب ورقة">${cardSVG(null)}<span class="up-n">${ar(uno.deck)}</span></button>
+          <button class="upile ${canDraw ? "go" : ""}" id="uDraw" ${canDraw ? "" : "disabled"} aria-label="اسحب ورقة">${cardSVG(null, myLook().b)}<span class="up-n">${ar(uno.deck)}</span></button>
           <div class="udisc" id="uDisc" aria-label="الورقة اللي فوق: ${esc(cardName(uno.top))}"><span class="ring"></span>${under.map(t => `<span class="ucard old" style="--r:${t.r}deg;--x:${t.x}px;--y:${t.y}px">${cardSVG(t.c)}</span>`).join("")}<span class="ucard top" data-v="${uno.v}" style="--r:${topT.r}deg;--x:${topT.x}px;--y:${topT.y}px">${cardSVG(uno.top)}</span></div>
         </div>
         <div class="udir ${uno.dir < 0 ? "rev" : ""}" aria-hidden="true">⟳</div>
@@ -3194,7 +3270,7 @@ if (configured) {
     try {
       const s = await getDoc(doc(db, "users", user.uid));
       if (!s.exists()) { me = { uid: user.uid }; go("username"); return; }
-      me = { uid: user.uid, username: s.data().username, photo: s.data().photo || "", bio: s.data().bio || "", renamedAt: s.data().usernameChangedAt || null, warns: s.data().warns || 0, mutedUntil: s.data().mutedUntil || 0 };
+      me = { uid: user.uid, username: s.data().username, photo: s.data().photo || "", bio: s.data().bio || "", xp: s.data().xp || 0, stats: s.data().stats || {}, look: s.data().look || null, renamedAt: s.data().usernameChangedAt || null, warns: s.data().warns || 0, mutedUntil: s.data().mutedUntil || 0 };
       startGlobal();
       const b = await getDoc(doc(db, "bans", user.uid)).catch(() => null);
       if (b?.exists()) { banned = true; go("banned"); return; }
