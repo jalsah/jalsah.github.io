@@ -9,9 +9,9 @@ import {
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
   getCountFromServer, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, authUrl } from "./firebase-config.js?v=13";
-import { WORDS, MOST, FIVE } from "./content.js?v=13";
-import { ICONS } from "./icons.js?v=13";
+import { firebaseConfig, authUrl } from "./firebase-config.js?v=14";
+import { WORDS, MOST, FIVE } from "./content.js?v=14";
+import { ICONS } from "./icons.js?v=14";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -137,7 +137,7 @@ function on(id, ev, fn) { const el = document.getElementById(id); if (el) el.add
 function onAll(sel, fn) { V.querySelectorAll(sel).forEach(el => el.addEventListener("click", e => fn(e.currentTarget, e))); }
 
 const BACK = {
-  friends: "home", profile: "home", admin: "home",
+  friends: "home", profile: "home", admin: "home", rename: "profile",
   email: "auth", forgot: () => (ui.emailMode = "login", "email"),
   local: () => me?.username ? "home" : (configured ? "auth" : "setup"),
   "l-players": "local", "l-imp": "local", "l-pass": "local", "l-play": "local",
@@ -757,6 +757,73 @@ VIEWS.forgot = () => {
   });
 };
 
+/* ================= تغيير اليوزر ================= */
+const RENAME_DAYS = 30;
+function renameWait() {
+  const t = me?.renamedAt?.toMillis?.(); if (!t) return 0;
+  return Math.max(0, t + RENAME_DAYS * 864e5 - Date.now());
+}
+async function changeUsername(name) {
+  const oldKey = me.username.toLowerCase(), newKey = name.toLowerCase();
+  await runTransaction(db, async tx => {
+    const ref = doc(db, "usernames", newKey);
+    if (newKey !== oldKey) {
+      const s = await tx.get(ref);
+      if (s.exists()) throw { code: "taken" };
+      tx.set(ref, { uid: me.uid });
+      tx.delete(doc(db, "usernames", oldKey));
+    }
+    tx.update(doc(db, "users", me.uid), { username: name, usernameChangedAt: serverTimestamp() });
+  });
+}
+
+VIEWS.rename = () => {
+  if (isOwner()) { go("profile"); return; }
+  const wait = renameWait();
+  const days = Math.ceil(wait / 864e5);
+  V.innerHTML = `<section>
+    <div><h2>غيّر يوزرك</h2>
+    <p class="lead">يوزرك الحين <b dir="ltr">@${esc(me.username)}</b>. تقدر تغيّره مرة كل ${ar(RENAME_DAYS)} يوم، ويوزرك القديم يصير متاح لغيرك.</p></div>
+    ${wait ? `<div class="li"><span class="nm">تقدر تغيّره بعد ${days === 1 ? "يوم" : days === 2 ? "يومين" : ar(days) + (days <= 10 ? " أيام" : " يوم")}</span></div>` : `
+    <div class="field"><label class="label" for="uname">اليوزر الجديد</label>
+      <div class="uinput"><span>@</span><input id="uname" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="20" placeholder="D-A-L-P"></div>
+      <p class="hint" id="unameMsg">${UNAME_HINT}</p></div>
+    ${roomCode ? `<p class="hint msg-bad">اطلع من الغرفة أول، وبعدها غيّر يوزرك.</p>` : ""}
+    <div class="foot"><button class="btn" id="claim" disabled>غيّر اليوزر</button></div>`}
+  </section>`;
+  if (wait) return;
+  const inp = document.getElementById("uname"), msg = document.getElementById("unameMsg"), btn = document.getElementById("claim");
+  const check = () => {
+    const v = inp.value.replace(/\s+/g, "");
+    if (v !== inp.value) inp.value = v;
+    const ok = USER_RE.test(v) && HAS_UPPER.test(v) && !RESERVED.has(v.toLowerCase()) && v.toLowerCase() !== OWNER && v !== me.username && !roomCode;
+    btn.disabled = !ok;
+    if (!v) { msg.className = "hint"; msg.textContent = UNAME_HINT; }
+    else if (/[^A-Za-z0-9_-]/.test(v)) { msg.className = "hint msg-bad"; msg.textContent = "مسموح بس: حروف إنجليزية وأرقام و _ و -"; }
+    else if (v.length < 3) { msg.className = "hint msg-bad"; msg.textContent = "اليوزر لازم يكون ٣ خانات أو أكثر"; }
+    else if (!HAS_UPPER.test(v)) { msg.className = "hint msg-bad"; msg.textContent = "لازم فيه حرف كبير واحد على الأقل، مثل D-A-L-P"; }
+    else if (RESERVED.has(v.toLowerCase()) || v.toLowerCase() === OWNER) { msg.className = "hint msg-bad"; msg.textContent = "هذا اليوزر محجوز، جرّب غيره"; }
+    else if (v === me.username) { msg.className = "hint msg-bad"; msg.textContent = "هذا يوزرك الحالي"; }
+    else { msg.className = "hint msg-ok"; msg.textContent = "@" + v + " شكله حلو"; }
+  };
+  inp.addEventListener("input", check); check();
+  btn.addEventListener("click", async e => {
+    const name = inp.value;
+    if (btn.disabled) return;
+    if (!confirmTap(btn, "متأكد؟ ما تقدر تغيّره ثاني إلا بعد " + ar(RENAME_DAYS) + " يوم")) return;
+    btn.disabled = true; btn.textContent = "لحظة…";
+    try {
+      await changeUsername(name);
+      me.username = name; me.renamedAt = { toMillis: () => Date.now() };
+      toast("صار يوزرك @" + name); go("profile");
+    } catch (err) {
+      btn.disabled = false; btn.dataset.armed = ""; btn.textContent = "غيّر اليوزر";
+      if (err?.code === "taken") { msg.className = "hint msg-bad"; msg.textContent = "@" + name + " محجوز، جرّب غيره"; }
+      else { console.error(err); toast("ما قدرنا نغيّر اليوزر"); }
+    }
+  });
+};
+
 const UNAME_HINT = "حروف إنجليزية وأرقام و _ و - ، من ٣ إلى ٢٠ خانة، وفيه حرف كبير واحد على الأقل.";
 
 VIEWS.username = () => {
@@ -889,7 +956,7 @@ VIEWS.profile = () => {
     </div>
 
     <div class="field"><span class="label">يوزرك</span>
-      <div class="li"><span class="nm" dir="ltr">@${esc(me.username)}</span><button class="btn small ghost" id="copy">انسخ</button></div>
+      <div class="li"><span class="nm" dir="ltr">@${esc(me.username)}</span><button class="btn small ghost" id="copy">انسخ</button>${isOwner() ? "" : `<button class="btn small ghost" id="rename">غيّر</button>`}</div>
       <p class="hint">أرسله لأصحابك عشان يضيفونك.</p></div>
 
     <div class="foot"><button class="btn ghost" id="out">تسجيل خروج</button></div></section>`;
@@ -920,6 +987,7 @@ VIEWS.profile = () => {
     try { await updateDoc(doc(db, "users", me.uid), { photo: "" }); me.photo = ""; render(true); } catch (err) { console.error(err); }
   });
   on("copy", "click", () => copyText("@" + me.username, "انسخ اليوزر"));
+  on("rename", "click", () => go("rename"));
   on("out", "click", async e => { if (!confirmTap(e.currentTarget)) return; await leaveRoom(true); signOut(auth); });
 };
 
@@ -1281,7 +1349,7 @@ if (configured) {
     try {
       const s = await getDoc(doc(db, "users", user.uid));
       if (!s.exists()) { me = { uid: user.uid }; go("username"); return; }
-      me = { uid: user.uid, username: s.data().username, photo: s.data().photo || "", bio: s.data().bio || "" };
+      me = { uid: user.uid, username: s.data().username, photo: s.data().photo || "", bio: s.data().bio || "", renamedAt: s.data().usernameChangedAt || null };
       startGlobal();
       const b = await getDoc(doc(db, "bans", user.uid)).catch(() => null);
       if (b?.exists()) { banned = true; go("banned"); return; }
