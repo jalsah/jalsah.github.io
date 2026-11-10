@@ -9,10 +9,10 @@ import {
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
   getCountFromServer, Timestamp, orderBy, limit, addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, authUrl } from "./firebase-config.js?v=18";
-import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=18";
-import { ICONS } from "./icons.js?v=18";
-import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=18";
+import { firebaseConfig, authUrl } from "./firebase-config.js?v=19";
+import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=19";
+import { ICONS } from "./icons.js?v=19";
+import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=19";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -104,6 +104,7 @@ function off(k) { const u = subs.get(k); if (u) { u(); subs.delete(k); } }
 function offAll() { [...subs.keys()].forEach(off); }
 
 let announce = null, banned = false, promo = null, guestUid = null, guestTimer = null;
+let pubRooms = null;          // الغرف العامة
 let inbox = [];               // محادثات الخاص
 let roomChat = [];            // شات الغرفة
 const profiles = new Map();   // uid -> { username, photo, bio }
@@ -128,6 +129,7 @@ const REFRESH = new Set(["home", "friends", "room", "profile", "admin", "inbox"]
 function go(name) {
   stopLocalTimers();
   if (screen === "dm" && name !== "dm") { off("dm"); ui.dmWith = null; }
+  if (name !== "pub") { off("pub"); pubRooms = null; }
   if (name !== "room") { document.getElementById("chatPanel")?.remove(); document.getElementById("chatFab")?.remove(); }
   screen = name;
   render(true);
@@ -154,7 +156,7 @@ function on(id, ev, fn) { const el = document.getElementById(id); if (el) el.add
 function onAll(sel, fn) { V.querySelectorAll(sel).forEach(el => el.addEventListener("click", e => fn(e.currentTarget, e))); }
 
 const BACK = {
-  friends: "home", profile: "home", admin: "home", rename: "profile", inbox: "home", dm: "inbox",
+  pub: "home", friends: "home", profile: "home", admin: "home", rename: "profile", inbox: "home", dm: "inbox",
   "l-hhnj": "local",
   email: "auth", forgot: () => (ui.emailMode = "login", "email"),
   local: () => me?.username ? "home" : (configured ? "auth" : "setup"),
@@ -380,8 +382,10 @@ async function createRoom(game = "imp") {
     }
     await setDoc(doc(db, "rooms", code), {
       host: me.uid, createdAt: serverTimestamp(), phase: "lobby", game: GAMES[game] ? game : "imp", cat: "عشوائي", imps: 1,
-      round: 0, players: { [me.uid]: { name: me.username, at: Date.now() } }, scores: {}
+      round: 0, players: { [me.uid]: { name: me.username, at: Date.now() } }, scores: {},
+      public: !!ui.makePublic, listed: !!ui.makePublic, ping: Date.now(), hostName: me.username
     });
+    ui.makePublic = false;
     enterRoom(code);
   } catch (e) { console.error(e); toast("ما قدرنا نسوي الغرفة"); }
 }
@@ -419,9 +423,12 @@ function enterRoom(code) {
     if (room.phase === "hq" && !subs.has("hdone")) watchHhnjDone();
     if (screen === "room") render(false); else renderHeader();
   }, e => { console.error(e); exitRoomLocal("انقطع الاتصال بالغرفة"); }));
+  clearInterval(ui.pingTimer);
+  ui.pingTimer = setInterval(() => { if (roomCode && isHost() && room?.listed) updateDoc(roomRef(), { ping: Date.now() }).catch(() => {}); }, 45000);
   go("room");
 }
 function exitRoomLocal(msg) {
+  clearInterval(ui.pingTimer); ui.pingTimer = null;
   off("room"); off("secret"); off("votes"); off("rchat"); off("hdone"); off("umoves"); off("priv"); off("dguess"); off("dcanvas"); DRAWS.strokes = []; DRAWS.sRound = 0; UNO.st = null; UNO.processed = {}; clearInterval(ui.hTimer); ui.hTimer = null;
   roomChat = []; closeChatPanel(); ui.chatSeen = 0;
   room = null; roomCode = null; votes = {}; secret = null;
@@ -1784,6 +1791,40 @@ VIEWS.username = () => {
   on("logout", "click", () => signOut(auth));
 };
 
+/* ================= الغرف العامة ================= */
+const PUB_ALIVE = 150000;
+function watchPub() {
+  if (subs.has("pub")) return;
+  sub("pub", onSnapshot(query(collection(db, "rooms"), where("listed", "==", true), limit(40)), q => {
+    pubRooms = q.docs.map(d => ({ code: d.id, ...d.data() }));
+    if (screen === "pub") render(false);
+  }, e => { console.error(e); pubRooms = []; if (screen === "pub") render(false); }));
+}
+VIEWS.pub = () => {
+  watchPub();
+  const now = Date.now();
+  const list = (pubRooms || []).filter(r => r.phase === "lobby" && r.public && now - (r.ping || 0) < PUB_ALIVE && Object.keys(r.players || {}).length < 12 && GAMES[r.game])
+    .sort((a, b) => Object.keys(b.players).length - Object.keys(a.players).length);
+  const icon = g => ICONS[CATALOG.find(c => c.id === g)?.icon || "imp"];
+  V.innerHTML = `<section>
+    <div><h2>غرف عامة 🌍</h2><p class="lead">ادخل أي غرفة والعب مع ناس جدد.</p></div>
+    ${pubRooms === null ? `<div class="spinner" aria-label="جاري التحميل"></div>`
+      : list.length ? `<div class="list">${list.map(r => {
+        const n = Object.keys(r.players).length, need = minPlayers(r.game);
+        return `<div class="pubroom"><span class="pr-ic">${icon(r.game)}</span>
+          <div class="pr-t"><b>${GAMES[r.game]}</b><span class="hint" dir="ltr">${at(r.hostName || r.players[r.host]?.name || "")}</span>
+          <span class="pr-n">${ar(n)} من ١٢ لاعب${n < need ? ` · يحتاجون ${ar(need - n)} 👀` : ""}</span></div>
+          <button class="btn small" data-pjoin="${esc(r.code)}">${roomCode === r.code ? "ارجع" : "ادخل"}</button></div>`;
+      }).join("")}</div>`
+      : `<div class="card" style="min-height:200px"><span class="big">🌙</span><span class="mid">ما فيه غرف عامة الحين</span><span class="hint">سوّ وحدة، وخل الناس يدخلون عندك!</span></div>`}
+    <div class="foot">
+      <button class="btn" id="pubNew">${roomCode ? "ارجع لغرفتك" : "سوّ غرفة عامة"}</button>
+      <p class="hint center">احترم الناس في الغرف العامة. أي أحد يسيء ينحظر 🚫</p>
+    </div></section>`;
+  onAll("[data-pjoin]", b => { b.disabled = true; joinRoom(b.dataset.pjoin); });
+  on("pubNew", "click", () => { if (roomCode) return go("room"); ui.makePublic = true; createRoom("draw"); });
+};
+
 /* ================= ثبّت جلسة على الشاشة ================= */
 let installEvt = null;
 const isStandalone = () => window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true;
@@ -1843,6 +1884,7 @@ VIEWS.home = () => {
       <button class="bigbtn create" id="create"><span class="bb-ic">${ICONS.create}</span><b>${roomCode ? "ارجع لغرفتك" : "غرفة جديدة"}</b><span>واعزم أصحابك</span></button>
       <button class="bigbtn join" id="joinBtn"><span class="bb-ic">${ICONS.join}</span><b>ادخل بكود</b><span>عندك كود غرفة؟</span></button>
     </div>
+    <button class="pubbtn" id="pubBtn"><span class="pb-ic">${ICONS.pub}</span><span class="pb-t"><b>غرف عامة</b><span>ادخل والعب مع ناس جدد</span></span><span class="pb-go">←</span></button>
     <form class="joinrow" id="joinF" ${ui.showJoin ? "" : "hidden"}>
       <input id="code" dir="ltr" maxlength="5" placeholder="K7M2P" autocomplete="off" autocapitalize="characters" aria-label="كود الغرفة">
       <button class="btn small">دخول</button>
@@ -1862,6 +1904,7 @@ VIEWS.home = () => {
   </section>`;
   on("hProf", "click", () => go("profile"));
   on("instGo", "click", doInstall);
+  on("pubBtn", "click", () => go("pub"));
   on("instHide", "click", () => { store.set("instHide", Date.now()); render(false); });
   on("create", "click", () => roomCode ? go("room") : createRoom());
   onAll("[data-game-card]", b => gameSheet(b.dataset.gameCard));
@@ -2073,6 +2116,7 @@ VIEWS.room = () => {
   if (room.phase === "uno" && isHost()) { if (!subs.has("umoves")) watchUnoMoves(); unoCleanup(); } else if (subs.has("umoves")) off("umoves");
   if (room.phase !== "uno" && room.phase !== "unoend") { UNO.st = null; UNO.processed = {}; }
   const host = isHost();
+  if (host) { const want = !!room.public && room.phase === "lobby"; if (!!room.listed !== want) setRoom({ listed: want, ping: Date.now(), hostName: me.username }); }
   if (host && (room.phase === "wq" || room.phase === "tw")) { if (!subs.has("priv")) watchPriv(); } else if (subs.has("priv")) off("priv");
   if (host && room.phase === "dq") { if (!subs.has("dguess")) watchGuesses(); } else if (subs.has("dguess")) off("dguess");
   if (room.phase === "dq" || room.phase === "dres") { if (!subs.has("dcanvas")) watchCanvas(); } else if (subs.has("dcanvas")) off("dcanvas");
@@ -2141,6 +2185,10 @@ const ROOM_VIEWS = {
       <div class="field"><span class="label">اللاعبين (${ar(n)} من ١٢)</span><div class="list">${ps.map(u => `
         <div class="li"><button class="li-who" data-pf="${esc(u)}">${avatar(pname(u), prof(u)?.photo, 36)}<span class="nm" dir="ltr">${at(pname(u))}</span></button>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}</div>`).join("")}</div></div>
       ${host ? `
+        <div class="field"><span class="label">نوع الغرفة</span><div class="chips">
+          <button class="chip" data-pub="0" aria-pressed="${!room.public}">خاصة 🔒</button>
+          <button class="chip" data-pub="1" aria-pressed="${!!room.public}">عامة 🌍</button></div>
+          <p class="hint">${room.public ? "الغرفة تطلع لكل الناس في «غرف عامة»، وأي أحد يقدر يدخل." : "بس اللي معهم الكود أو الرابط يقدرون يدخلون."}</p></div>
         <div class="field"><span class="label">اللعبة</span><div class="chips">${Object.entries(GAMES).map(([k, t]) => `<button class="chip" data-game="${k}" aria-pressed="${room.game === k}" ${k === "uno" && n > 8 ? "disabled" : ""}>${t}</button>`).join("")}</div>${room.game === "uno" ? `<p class="hint">أونو من ٢ إلى ٨ لاعبين.</p>` : ""}${CATALOG.find(c => c.id === room.game)?.desc ? `<p class="hint">${CATALOG.find(c => c.id === room.game).desc}</p>` : ""}</div>
         ${room.game === "imp" ? `
         <div class="field"><span class="label">الفئة</span><div class="chips">${["عشوائي", ...Object.keys(WORDS)].map(c => `<button class="chip" data-cat="${esc(c)}" aria-pressed="${room.cat === c}">${esc(c)}</button>`).join("")}</div></div>
@@ -2148,7 +2196,7 @@ const ROOM_VIEWS = {
           <button class="chip" data-imps="1" aria-pressed="${room.imps !== 2 || n < 7}">واحد</button>
           <button class="chip" data-imps="2" aria-pressed="${room.imps === 2 && n >= 7}" ${n < 7 ? "disabled" : ""}>اثنين</button></div>
           ${n < 7 ? `<p class="hint">دخيلين يحتاجون ٧ لاعبين أو أكثر.</p>` : ""}</div>` : ""}`
-      : `<p class="hint center">اللعبة: <b>${GAMES[room.game]}</b>${room.game === "imp" ? ` · الفئة: <b>${esc(room.cat)}</b>` : ""}<br>ننتظر المضيف يبدأ.</p>`}
+      : `<p class="hint center">${room.public ? `<span class="tag">غرفة عامة 🌍</span><br>` : ""}اللعبة: <b>${GAMES[room.game]}</b>${room.game === "imp" ? ` · الفئة: <b>${esc(room.cat)}</b>` : ""}<br>ننتظر المضيف يبدأ.</p>`}
       ${onlineFriends.length ? `<div class="field"><span class="label">أصحابك الأونلاين</span><div class="list">${onlineFriends.map(([u, f]) => `
         <div class="li"><i class="dot on"></i><span class="nm" dir="ltr">${at(f.username)}</span><button class="btn small" data-inv="${esc(u)}">اعزمه</button></div>`).join("")}</div></div>` : ""}
       ${hasScores ? `<div class="field"><span class="label">النقاط</span>${scoreBoard(ps)}</div>` : ""}
@@ -2160,6 +2208,7 @@ const ROOM_VIEWS = {
     onAll("[data-inv]", b => { b.disabled = true; sendInvite(b.dataset.inv); });
     onAll("[data-pf]", b => { if (b.dataset.pf !== me.uid) showProfile(b.dataset.pf); else go("profile"); });
     onAll("[data-game]", b => setRoom({ game: b.dataset.game }));
+    onAll("[data-pub]", b => { const pub = b.dataset.pub === "1"; setRoom({ public: pub, listed: pub, ping: Date.now(), hostName: me.username }); if (pub) toast("صارت غرفتك عامة 🌍"); });
     onAll("[data-cat]", b => setRoom({ cat: b.dataset.cat }));
     onAll("[data-imps]", b => setRoom({ imps: Number(b.dataset.imps) }));
     on("start", "click", () => ({ most: startMost, hhnj: startHhnj, uno: startUno, who: startWho, tf: startTf, draw: startDraw }[room.game] || startImp)());

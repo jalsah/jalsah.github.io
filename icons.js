@@ -46,6 +46,14 @@ export const ICONS = {
     </g>
     <circle cx="32" cy="50" r="7" fill="#1c1530"/><text x="32" y="54" text-anchor="middle" font-family="Lalezar,Tahoma,sans-serif" font-size="10" fill="#ffd36b">؟</text>`),
 
+  // غرف عامة: كرة أرضية وناس
+  pub: wrap(bg("gPub", "#8ef0cf", "#2f8fd5") + shine + `
+    <circle cx="32" cy="30" r="17" fill="#1c1530"/>
+    <path d="M15 30 h34 M32 13 c-8 9 -8 25 0 34 M32 13 c8 9 8 25 0 34 M18 21 h28 M18 39 h28" stroke="#8ef0cf" stroke-width="2.4" fill="none"/>
+    <circle cx="14" cy="48" r="5" fill="#fff8ec"/><path d="M6 60 a8 8 0 0 1 16 0z" fill="#fff8ec"/>
+    <circle cx="50" cy="48" r="5" fill="#ffd36b"/><path d="M42 60 a8 8 0 0 1 16 0z" fill="#ffd36b"/>
+    <circle cx="32" cy="52" r="5" fill="#ef6f6c"/><path d="M24 64 a8 8 0 0 1 16 0z" fill="#ef6f6c"/>`),
+
   // واتساب
   wa: `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.8-1.4.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.3 2.2 2.2 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3z"/></svg>`,
 
