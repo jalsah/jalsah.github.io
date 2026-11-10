@@ -51,7 +51,12 @@ const RESERVED = new Set(["admin", "owner", "jalsah", "jalsa", "support", "offic
 // المستوى L يحتاج 25×L×(L-1) نقطة خبرة: ٢=٥٠، ٣=١٥٠، ٥=٥٠٠، ١٠=٢٢٥٠
 const lvlOf = xp => Math.max(1, Math.floor((1 + Math.sqrt(1 + (xp || 0) * 4 / 25)) / 2));
 const lvlXp = L => 25 * L * (L - 1);
-const lvlTag = xp => `<span class="lvl" title="المستوى">⭐ ${ar(lvlOf(xp))}</span>`;
+// المالك والحساب الرسمي: أعلى مستوى وكل شي مفتوح
+const STAFF = n => [OWNER, OFFICIAL].includes(String(n || "").toLowerCase());
+const MAXL = 99;
+const lvlOfP = p => STAFF(p?.username) ? MAXL : lvlOf(p?.xp);
+const myLvl = () => lvlOfP(me);
+const lvlTag = p => `<span class="lvl ${STAFF(p?.username) ? "max" : ""}" title="المستوى">${STAFF(p?.username) ? "👑" : "⭐"} ${ar(lvlOfP(p))}</span>`;
 const ACH = [
   { id: "first", ic: "🎉", t: "أول جلسة", d: "العب أول جولة", ok: s => (s.games || 0) >= 1 },
   { id: "g50", ic: "🔥", t: "مدمن جلسات", d: "العب ٥٠ جولة", ok: s => (s.games || 0) >= 50 },
@@ -65,8 +70,8 @@ const ACH = [
   { id: "night", ic: "🌙", t: "سهران", d: "العب بين ٢ و٥ الفجر", ok: s => (s.night || 0) >= 1 },
   { id: "lvl10", ic: "⭐", t: "نجم جلسة", d: "وصّل المستوى ١٠", ok: (s, xp) => lvlOf(xp) >= 10 }
 ];
-const achGot = (s, xp) => ACH.filter(x => x.ok(s || {}, xp || 0));
-const myLook = () => ({ t: TABLES[me?.look?.t] && lvlOf(me?.xp) >= TABLES[me.look.t].lvl ? me.look.t : "felt", b: BACKS[me?.look?.b] && lvlOf(me?.xp) >= BACKS[me.look.b].lvl ? me.look.b : "classic" });
+const achGot = (s, xp, name) => STAFF(name) ? ACH : ACH.filter(x => x.ok(s || {}, xp || 0));
+const myLook = () => ({ t: TABLES[me?.look?.t] && myLvl() >= TABLES[me.look.t].lvl ? me.look.t : "felt", b: BACKS[me?.look?.b] && myLvl() >= BACKS[me.look.b].lvl ? me.look.b : "classic" });
 
 const OFFICIAL = "jalsah"; // حساب جلسة الرسمي (@Jalsah)، تحت تصرف المالك
 const isOwner = () => [OWNER, OFFICIAL].includes(String(me?.username || "").toLowerCase());
@@ -868,14 +873,14 @@ async function awardXp() {
   s.games = (s.games || 0) + 1; s["g_" + game] = (s["g_" + game] || 0) + 1;
   if (won) { s.wins = (s.wins || 0) + 1; s["w_" + game] = (s["w_" + game] || 0) + 1; }
   const h = new Date().getHours(); if (h >= 2 && h < 5) s.night = (s.night || 0) + 1;
-  const before = achGot(me.stats, me.xp).map(x => x.id), oldL = lvlOf(me.xp);
+  const before = achGot(me.stats, me.xp, me.username).map(x => x.id), oldL = myLvl();
   try {
     await updateDoc(doc(db, "users", me.uid), { xp: (me.xp || 0) + add, xpAt: serverTimestamp(), stats: s });
     me.xp = (me.xp || 0) + add; me.stats = s;
-    const fresh = achGot(s, me.xp).filter(x => !before.includes(x.id));
+    const fresh = achGot(s, me.xp, me.username).filter(x => !before.includes(x.id));
     setTimeout(() => {
       toast(`+${ar(add)} خبرة ⭐`);
-      if (lvlOf(me.xp) > oldL) setTimeout(() => toast(`🎉 وصلت المستوى ${ar(lvlOf(me.xp))}!`), 1400);
+      if (myLvl() > oldL) setTimeout(() => toast(`🎉 وصلت المستوى ${ar(myLvl())}!`), 1400);
       fresh.forEach((x, i) => setTimeout(() => toast(`${x.ic} إنجاز جديد: ${x.t}`), 2800 + i * 1400));
     }, 600);
   } catch (e) { console.warn("xp", e); }
@@ -2333,9 +2338,9 @@ function showProfile(uid) {
     <div class="pcard-body">
       <b class="pf-name" dir="ltr">${at(p.username)}</b>
       ${f ? `<span class="chip-st ${isOnline(f) ? "on" : ""}">${isOnline(f) ? "أونلاين الحين" : "مو أونلاين"}</span>` : ""}
-      ${lvlTag(p.xp)}
+      ${lvlTag(p)}
       ${p.bio ? `<p class="pcard-bio">${esc(p.bio)}</p>` : ""}
-      ${(() => { const g = achGot(p.stats, p.xp); return g.length ? `<div class="ach-mini" aria-label="الإنجازات">${g.map(x => `<span title="${esc(x.t)}">${x.ic}</span>`).join("")}</div>` : ""; })()}
+      ${(() => { const g = achGot(p.stats, p.xp, p.username); return g.length ? `<div class="ach-mini" aria-label="الإنجازات">${g.map(x => `<span title="${esc(x.t)}">${x.ic}</span>`).join("")}</div>` : ""; })()}
       <div class="pcard-acts">${acts}</div>
       ${modRow}
       <button class="btn ghost" id="pfClose">إغلاق</button>
@@ -2377,7 +2382,7 @@ VIEWS.profile = () => {
         <input type="file" id="photoIn" accept="image/*" hidden>
       </div>
       <b class="pf-name" dir="ltr">${at(me.username)}</b>
-      ${(() => { const L = lvlOf(me.xp), a0 = lvlXp(L), a1 = lvlXp(L + 1), pc = Math.round(((me.xp || 0) - a0) / (a1 - a0) * 100);
+      ${STAFF(me.username) ? `<div class="lvlbox max"><div class="row-h"><b>👑 المستوى ${ar(MAXL)}</b><span class="hint">${me.username.toLowerCase() === OWNER ? "صاحب اللعبة" : "الحساب الرسمي"}</span></div><div class="lvlbar"><i style="width:100%"></i></div><span class="hint">كل الأشكال والإنجازات مفتوحة لك.</span></div>` : (() => { const L = lvlOf(me.xp), a0 = lvlXp(L), a1 = lvlXp(L + 1), pc = Math.round(((me.xp || 0) - a0) / (a1 - a0) * 100);
         return `<div class="lvlbox"><div class="row-h"><b>⭐ المستوى ${ar(L)}</b><span class="hint">${ar((me.xp || 0) - a0)} / ${ar(a1 - a0)} خبرة</span></div><div class="lvlbar"><i style="width:${pc}%"></i></div><span class="hint">العب جولات واكسب خبرة. الفوز يعطيك أكثر.</span></div>`; })()}
       <div class="row pf-acts">
         <label class="btn small ghost" for="photoIn">${me.photo ? "غيّر الصورة" : "أضف صورة"}</label>
@@ -2391,15 +2396,15 @@ VIEWS.profile = () => {
       <button class="btn small" id="saveBio" ${draft === (me.bio || "") ? "disabled" : ""}>احفظ</button></div>
     </div>
 
-    <div class="field"><span class="label">🎖️ إنجازاتك (${ar(achGot(me.stats, me.xp).length)} من ${ar(ACH.length)})</span>
-      <div class="achs">${ACH.map(x => { const ok = x.ok(me.stats || {}, me.xp || 0); return `<div class="ach ${ok ? "on" : ""}"><span class="ach-ic">${ok ? x.ic : "🔒"}</span><b>${x.t}</b><span>${x.d}</span></div>`; }).join("")}</div></div>
+    <div class="field"><span class="label">🎖️ إنجازاتك (${ar(achGot(me.stats, me.xp, me.username).length)} من ${ar(ACH.length)})</span>
+      <div class="achs">${ACH.map(x => { const ok = STAFF(me.username) || x.ok(me.stats || {}, me.xp || 0); return `<div class="ach ${ok ? "on" : ""}"><span class="ach-ic">${ok ? x.ic : "🔒"}</span><b>${x.t}</b><span>${x.d}</span></div>`; }).join("")}</div></div>
 
     <div class="field"><span class="label">🎨 أشكالك</span>
       <span class="hint">شكل الطاولة</span>
-      <div class="looks">${Object.entries(TABLES).map(([k, t]) => { const open = lvlOf(me.xp) >= t.lvl, sel = myLook().t === k;
+      <div class="looks">${Object.entries(TABLES).map(([k, t]) => { const open = myLvl() >= t.lvl, sel = myLook().t === k;
         return `<button class="look ${sel ? "sel" : ""}" data-lt="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><span class="look-pv">${tableSVG(k)}</span><b>${t.name}</b><span class="hint">${open ? (sel ? "مختار ✓" : "متاح") : "🔒 مستوى " + ar(t.lvl)}</span></button>`; }).join("")}</div>
       <span class="hint">ظهر الورق</span>
-      <div class="looks">${Object.entries(BACKS).map(([k, t]) => { const open = lvlOf(me.xp) >= t.lvl, sel = myLook().b === k;
+      <div class="looks">${Object.entries(BACKS).map(([k, t]) => { const open = myLvl() >= t.lvl, sel = myLook().b === k;
         return `<button class="look back ${sel ? "sel" : ""}" data-lb="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><span class="look-pv">${cardSVG(null, k)}</span><b>${t.name}</b><span class="hint">${open ? (sel ? "مختار ✓" : "متاح") : "🔒 مستوى " + ar(t.lvl)}</span></button>`; }).join("")}</div></div>
 
     <div class="field"><span class="label">يوزرك</span>
@@ -2411,7 +2416,7 @@ VIEWS.profile = () => {
   on("tour", "click", () => { ui.slide = 0; go("welcome"); });
   on("delAcc", "click", openDeleteAccount);
   const setLook = async (kind, k, list) => {
-    if (lvlOf(me.xp) < list[k].lvl) return toast(`يفتح لك في المستوى ${ar(list[k].lvl)} ⭐`);
+    if (myLvl() < list[k].lvl) return toast(`يفتح لك في المستوى ${ar(list[k].lvl)} ⭐`);
     const look = { ...myLook(), [kind]: k };
     me.look = look; render(false);
     try { await updateDoc(doc(db, "users", me.uid), { look }); } catch (e) { console.error(e); }
@@ -2642,7 +2647,7 @@ const ROOM_VIEWS = {
         <div class="row inv-row"><a class="btn small wa" id="waInv" href="${esc(waLink())}" target="_blank" rel="noopener">${ICONS.wa} ادعُ بالواتساب</a>
         <button class="btn small ghost" id="copyLink">انسخ الرابط</button></div></div>
       <div class="field"><span class="label">اللاعبين (${ar(n)} من ١٢)</span><div class="list">${ps.map(u => `
-        <div class="li"><button class="li-who" data-pf="${esc(u)}">${avatar(pname(u), prof(u)?.photo, 36)}<span class="nm" dir="ltr">${at(pname(u))}</span>${prof(u) ? lvlTag(prof(u).xp) : ""}</button>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}${host && u !== me.uid ? `<button class="btn small ghost kick" data-kick="${esc(u)}" aria-label="اطرد ${esc(pname(u))}">اطرد</button>` : ""}</div>`).join("")}</div></div>
+        <div class="li"><button class="li-who" data-pf="${esc(u)}">${avatar(pname(u), prof(u)?.photo, 36)}<span class="nm" dir="ltr">${at(pname(u))}</span>${prof(u) ? lvlTag(prof(u)) : ""}</button>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}${host && u !== me.uid ? `<button class="btn small ghost kick" data-kick="${esc(u)}" aria-label="اطرد ${esc(pname(u))}">اطرد</button>` : ""}</div>`).join("")}</div></div>
       ${host ? `
         <div class="field"><span class="label">نوع الغرفة</span><div class="chips">
           <button class="chip" data-pub="0" aria-pressed="${!room.public}">خاصة 🔒</button>
