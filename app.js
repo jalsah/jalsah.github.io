@@ -14,7 +14,7 @@ import { getMessaging, getToken, isSupported as pushSupported } from "https://ww
 import { firebaseConfig, authUrl } from "./firebase-config.js?v=27";
 import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=27";
 import { ICONS } from "./icons.js?v=27";
-import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, tableSVG, TABLES, BACKS, seatSpots, isWild, cColor, cVal } from "./uno.js?v=32";
+import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, tableSVG, TABLES, BACKS, seatSpots, isWild, cColor, cVal } from "./uno.js?v=33";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -70,15 +70,15 @@ const ACH = [
   { id: "all", tier: "s", svg: '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>', t: "جرّب كل شي", d: "العب ٥ ألعاب مختلفة", ok: s => ["uno", "imp", "most", "hhnj", "who", "tf", "draw"].filter(g => s["g_" + g]).length >= 5 },
   { id: "night", tier: "b", svg: '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>', t: "سهران", d: "العب بين ٢ و٥ الفجر", ok: s => (s.night || 0) >= 1 },
   { id: "lvl10", tier: "s", svg: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3l-5.5 2.9 1-6.2L3 9.6l6.2-.9z"/>', t: "نجم صاعد", d: "وصّل المستوى ١٠", ok: (s, xp) => lvlOf(xp) >= 10 },
-  { id: "lvl25", tier: "g", svg: '<circle cx="12" cy="12" r="9.5"/><path d="M12 6.5l1.7 3.5 3.8.5-2.8 2.7.7 3.8L12 15.2 8.6 17l.7-3.8-2.8-2.7 3.8-.5z"/>', t: "نجم جلسة", d: "وصّل المستوى ٢٥", ok: (s, xp) => lvlOf(xp) >= 25 },
+  { id: "lvl25", tier: "g", svg: '<circle cx="12" cy="12" r="9.5"/><path d="M12 6.5l1.7 3.5 3.8.5-2.8 2.7.7 3.8L12 15.2 8.6 17l.7-3.8-2.8-2.7 3.8-.5z"/>', t: "نجم روق", d: "وصّل المستوى ٢٥", ok: (s, xp) => lvlOf(xp) >= 25 },
   { id: "lvl50", tier: "g", svg: '<path d="M6.5 4h11l3.5 5-9 11L3 9z"/><path d="M3 9h18M9.5 4L12 20l2.5-16"/>', t: "خرافي", d: "وصّل المستوى ٥٠", ok: (s, xp) => lvlOf(xp) >= 50 },
-  { id: "g1000", tier: "g", svg: '<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>', t: "ساكن جلسة", d: "العب ١٠٠٠ جولة", ok: s => (s.games || 0) >= 1000 },
+  { id: "g1000", tier: "g", svg: '<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>', t: "ساكن روق", d: "العب ١٠٠٠ جولة", ok: s => (s.games || 0) >= 1000 },
   { id: "win100", tier: "g", svg: '<circle cx="12" cy="9" r="6"/><path d="M8.5 14L7 21l5-2.5 5 2.5-1.5-7"/><path d="M12 6.5v5M10 8.5h4" />', t: "الملك", d: "افز في ١٠٠ جولة", ok: s => (s.wins || 0) >= 100 }
 ];
 const TIER_RANK = { g: 3, s: 2, b: 1 };
 const medal = (x, on = true) => `<span class="medal ${on ? "t-" + x.tier : "off"}" title="${esc(x.t)}"><svg viewBox="0 0 24 24" aria-hidden="true">${on ? x.svg : '<rect x="6" y="11" width="12" height="9" rx="2"/><path d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3"/>'}</svg></span>`;
 const achGot = (s, xp, name) => STAFF(name) ? ACH : ACH.filter(x => x.ok(s || {}, xp || 0));
-/* ================= متجر جلسة ================= */
+/* ================= متجر روق ================= */
 const SHOP = [
   { id: "king", name: "باقة الملك", desc: "كل الحصريات + VIP سنة كاملة", price: 399, grants: ["t_royal", "b_royal", "f_gold", "f_fire", "f_sadu", "e_royal"], days: 365, hot: 1 },
   { id: "vip365", name: "VIP سنة", desc: "شارة VIP وكل الحصريات لمدة سنة", price: 249, grants: [], days: 365 },
@@ -91,7 +91,7 @@ const SHOP = [
   { id: "b_royal", name: "ظهر الورق الملكي", desc: "عنابي بتاج ذهبي", price: 19, grants: ["b_royal"], days: 0 }
 ];
 const FRAMES = { f_gold: "ذهبي", f_fire: "ناري", f_sadu: "سدو" };
-let shopCfg = null; // روابط المنتجات في متجر جلسة
+let shopCfg = null; // روابط المنتجات في متجر روق
 const vipOn = p => (p?.vipUntil || 0) > Date.now();
 const owns = (p, id) => STAFF(p?.username) || vipOn(p) || (p?.owned || []).includes(id);
 const lookOpen = (t, p = me) => t.shop ? owns(p, t.shop) : lvlOfP(p) >= t.lvl;
@@ -101,7 +101,7 @@ const frameOf = p => p?.frame && FRAMES[p.frame] && owns(p, p.frame) ? p.frame :
 const avF = (p, size) => { const f = frameOf(p), av = avatar(p?.username, p?.photo, size); return f ? `<span class="fr ${f}" style="--fs:${Math.max(3, Math.round(size / 18))}px">${av}</span>` : av; };
 const vipTag = p => vipOn(p) && !STAFF(p?.username) ? `<span class="vip">VIP</span>` : "";
 
-const OFFICIAL = "jalsah"; // حساب جلسة الرسمي (@Jalsah)، تحت تصرف المالك
+const OFFICIAL = "jalsah"; // حساب روق الرسمي (@Jalsah)، تحت تصرف المالك
 const isOwner = () => [OWNER, OFFICIAL].includes(String(me?.username || "").toLowerCase());
 const at = name => { const k = String(name).toLowerCase();
   return `@${esc(name)}${k === OWNER ? ' <span class="crown" title="صاحب اللعبة" aria-label="صاحب اللعبة">👑</span>' : k === OFFICIAL ? ' <span class="verified" title="الحساب الرسمي" aria-label="الحساب الرسمي">✓</span>' : ""}`; };
@@ -120,12 +120,12 @@ const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const ONLINE_MS = 150000;
 const INVITE_MS = 15 * 60 * 1000;
 const GAMES = { draw: "ارسم وخمّن", who: "مين قالها؟", tf: "صح ولا خطأ", uno: "أونو", imp: "الدخيل", most: "مين أكثر واحد", hhnj: "إنسان حيوان نبات جماد" };
-// كل ألعاب جلسة: وين تنلعب (أونلاين، بجوال واحد)
+// كل ألعاب روق: وين تنلعب (أونلاين، بجوال واحد)
 const CATALOG = [
   { id: "draw", icon: "draw", title: "ارسم وخمّن", desc: "واحد يرسم كلمة سرية، والباقين يخمّنونها بأسرع وقت. كل جولة يرسم واحد.", online: true, local: null, min: 2, hot: true },
   { id: "who", icon: "who", title: "مين قالها؟", desc: "سؤال، وكل واحد يكتب جوابه بالسر. بعدها تطلع الأجوبة وتخمّنون مين كاتب كل جواب.", online: true, local: null, min: 3, hot: true },
   { id: "tf", icon: "tf", title: "صح ولا خطأ", desc: "كل جولة واحد يكتب شي عن نفسه، والباقين يخمّنون: صح ولا كذب؟ تنفع حتى لو أنتم اثنين.", online: true, local: null, min: 2, hot: true },
-  { id: "uno", icon: "uno", title: "أونو جلسة", desc: "الأونو اللي تعرفه، بأوراق وطاولة جلسة. من ٢ إلى ٨ لاعبين، كل واحد من جواله.", online: true, local: null, min: 2 },
+  { id: "uno", icon: "uno", title: "أونو روق", desc: "الأونو اللي تعرفه، بأوراق وطاولة روق. من ٢ إلى ٨ لاعبين، كل واحد من جواله.", online: true, local: null, min: 2 },
   { id: "imp", icon: "imp", title: "الدخيل", desc: "الكل يعرف الكلمة إلا واحد. اكشفوه قبل ما يكشف الكلمة.", online: true, local: "l-imp", min: 3 },
   { id: "most", icon: "most", title: "مين أكثر واحد؟", desc: "سؤال، وكل واحد يصوّت على واحد من الشلة.", online: true, local: "l-most", min: 2 },
   { id: "hhnj", icon: "hhnj", title: "إنسان حيوان نبات جماد", desc: "حرف عشوائي، واكتب أربع كلمات تبدأ فيه قبل يخلص الوقت.", online: true, local: "l-hhnj", min: 2 },
@@ -251,8 +251,8 @@ function renderBanner() {
   const pimg = promo && typeof promo.img === "string" && promo.img.startsWith("data:image/jpeg;base64,") ? promo.img : "";
   const plink = promo && /^https:\/\//.test(promo.link || "") ? promo.link : "";
   const promoHtml = pimg && screen === "home"
-    ? (plink ? `<a class="promo" href="${esc(plink)}" target="_blank" rel="noopener"><img src="${esc(pimg)}" alt="${esc(promo.alt || "إعلان جلسة")}"></a>`
-             : `<div class="promo"><img src="${esc(pimg)}" alt="${esc(promo.alt || "إعلان جلسة")}"></div>`) : "";
+    ? (plink ? `<a class="promo" href="${esc(plink)}" target="_blank" rel="noopener"><img src="${esc(pimg)}" alt="${esc(promo.alt || "إعلان روق")}"></a>`
+             : `<div class="promo"><img src="${esc(pimg)}" alt="${esc(promo.alt || "إعلان روق")}"></div>`) : "";
   BANNER.innerHTML = promoHtml + list.map(i => `
     <div class="inv"><span class="txt"><span dir="ltr">${at(i.fromName)}</span> عزمك على غرفة</span>
     <button class="btn small" data-ij="${esc(i.id)}">ادخل</button>
@@ -283,7 +283,7 @@ function renderAnnounce() {
         <span class="ann-art">${MEGAPHONE}</span>
       </div>
       <div class="ann-body">
-        <span class="ann-eyebrow" id="annTitle">جديد في جلسة</span>
+        <span class="ann-eyebrow" id="annTitle">جديد في روق</span>
         <p class="ann-text">${esc(announce.text)}</p>
         <button class="btn" id="annOk">تمام 👍</button>
       </div>
@@ -320,7 +320,7 @@ async function login() {
 
 /* ================= تبديل الحسابات ================= */
 const accounts = () => { const a = store.get("accounts", []); return Array.isArray(a) ? a : []; };
-// كل حساب له جلسة محفوظة لحاله، عشان التبديل يصير بدون كلمة سر
+// كل حساب له جلسة دخول محفوظة لحاله، عشان التبديل يصير بدون كلمة سر
 const accAuths = new Map();
 function accAuth(uid) {
   if (!accAuths.has(uid)) accAuths.set(uid, getAuth(initializeApp(firebaseConfig, "acc_" + uid)));
@@ -580,6 +580,8 @@ function exitRoomLocal(msg) {
 async function leaveRoom(silent) {
   if (!roomCode) return;
   const code = roomCode, host = isHost();
+  const sum = !silent && ui.sess?.room === code && ui.sess.rounds.size >= 2 ? sessionData() : null;
+  if (sum) setTimeout(() => openSummary(sum), 350);
   exitRoomLocal(silent ? null : "طلعت من الغرفة");
   try {
     if (host) await deleteDoc(doc(db, "rooms", code));
@@ -886,6 +888,62 @@ function unoTimerStart() {
 }
 // نقاط الخبرة: كل ما تخلص جولة لعبت فيها
 const END_PHASES = { result: "imp", hres: "hhnj", unoend: "uno", mresult: "most", wres: "who", tres: "tf", dres: "draw" };
+/* ================= ملخص الجلسة ================= */
+function trackSession() {
+  if (!room || !roomCode) return;
+  if (!ui.sess || ui.sess.room !== roomCode) ui.sess = { room: roomCode, start: Date.now(), rounds: new Set(), games: {}, names: {}, scores: {} };
+  const s = ui.sess;
+  Object.keys(room.players || {}).forEach(u => { s.names[u] = pname(u); });
+  Object.entries(room.scores || {}).forEach(([u, p]) => { s.scores[u] = p; });
+  const g = END_PHASES[room.phase];
+  if (g) { const k = room.round + ":" + room.phase; if (!s.rounds.has(k)) { s.rounds.add(k); s.games[g] = (s.games[g] || 0) + 1; } }
+}
+const GAME_OF = { imp: "imp", hhnj: "hhnj", uno: "uno", most: "most", who: "who", tf: "tf", draw: "draw" };
+function sessionData(s = ui.sess) {
+  if (!s || !s.rounds.size) return null;
+  const rows = Object.entries(s.names).map(([u, n]) => ({ u, n, p: s.scores[u] || 0 })).sort((x, y) => y.p - x.p);
+  const mins = Math.max(1, Math.round((Date.now() - s.start) / 60000));
+  const games = Object.entries(s.games).sort((x, y) => y[1] - x[1]).map(([g, c]) => `${GAMES[GAME_OF[g]] || g} (${ar(c)})`);
+  const top = rows[0]?.p > 0 ? rows.filter(r => r.p === rows[0].p) : [];
+  const low = rows.length > 1 && rows[rows.length - 1].p < (rows[0]?.p || 0) ? rows[rows.length - 1] : null;
+  const dur = mins < 2 ? "دقيقة" : mins >= 60 ? `${ar(Math.floor(mins / 60))} ساعة${mins % 60 ? " و" + ar(mins % 60) + " دقيقة" : ""}` : `${ar(mins)} دقيقة`;
+  return {
+    game: "ملخص الجلسة 📊",
+    head: top.length ? "ملك الجلسة 👑" : "جلسة حلوة 🔥",
+    names: top.map(r => r.n),
+    sub: [`الجولات: ${ar(s.rounds.size)} · المدة: ${dur}`, games.slice(0, 3).join(" · "), low ? `واللي يبيله تدريب: @${low.n} 😅` : ""].filter(Boolean).join("\n"),
+    quote: "", img: null,
+    board: rows.slice(0, 6).map(r => ({ n: r.n, p: r.p }))
+  };
+}
+async function openSummary(d) {
+  if (!d) return toast("العبوا جولة أول 😄");
+  document.getElementById("shareSheet")?.remove();
+  const el = document.createElement("div");
+  el.id = "shareSheet"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "ملخص الجلسة");
+  el.innerHTML = `<div class="sheet share-sheet"><b class="pf-name">ملخص الجلسة 📊</b>
+    <div class="share-prev" id="shPrev"><div class="spinner" aria-label="نجهز الصورة"></div></div>
+    <button class="btn" id="shGo" disabled>شارك 📤</button>
+    <p class="hint" id="shHint">نجهز الصورة…</p>
+    <button class="btn ghost" id="shX">إغلاق</button></div>`;
+  document.body.appendChild(el);
+  let url = null;
+  const close = () => { el.remove(); if (url) URL.revokeObjectURL(url); };
+  el.addEventListener("click", e => { if (e.target === el) close(); });
+  el.querySelector("#shX").addEventListener("click", close);
+  try {
+    const blob = await makeShareImage(d);
+    if (!el.isConnected) return;
+    url = URL.createObjectURL(blob);
+    el.querySelector("#shPrev").innerHTML = `<img class="share-img" src="${url}" alt="صورة ملخص الجلسة">`;
+    const file = new File([blob], "rawq.jpg", { type: "image/jpeg" });
+    const can = !!navigator.canShare?.({ files: [file] });
+    const go = el.querySelector("#shGo"), hint = el.querySelector("#shHint");
+    hint.textContent = can ? "نزّلها ستوري بالسناب أو الانستا، وخلّهم يشوفون مين الملك 👑" : "اضغط مطوّل على الصورة واحفظها، ونزّلها ستوري.";
+    if (can) { go.disabled = false; go.addEventListener("click", async () => { try { await navigator.share({ files: [file], text: `جلستنا في روق 🔥 ${appLink()}` }); } catch (e) { if (e?.name !== "AbortError") toast("احفظ الصورة وشاركها"); } }); }
+    else go.remove();
+  } catch (e) { console.error(e); el.querySelector("#shHint").textContent = "ما قدرنا نسوي الصورة"; }
+}
 async function awardXp() {
   if (!me?.uid || !room || !roomCode) return;
   const myScore = room.scores?.[me.uid] || 0;
@@ -1240,14 +1298,14 @@ function drawTick() {
 
 /* ================= شارك النتيجة (صورة) ================= */
 const appLink = () => location.origin + location.pathname.replace(/index\.html$/, "");
-const waLink = () => "https://wa.me/?text=" + encodeURIComponent(`تعال العب معنا ${GAMES[room?.game] || ""} في جلسة 🎉\nادخل من هنا: ${appLink()}?r=${roomCode}\nأو اكتب كود الغرفة: ${roomCode}`);
+const waLink = () => "https://wa.me/?text=" + encodeURIComponent(`تعال العب معنا ${GAMES[room?.game] || ""} في روق 🎉\nادخل من هنا: ${appLink()}?r=${roomCode}\nأو اكتب كود الغرفة: ${roomCode}`);
 function topOf(map, ids) {
   const max = Math.max(0, ...ids.map(u => map[u] || 0));
   return max > 0 ? ids.filter(u => (map[u] || 0) === max) : [];
 }
 function shareData() {
   const ps = order(), r = room.result || {};
-  const d = { game: GAMES[room.game] || "جلسة", head: "", quote: "", names: [], sub: "", img: null };
+  const d = { game: GAMES[room.game] || "روق", head: "", quote: "", names: [], sub: "", img: null };
   if (room.phase === "result") {
     d.head = r.caught ? "مسكنا الدخيل 🕵️" : "الدخيل نجا منّا 😈";
     d.names = (r.imps || []).map(pname); d.sub = r.wordShown ? "الكلمة كانت: " + r.word : "";
@@ -1258,7 +1316,7 @@ function shareData() {
     const rows = r.rows || {}, best = Object.keys(rows).sort((a, b) => rows[b].total - rows[a].total)[0];
     d.head = "إنسان حيوان نبات جماد · حرف " + room.letter; d.names = best ? [pname(best)] : []; d.sub = best ? `أعلى نقاط بالجولة: ${ar(rows[best].total)}` : "";
   } else if (room.phase === "unoend") {
-    d.head = "فاز بأونو جلسة 🏆"; d.names = room.uno?.winner ? [pname(room.uno.winner)] : [];
+    d.head = "فاز بأونو روق 🏆"; d.names = room.uno?.winner ? [pname(room.uno.winner)] : [];
   } else if (room.phase === "wres") {
     d.head = "مين قالها؟ 🤫"; d.quote = room.prompt;
     const best = topOf(room.scores || {}, ps); d.names = best.map(pname); d.sub = best.length ? "متصدّر الجلسة" : "";
@@ -1300,7 +1358,7 @@ async function makeShareImage(d) {
   const sadu = (y, col) => { g.fillStyle = col; for (let x = 0; x < W; x += 40) { g.beginPath(); g.moveTo(x, y + 28); g.lineTo(x + 20, y); g.lineTo(x + 40, y + 28); g.fill(); } };
   sadu(36, "rgba(239,111,108,.85)"); sadu(72, "rgba(242,177,52,.6)"); sadu(H - 100, "rgba(242,177,52,.6)"); sadu(H - 64, "rgba(239,111,108,.85)");
   // الشعار
-  g.fillStyle = "#f2b134"; g.font = `150px ${DISP}`; g.fillText("جلسة", W / 2, 270);
+  g.fillStyle = "#f2b134"; g.font = `150px ${DISP}`; g.fillText("روق", W / 2, 270);
   g.font = `600 40px ${BODY}`; const pillW = Math.min(W - 160, g.measureText(d.game).width + 90);
   g.fillStyle = "rgba(255,255,255,.08)"; rr(g, (W - pillW) / 2, 312, pillW, 76, 38); g.fill();
   g.fillStyle = "#f7f0e3"; g.fillText(d.game, W / 2, 364);
@@ -1311,7 +1369,7 @@ async function makeShareImage(d) {
   if (d.quote) { g.font = `600 50px ${BODY}`; wrapLines(g, "«" + d.quote + "»", inner).slice(0, 5).forEach(t => items.push({ t, font: `600 50px ${BODY}`, col: "#f2b134", h: 74 })); items.push({ gap: 18 }); }
   if (d.img) items.push({ img: d.img, h: 640 + 26 });
   d.names.slice(0, 3).forEach(n => { const s = "@" + n; let fs = 100; g.font = `${fs}px ${DISP}`; while (g.measureText(s).width > inner && fs > 50) { fs -= 6; g.font = `${fs}px ${DISP}`; } items.push({ t: s, font: `${fs}px ${DISP}`, col: "#74d6b8", h: fs + 20, ltr: true }); });
-  if (d.sub) { items.push({ gap: 8 }); g.font = `500 42px ${BODY}`; wrapLines(g, d.sub, inner).forEach(t => items.push({ t, font: `500 42px ${BODY}`, col: "#b8adcf", h: 60 })); }
+  if (d.sub) { items.push({ gap: 8 }); g.font = `500 42px ${BODY}`; String(d.sub).split("\n").flatMap(l => wrapLines(g, l, inner)).forEach(t => items.push({ t, font: `500 42px ${BODY}`, col: "#b8adcf", h: 60 })); }
   const ch = items.reduce((s, it) => s + (it.gap || it.h), 0) + 120, CY = 450;
   g.fillStyle = "#2a2146"; rr(g, CX, CY, CW, ch, 56); g.fill();
   g.strokeStyle = "#3d3263"; g.lineWidth = 4; g.stroke();
@@ -1375,7 +1433,7 @@ async function openShare() {
     if (can) {
       go.disabled = false;
       go.addEventListener("click", async () => {
-        try { await navigator.share({ files: [file], text: `العبوا معنا جلسة 🎉 ${appLink()}` }); }
+        try { await navigator.share({ files: [file], text: `العبوا معنا روق 🎉 ${appLink()}` }); }
         catch (e) { if (e?.name !== "AbortError") toast("ما قدرنا نفتح المشاركة، احفظ الصورة"); }
       });
     } else go.remove();
@@ -1812,7 +1870,7 @@ VIEWS.auth = () => {
       <div class="hero-icons" aria-hidden="true">
         <span class="hi hi1">${ICONS.imp}</span><span class="hi hi2">${ICONS.most}</span><span class="hi hi3">${ICONS.five}</span>
       </div>
-      <h2>أهلًا في جلسة</h2>
+      <h2>أهلًا في روق</h2>
       <p class="lead">ألعاب جلسات تلعبها مع أصحابك. أونلاين كل واحد من جواله، أو بجوال واحد يتمرر بينكم.</p>
       <ul class="perks"><li>الدخيل</li><li>مين أكثر واحد</li><li>خمسة بعشر</li></ul>
     </div>
@@ -2050,7 +2108,7 @@ VIEWS.rename = () => {
 
 /* ================= الترحيب وشرح اللعبة ================= */
 const SLIDES = [
-  { art: "local", t: "أهلًا فيك في جلسة 👋", d: "ألعاب جلسات عربية تلعبها مع أصحابك. خلنا نوريك كيف تمشي في دقيقة." },
+  { art: "local", t: "أهلًا فيك في روق 👋", d: "ألعاب جلسات عربية تلعبها مع أصحابك. خلنا نوريك كيف تمشي في دقيقة." },
   { art: "create", t: "العب أونلاين", d: "سوّ غرفة، وأرسل الكود أو رابط الدعوة لأصحابك. كل واحد يلعب من جواله." },
   { art: "imp", t: "الألعاب", d: "الدخيل، مين أكثر واحد، إنسان حيوان نبات جماد، وخمسة بعشر. تلقاها كلها في الصفحة الرئيسية تحت «الألعاب»." },
   { art: "friends", t: "أصحابك والرسائل", d: "من زر «أضف صديق» فوق، أضف أصحابك بيوزراتهم. وبعدها تقدر تراسلهم في الخاص 💬، وتسولف معهم في شات الغرفة." },
@@ -2117,7 +2175,7 @@ VIEWS.username = () => {
   on("logout", "click", () => signOut(auth));
 };
 
-/* ================= 🤖 بوت جلسة: يمنع السب والقذف ================= */
+/* ================= 🤖 بوت روق: يمنع السب والقذف ================= */
 // السب القوي بس (القذف والكلام الجنسي). السب الخفيف مسموح
 const BAD_HARD = ["شرموط","شرموطه","شراميط","قحبه","قحاب","عاهره","عاهر","منيوك","منيوكه","منيك","متناك","متناكه","نيك","انيك","ينيك","تنيك","نيكك","انيكك","مناكه","كس","كسك","كسمك","كسختك","كسخت","كسامك","زب","زبي","زبك","خول","لوطي","لوطيه","ديوث","معرص","عرص","عرصه","زاني","زانيه","ولد زنا","ابن زنا","بنت زنا","ابن الحرام","ولد الحرام","بنت الحرام","fuck","fucking","fucker","motherfucker","bitch","whore","slut","pussy","cunt","nigga","nigger","fag","faggot"];
 const BAD_SOFT = []; // السب الخفيف مسموح
@@ -2165,7 +2223,7 @@ const muteLeft = () => { const m = Math.ceil(((me?.mutedUntil || 0) - Date.now()
 function botSheet(title, body) {
   document.getElementById("botSheet")?.remove();
   const el = document.createElement("div");
-  el.id = "botSheet"; el.className = "sheet-bg"; el.setAttribute("role", "alertdialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "بوت جلسة");
+  el.id = "botSheet"; el.className = "sheet-bg"; el.setAttribute("role", "alertdialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "بوت روق");
   el.innerHTML = `<div class="sheet bot-sheet"><span class="bot-av" aria-hidden="true">🤖</span><b class="pf-name">${title}</b><p class="pf-bio">${body}</p><button class="btn" id="botOk">فاهم 👍</button></div>`;
   document.body.appendChild(el);
   el.querySelector("#botOk").addEventListener("click", () => el.remove());
@@ -2181,7 +2239,7 @@ async function botWarn(text) {
     addDoc(collection(db, "reports"), { by: me.uid, byName: me.username, target: me.uid, targetName: me.username, why: "🤖 البوت: سب متكرر وانكتم",
       text: "", msgs: String(text).slice(0, 300), room: roomCode || "", at: serverTimestamp() }).catch(() => {});
     botSheet("انكتمت ٢٤ ساعة 🔇", `هذا التحذير رقم ${ar(warns)}. ما تقدر تكتب في الشات لمدة ${muteLeft()}. واللعب عادي تقدر تكمّله.`);
-  } else botSheet(`تحذير ${ar(warns)} من ٣ ⚠️`, "ممنوع القذف والكلام البذيء في جلسة. رسالتك ما انرسلت.<br>بعد التحذير الثالث تنكتم ٢٤ ساعة.");
+  } else botSheet(`تحذير ${ar(warns)} من ٣ ⚠️`, "ممنوع القذف والكلام البذيء في روق. رسالتك ما انرسلت.<br>بعد التحذير الثالث تنكتم ٢٤ ساعة.");
 }
 // كل نص يطلع لغيرك يمر من هنا. يرجع true لو مسموح
 async function botGate(text) {
@@ -2211,7 +2269,7 @@ function openReport(uid, name) {
   const el = document.createElement("div");
   el.id = "repSheet"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "بلّغ عن لاعب");
   el.innerHTML = `<div class="sheet"><b class="pf-name">🚩 بلّغ عن <span dir="ltr">@${esc(name)}</span></b>
-    <p class="pf-bio">وش المشكلة؟ البلاغ يوصل لإدارة جلسة، ومحد يعرف إنك أنت اللي بلّغت.</p>
+    <p class="pf-bio">وش المشكلة؟ البلاغ يوصل لإدارة روق، ومحد يعرف إنك أنت اللي بلّغت.</p>
     <div class="chips rep-why">${REPORT_WHY.map((w, i) => `<button class="chip" data-why="${i}" aria-pressed="false">${w}</button>`).join("")}</div>
     <textarea class="txt" id="repTxt" rows="2" maxlength="200" dir="auto" placeholder="تفاصيل (اختياري)"></textarea>
     <button class="btn danger" id="repGo" disabled>أرسل البلاغ</button>
@@ -2301,9 +2359,9 @@ async function pushSaveToken(quiet) {
 }
 async function enablePush() {
   const st = pushState();
-  if (st === "ios") { toast("أضف جلسة للشاشة الرئيسية أول، وافتحها من هناك"); doInstall(); return; }
+  if (st === "ios") { toast("أضف روق للشاشة الرئيسية أول، وافتحها من هناك"); doInstall(); return; }
   if (st === "no") return toast("جهازك أو متصفحك ما يدعم الإشعارات");
-  if (st === "denied") return toast("الإشعارات مقفلة. فعّلها من إعدادات الجوال لجلسة");
+  if (st === "denied") return toast("الإشعارات مقفلة. فعّلها من إعدادات الجوال لروق");
   const p = await Notification.requestPermission();
   if (p !== "granted") { render(false); return toast("ما تفعّلت الإشعارات"); }
   toast("لحظة…");
@@ -2349,7 +2407,7 @@ function showStreak(streak, add, broke) {
     <h3>${streak === 1 ? (broke ? "بدأت سلسلة جديدة" : "أول يوم في سلسلتك") : `سلسلة ${ar(streak)} ${streak <= 10 ? "أيام" : "يوم"}!`}</h3>
     <div class="sk-row">${dots}</div>
     <p class="sk-xp">+${ar(add)} خبرة ⭐${streak % 7 === 0 ? " · هدية الأسبوع 🎁" : ""}</p>
-    <p class="hint">افتح جلسة كل يوم عشان ما تنقطع السلسلة. اليوم السابع هديته أكبر.</p>
+    <p class="hint">افتح روق كل يوم عشان ما تنقطع السلسلة. اليوم السابع هديته أكبر.</p>
     <button class="btn" data-close>يلا نلعب</button></div>`);
 }
 
@@ -2426,7 +2484,7 @@ async function redeemCode(raw) {
 VIEWS.shop = () => {
   const p = prof(me.uid), vip = vipOn(p);
   V.innerHTML = `<section>
-    <div><h2>متجر جلسة 🛍️</h2><p class="lead">تميّز قدام أصحابك. تشتري من متجر جلسة، ويوصلك كود تكتبه هنا.</p></div>
+    <div><h2>متجر روق 🛍️</h2><p class="lead">تميّز قدام أصحابك. تشتري من متجر روق، ويوصلك كود تكتبه هنا.</p></div>
     <form class="redeem" id="codeF">
       <span class="label">عندك كود؟</span>
       <div class="row"><input class="txt" id="codeIn" dir="ltr" maxlength="14" placeholder="XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="الكود">
@@ -2469,13 +2527,13 @@ VIEWS.shop = () => {
   });
 };
 
-/* ================= ثبّت جلسة على الشاشة ================= */
+/* ================= ثبّت روق على الشاشة ================= */
 let installEvt = null;
 const isStandalone = () => window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true;
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const inAppBrowser = () => /Snapchat|Instagram|FBAN|FBAV|WhatsApp|TikTok|musical_ly|Twitter/i.test(navigator.userAgent);
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; if (screen === "home") render(false); });
-window.addEventListener("appinstalled", () => { installEvt = null; store.set("instHide", Date.now()); toast("انثبّتت جلسة 🎉"); if (screen === "home") render(false); });
+window.addEventListener("appinstalled", () => { installEvt = null; store.set("instHide", Date.now()); toast("انثبّت روق 🎉"); if (screen === "home") render(false); });
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
 function showInstallCard() {
   if (isStandalone()) return false;
@@ -2493,14 +2551,14 @@ async function doInstall() {
   }
   document.getElementById("instSheet")?.remove();
   const el = document.createElement("div");
-  el.id = "instSheet"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "ثبّت جلسة");
+  el.id = "instSheet"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "ثبّت روق");
   el.innerHTML = `<div class="sheet"><img src="icon-180.png" alt="" width="72" height="72" style="border-radius:18px">
-    <b class="pf-name">ثبّت جلسة على شاشتك</b>
+    <b class="pf-name">ثبّت روق على شاشتك</b>
     ${inAppBrowser() ? `<p class="pf-bio">أنت فاتحها من داخل تطبيق (سناب أو واتساب…). افتح الرابط في <b>Safari</b> أول، بعدين سوّ الخطوات.</p>` : ""}
     <ol class="ios-steps">
       <li>${SHARE_IC}<span>اضغط زر <b>المشاركة</b> تحت الشاشة (المربع اللي فيه سهم لفوق)</span></li>
       <li>${ADD_IC}<span>انزل واختر <b>«إضافة إلى الشاشة الرئيسية»</b></span></li>
-      <li><span>اضغط <b>«إضافة»</b> فوق، وتطلع لك أيقونة جلسة 🎉</span></li>
+      <li><span>اضغط <b>«إضافة»</b> فوق، وتطلع لك أيقونة روق 🎉</span></li>
     </ol>
     ${inAppBrowser() ? `<button class="btn" id="instCopy">انسخ الرابط</button>` : ""}
     <button class="btn ghost" id="instX">تمام</button></div>`;
@@ -2520,11 +2578,11 @@ VIEWS.home = () => {
     </div>
 
     ${showInstallCard() ? `<div class="inst"><img src="icon-180.png" alt="" width="52" height="52">
-      <div class="inst-t"><b>ثبّت جلسة على شاشتك</b><span class="hint">تفتح بضغطة مثل التطبيق، وبدون متصفح</span></div>
+      <div class="inst-t"><b>ثبّت روق على شاشتك</b><span class="hint">تفتح بضغطة مثل التطبيق، وبدون متصفح</span></div>
       <button class="btn small" id="instGo">ثبّت</button><button class="inst-x" id="instHide" aria-label="إخفاء">×</button></div>` : ""}
 
     ${!showInstallCard() && showPushCard() ? `<div class="inst push"><span class="push-ic" aria-hidden="true">🔔</span>
-      <div class="inst-t"><b>فعّل الإشعارات</b><span class="hint">عشان توصلك العزايم والرسائل حتى لو جلسة مقفلة</span></div>
+      <div class="inst-t"><b>فعّل الإشعارات</b><span class="hint">عشان توصلك العزايم والرسائل حتى لو روق مقفل</span></div>
       <button class="btn small" id="pushGo">فعّل</button><button class="inst-x" id="pushHide" aria-label="إخفاء">×</button></div>` : ""}
 
     <h2>وش نلعب الليلة؟</h2>
@@ -2532,7 +2590,7 @@ VIEWS.home = () => {
       <button class="bigbtn create" id="create"><span class="bb-ic">${ICONS.create}</span><b>${roomCode ? "ارجع لغرفتك" : "غرفة جديدة"}</b><span>واعزم أصحابك</span></button>
       <button class="bigbtn join" id="joinBtn"><span class="bb-ic">${ICONS.join}</span><b>ادخل بكود</b><span>عندك كود غرفة؟</span></button>
     </div>
-    <button class="shopbtn" id="shopBtn"><span class="sb-ic" aria-hidden="true">🛍️</span><span class="pb-t"><b>متجر جلسة</b><span>أشكال حصرية واشتراك VIP</span></span><span class="pb-go">←</span></button>
+    <button class="shopbtn" id="shopBtn"><span class="sb-ic" aria-hidden="true">🛍️</span><span class="pb-t"><b>متجر روق</b><span>أشكال حصرية واشتراك VIP</span></span><span class="pb-go">←</span></button>
     <button class="pubbtn" id="pubBtn"><span class="pb-ic">${ICONS.pub}</span><span class="pb-t"><b>غرف عامة</b><span>ادخل والعب مع ناس جدد</span></span><span class="pb-go">←</span></button>
     <form class="joinrow" id="joinF" ${ui.showJoin ? "" : "hidden"}>
       <input id="code" dir="ltr" maxlength="5" placeholder="K7M2P" autocomplete="off" autocapitalize="characters" aria-label="كود الغرفة">
@@ -2676,9 +2734,9 @@ VIEWS.profile = () => {
     </div>
 
     <div class="field"><span class="label">🔔 الإشعارات</span>
-      <div class="li"><span class="nm">${{ granted: "مفعّلة ✓", denied: "مقفلة من إعدادات الجوال", ios: "تحتاج تضيف جلسة للشاشة الرئيسية", no: "جهازك ما يدعمها" }[pushState()] || "مو مفعّلة"}</span>
+      <div class="li"><span class="nm">${{ granted: "مفعّلة ✓", denied: "مقفلة من إعدادات الجوال", ios: "تحتاج تضيف روق للشاشة الرئيسية", no: "جهازك ما يدعمها" }[pushState()] || "مو مفعّلة"}</span>
       ${pushState() === "granted" ? `<button class="btn small ghost" id="pushRe">حدّث</button>` : ["default", "ios"].includes(pushState()) ? `<button class="btn small" id="pushOn">فعّل</button>` : ""}</div>
-      <p class="hint">توصلك العزايم وطلبات الصداقة والرسائل حتى لو جلسة مقفلة.</p></div>
+      <p class="hint">توصلك العزايم وطلبات الصداقة والرسائل حتى لو روق مقفل.</p></div>
 
     <div class="field"><span class="label">🎖️ إنجازاتك (${ar(achGot(me.stats, me.xp, me.username).length)} من ${ar(ACH.length)})</span>
       <div class="achs">${ACH.map(x => { const ok = STAFF(me.username) || x.ok(me.stats || {}, me.xp || 0); return `<div class="ach ${ok ? "on" : ""}">${medal(x, ok)}<b>${x.t}</b><span>${x.d}</span></div>`; }).join("")}</div></div>
@@ -2693,7 +2751,7 @@ VIEWS.profile = () => {
       <span class="hint">إطار الصورة</span>
       <div class="looks">${[["", "بدون"], ...Object.entries(FRAMES)].map(([k, n]) => { const open = !k || owns(prof(me.uid), k), sel = (frameOf(prof(me.uid)) || "") === k;
         return `<button class="look frm ${sel ? "sel" : ""} ${k ? "excl" : ""}" data-lf="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><span class="look-pv">${k ? `<span class="fr ${k}" style="--fs:4px">${avatar(me.username, me.photo, 56)}</span>` : avatar(me.username, me.photo, 56)}</span><b>${n}</b><span class="hint">${open ? (sel ? "مختار ✓" : "متاح") : "🛍️ من المتجر"}</span></button>`; }).join("")}</div>
-      <button class="btn ghost" id="toShop">🛍️ متجر جلسة</button></div>
+      <button class="btn ghost" id="toShop">🛍️ متجر روق</button></div>
 
     <div class="field"><span class="label">يوزرك</span>
       <div class="li"><span class="nm" dir="ltr">@${esc(me.username)}</span><button class="btn small ghost" id="copy">انسخ</button>${isOwner() ? "" : `<button class="btn small ghost" id="rename">غيّر</button>`}</div>
@@ -2704,7 +2762,7 @@ VIEWS.profile = () => {
   on("tour", "click", () => { ui.slide = 0; go("welcome"); });
   on("delAcc", "click", openDeleteAccount);
   const setLook = async (kind, k, list) => {
-    if (!lookOpen(list[k])) { if (list[k].shop) { toast("هذا من متجر جلسة 🛍️"); go("shop"); return; } return toast(`يفتح لك في المستوى ${ar(list[k].lvl)} ⭐`); }
+    if (!lookOpen(list[k])) { if (list[k].shop) { toast("هذا من متجر روق 🛍️"); go("shop"); return; } return toast(`يفتح لك في المستوى ${ar(list[k].lvl)} ⭐`); }
     const look = { ...myLook(), [kind]: k };
     me.look = look; render(false);
     try { await updateDoc(doc(db, "users", me.uid), { look }); } catch (e) { console.error(e); }
@@ -2713,7 +2771,7 @@ VIEWS.profile = () => {
   onAll("[data-lb]", b => setLook("b", b.dataset.lb, BACKS));
   onAll("[data-lf]", async b => {
     const k = b.dataset.lf;
-    if (k && !owns(prof(me.uid), k)) { toast("هذا من متجر جلسة 🛍️"); go("shop"); return; }
+    if (k && !owns(prof(me.uid), k)) { toast("هذا من متجر روق 🛍️"); go("shop"); return; }
     me.frame = k; render(false);
     try { await updateDoc(doc(db, "users", me.uid), { frame: k }); } catch (e) { console.error(e); }
   });
@@ -2874,7 +2932,7 @@ function bindLeave() { on("leave", "click", e => { if (confirmTap(e.currentTarge
 VIEWS.room = () => {
   if (!room) { V.innerHTML = `<div class="spinner" aria-label="جاري التحميل"></div>`; return; }
   if (room.phase === "hq") { if (!subs.has("hdone")) watchHhnjDone(); } else if (subs.has("hdone")) { off("hdone"); ui.hDoneCount = 0; }
-  awardXp(); entranceCheck();
+  awardXp(); entranceCheck(); trackSession();
   if (room.phase === "uno" && isHost()) { if (!subs.has("umoves")) watchUnoMoves(); unoCleanup(); } else if (subs.has("umoves")) off("umoves");
   if (room.phase !== "uno" && room.phase !== "unoend") { UNO.st = null; UNO.processed = {}; }
   const host = isHost();
@@ -2962,12 +3020,14 @@ const ROOM_VIEWS = {
       ${onlineFriends.length ? `<div class="field"><span class="label">أصحابك الأونلاين</span><div class="list">${onlineFriends.map(([u, f]) => `
         <div class="li"><i class="dot on"></i><span class="nm" dir="ltr">${at(f.username)}</span><button class="btn small" data-inv="${esc(u)}">اعزمه</button></div>`).join("")}</div></div>` : ""}
       ${hasScores ? `<div class="field"><span class="label">النقاط</span>${scoreBoard(ps)}</div>` : ""}
+      ${ui.sess?.room === roomCode && ui.sess.rounds.size ? `<button class="btn ghost" id="sumBtn">📊 ملخص الجلسة</button>` : ""}
       <div class="foot">
         ${host ? `<button class="btn" id="start" ${n < minPlayers(room.game) ? "disabled" : ""}>${n < minPlayers(room.game) ? (minPlayers(room.game) === 2 ? "تحتاجون لاعبين على الأقل" : `تحتاجون ${ar(minPlayers(room.game))} لاعبين على الأقل`) : "ابدأ"}</button>` : ""}
         ${leaveBtn()}
       </div></section>`;
     on("copyLink", "click", () => copyText(location.origin + location.pathname + "?r=" + roomCode, "انسخ رابط الدعوة"));
     onAll("[data-inv]", b => { b.disabled = true; sendInvite(b.dataset.inv); });
+    on("sumBtn", "click", () => openSummary(sessionData()));
     onAll("[data-pf]", b => { if (b.dataset.pf !== me.uid) showProfile(b.dataset.pf); else go("profile"); });
     onAll("[data-game]", b => setRoom({ game: b.dataset.game }));
     onAll("[data-kick]", b => { if (!confirmTap(b, "متأكد؟")) return; kickPlayer(b.dataset.kick); });
@@ -3152,7 +3212,7 @@ const ROOM_VIEWS = {
     const uno = unoState() || {}, w = uno.winner;
     V.innerHTML = `<section>${statusBar()}
       <div class="card safe pop uwin"><span class="eyebrow">انتهت الجولة</span>
-        ${w ? `${avatar(pname(w), prof(w)?.photo, 84)}<span class="big" dir="ltr">${at(pname(w))}</span><span class="hint">فاز بأونو جلسة 🏆</span>` : `<span class="big">انتهت</span>`}</div>
+        ${w ? `${avatar(pname(w), prof(w)?.photo, 84)}<span class="big" dir="ltr">${at(pname(w))}</span><span class="hint">فاز بأونو روق 🏆</span>` : `<span class="big">انتهت</span>`}</div>
       <div class="field"><span class="label">الأوراق اللي بقت</span><div class="list">${(uno.order || []).filter(u => u !== w).map(u => `<div class="li">${avatar(pname(u), prof(u)?.photo, 32)}<span class="nm" dir="ltr">${at(pname(u))}</span><span class="tag">${ar(uno.counts?.[u] || 0)} ورقة</span></div>`).join("")}</div></div>
       <div class="field"><span class="label">النقاط</span>${scoreBoard(order())}</div>
       <div class="foot">${shareBtn()}${isHost() ? `<button class="btn" id="again">جولة جديدة</button><button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يبدأ الجولة الجاية.</p>`}${leaveBtn()}</div></section>`;
