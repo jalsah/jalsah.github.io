@@ -196,7 +196,7 @@ function renderBanner() {
   renderAnnounce();
   const pimg = promo && typeof promo.img === "string" && promo.img.startsWith("data:image/jpeg;base64,") ? promo.img : "";
   const plink = promo && /^https:\/\//.test(promo.link || "") ? promo.link : "";
-  const promoHtml = pimg && !["dm"].includes(screen)
+  const promoHtml = pimg && screen === "home"
     ? (plink ? `<a class="promo" href="${esc(plink)}" target="_blank" rel="noopener"><img src="${esc(pimg)}" alt="${esc(promo.alt || "إعلان جلسة")}"></a>`
              : `<div class="promo"><img src="${esc(pimg)}" alt="${esc(promo.alt || "إعلان جلسة")}"></div>`) : "";
   BANNER.innerHTML = promoHtml + list.map(i => `
@@ -1692,7 +1692,7 @@ VIEWS.email = () => {
     <p class="lead">${signup ? "بعدها تختار يوزرك وتبدأ تضيف أصحابك." : byUser ? "ادخل بيوزرك وكلمة السر." : "ادخل بالإيميل وكلمة السر اللي سجلت فيها."}</p></div>
     <form class="field" id="emailF" novalidate>
       ${byUser ? `<label class="label" for="un">اليوزر</label>
-      <div class="uinput"><span>@</span><input id="un" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="D-A-L-P"></div>`
+      <div class="uinput"><span>@</span><input id="un" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="21"></div>`
       : `<label class="label" for="em">الإيميل</label>
       <input class="txt" id="em" type="email" dir="ltr" autocomplete="email" autocapitalize="none" inputmode="email" placeholder="name@gmail.com">`}
       <label class="label" for="pw">كلمة السر</label>
@@ -1765,7 +1765,7 @@ VIEWS.forgot = () => {
     <p class="lead">اكتب ${authUrl ? "إيميلك أو يوزرك" : "إيميلك"}، ونرسل لك رابط تغيّر فيه كلمة السر.</p></div>
     <form class="field" id="fgF" novalidate>
       <label class="label" for="fg">${authUrl ? "الإيميل أو اليوزر" : "الإيميل"}</label>
-      <input class="txt" id="fg" dir="ltr" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="${authUrl ? "name@gmail.com أو D-A-L-P" : "name@gmail.com"}">
+      <input class="txt" id="fg" dir="ltr" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="${authUrl ? "الإيميل أو اليوزر" : "name@gmail.com"}">
       <p class="hint" id="fgMsg" role="status"></p>
       <button class="btn" id="fgGo">أرسل الرابط</button>
     </form>
@@ -1824,7 +1824,7 @@ VIEWS.rename = () => {
     <p class="lead">يوزرك الحين <b dir="ltr">@${esc(me.username)}</b>. تقدر تغيّره مرة كل ${ar(RENAME_DAYS)} يوم، ويوزرك القديم يصير متاح لغيرك.</p></div>
     ${wait ? `<div class="li"><span class="nm">تقدر تغيّره بعد ${days === 1 ? "يوم" : days === 2 ? "يومين" : ar(days) + (days <= 10 ? " أيام" : " يوم")}</span></div>` : `
     <div class="field"><label class="label" for="uname">اليوزر الجديد</label>
-      <div class="uinput"><span>@</span><input id="uname" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="20" placeholder="D-A-L-P"></div>
+      <div class="uinput"><span>@</span><input id="uname" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="20"></div>
       <p class="hint" id="unameMsg">${UNAME_HINT}</p></div>
     ${roomCode ? `<p class="hint msg-bad">اطلع من الغرفة أول، وبعدها غيّر يوزرك.</p>` : ""}
     <div class="foot"><button class="btn" id="claim" disabled>غيّر اليوزر</button></div>`}
@@ -1894,7 +1894,7 @@ VIEWS.username = () => {
   V.innerHTML = `<section>
     <div><h2>اختر يوزرك</h2><p class="lead">أصحابك يضيفونك فيه. ما تقدر تغيّره بعدين، فاختره زين.</p></div>
     <div class="field"><label class="label" for="uname">اليوزر</label>
-      <div class="uinput"><span>@</span><input id="uname" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="20" placeholder="D-A-L-P"></div>
+      <div class="uinput"><span>@</span><input id="uname" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="20"></div>
       <p class="hint" id="unameMsg">${UNAME_HINT}</p></div>
     <div class="foot"><button class="btn" id="claim" disabled>اعتمد اليوزر</button>
     <button class="btn ghost" id="logout">تسجيل خروج</button></div></section>`;
