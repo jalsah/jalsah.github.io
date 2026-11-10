@@ -9,9 +9,9 @@ import {
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
   getCountFromServer, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=7";
-import { WORDS, MOST, FIVE } from "./content.js?v=7";
-import { ICONS } from "./icons.js?v=7";
+import { firebaseConfig } from "./firebase-config.js?v=8";
+import { WORDS, MOST, FIVE } from "./content.js?v=8";
+import { ICONS } from "./icons.js?v=8";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -218,9 +218,6 @@ function startGlobal() {
   sub("reqOut", onSnapshot(query(collection(db, "friendRequests"), where("from", "==", me.uid)), snap => {
     reqOut = snap.docs.map(d => d.data()); refresh();
   }, err));
-  sub("announce", onSnapshot(doc(db, "config", "announce"), s => {
-    announce = s.exists() ? s.data() : null; renderBanner(); if (screen === "admin") render(false);
-  }, err));
   sub("ban", onSnapshot(doc(db, "bans", me.uid), s => {
     const was = banned; banned = s.exists();
     if (banned && !was) { if (roomCode) leaveRoom(true); go("banned"); }
@@ -236,7 +233,7 @@ function onVisible() {
 function stopGlobal() {
   offAll(); clearInterval(presenceTimer); presenceTimer = null;
   document.removeEventListener("visibilitychange", onVisible);
-  friends.clear(); reqIn = []; reqOut = []; invites = []; announce = null; banned = false;
+  friends.clear(); reqIn = []; reqOut = []; invites = []; banned = false;
   room = null; roomCode = null; votes = {}; secret = null;
 }
 function err(e) { console.error(e); }
@@ -1032,6 +1029,10 @@ document.addEventListener("click", async () => {
 
 /* ================= start ================= */
 if (configured) {
+  // الإعلان يوصل للكل، حتى اللي يلعبون بدون حساب
+  onSnapshot(doc(db, "config", "announce"), s => {
+    announce = s.exists() ? s.data() : null; renderBanner(); if (screen === "admin") render(false);
+  }, err);
   getRedirectResult(auth).catch(() => {});
   onAuthStateChanged(auth, async user => {
     stopGlobal();
