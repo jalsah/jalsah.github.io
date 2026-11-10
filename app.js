@@ -59,18 +59,20 @@ const lvlOfP = p => STAFF(p?.username) ? MAXL : lvlOf(p?.xp);
 const myLvl = () => lvlOfP(me);
 const lvlTag = p => `<span class="lvl ${STAFF(p?.username) ? "max" : ""}" title="المستوى">${STAFF(p?.username) ? "👑" : "⭐"} ${ar(lvlOfP(p))}</span>`;
 const ACH = [
-  { id: "first", ic: "🎉", t: "أول جلسة", d: "العب أول جولة", ok: s => (s.games || 0) >= 1 },
-  { id: "g50", ic: "🔥", t: "مدمن جلسات", d: "العب ٥٠ جولة", ok: s => (s.games || 0) >= 50 },
-  { id: "g200", ic: "👑", t: "أسطورة الجلسات", d: "العب ٢٠٠ جولة", ok: s => (s.games || 0) >= 200 },
-  { id: "win1", ic: "🏆", t: "أول فوز", d: "اكسب نقاط في جولة", ok: s => (s.wins || 0) >= 1 },
-  { id: "win25", ic: "💪", t: "ما ينغلب", d: "افز في ٢٥ جولة", ok: s => (s.wins || 0) >= 25 },
-  { id: "uno", ic: "🃏", t: "ملك الأونو", d: "افز بالأونو ١٠ مرات", ok: s => (s.w_uno || 0) >= 10 },
-  { id: "imp", ic: "🕵️", t: "صياد الدخلاء", d: "افز في الدخيل ١٠ مرات", ok: s => (s.w_imp || 0) >= 10 },
-  { id: "draw", ic: "🎨", t: "فنان الجلسة", d: "افز في ارسم وخمّن ١٠ مرات", ok: s => (s.w_draw || 0) >= 10 },
-  { id: "all", ic: "🧭", t: "جرّب كل شي", d: "العب ٥ ألعاب مختلفة", ok: s => ["uno", "imp", "most", "hhnj", "who", "tf", "draw"].filter(g => s["g_" + g]).length >= 5 },
-  { id: "night", ic: "🌙", t: "سهران", d: "العب بين ٢ و٥ الفجر", ok: s => (s.night || 0) >= 1 },
-  { id: "lvl10", ic: "⭐", t: "نجم جلسة", d: "وصّل المستوى ١٠", ok: (s, xp) => lvlOf(xp) >= 10 }
+  { id: "first", tier: "b", svg: '<path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/>', t: "أول جلسة", d: "العب أول جولة", ok: s => (s.games || 0) >= 1 },
+  { id: "g50", tier: "s", svg: '<path d="M12 3c1 4 5 5.5 5 10.5a5 5 0 0 1-10 0c0-3 2-4 2-6.5 1 1.2 2 2 3 2 0-2-1-4 0-6z"/>', t: "مدمن جلسات", d: "العب ٥٠ جولة", ok: s => (s.games || 0) >= 50 },
+  { id: "g200", tier: "g", svg: '<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/>', t: "أسطورة الجلسات", d: "العب ٢٠٠ جولة", ok: s => (s.games || 0) >= 200 },
+  { id: "win1", tier: "b", svg: '<path d="M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8"/>', t: "أول فوز", d: "اكسب نقاط في جولة", ok: s => (s.wins || 0) >= 1 },
+  { id: "win25", tier: "g", svg: '<path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>', t: "ما ينغلب", d: "افز في ٢٥ جولة", ok: s => (s.wins || 0) >= 25 },
+  { id: "uno", tier: "s", svg: '<path d="M9 3h9a1 1 0 0 1 1 1v13"/><rect x="5" y="6" width="11" height="15" rx="1.5"/>', t: "ملك الأونو", d: "افز بالأونو ١٠ مرات", ok: s => (s.w_uno || 0) >= 10 },
+  { id: "imp", tier: "s", svg: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/>', t: "صياد الدخلاء", d: "افز في الدخيل ١٠ مرات", ok: s => (s.w_imp || 0) >= 10 },
+  { id: "draw", tier: "s", svg: '<path d="M4 20l4-1L19 8a2.1 2.1 0 0 0-3-3L5 16z"/><path d="M14 7l3 3"/>', t: "فنان الجلسة", d: "افز في ارسم وخمّن ١٠ مرات", ok: s => (s.w_draw || 0) >= 10 },
+  { id: "all", tier: "s", svg: '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>', t: "جرّب كل شي", d: "العب ٥ ألعاب مختلفة", ok: s => ["uno", "imp", "most", "hhnj", "who", "tf", "draw"].filter(g => s["g_" + g]).length >= 5 },
+  { id: "night", tier: "b", svg: '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>', t: "سهران", d: "العب بين ٢ و٥ الفجر", ok: s => (s.night || 0) >= 1 },
+  { id: "lvl10", tier: "g", svg: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3l-5.5 2.9 1-6.2L3 9.6l6.2-.9z"/>', t: "نجم جلسة", d: "وصّل المستوى ١٠", ok: (s, xp) => lvlOf(xp) >= 10 }
 ];
+const TIER_RANK = { g: 3, s: 2, b: 1 };
+const medal = (x, on = true) => `<span class="medal ${on ? "t-" + x.tier : "off"}" title="${esc(x.t)}"><svg viewBox="0 0 24 24" aria-hidden="true">${on ? x.svg : '<rect x="6" y="11" width="12" height="9" rx="2"/><path d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3"/>'}</svg></span>`;
 const achGot = (s, xp, name) => STAFF(name) ? ACH : ACH.filter(x => x.ok(s || {}, xp || 0));
 const myLook = () => ({ t: TABLES[me?.look?.t] && myLvl() >= TABLES[me.look.t].lvl ? me.look.t : "felt", b: BACKS[me?.look?.b] && myLvl() >= BACKS[me.look.b].lvl ? me.look.b : "classic" });
 
@@ -883,7 +885,7 @@ async function awardXp() {
     setTimeout(() => {
       toast(`+${ar(add)} خبرة ⭐`);
       if (myLvl() > oldL) setTimeout(() => toast(`🎉 وصلت المستوى ${ar(myLvl())}!`), 1400);
-      fresh.forEach((x, i) => setTimeout(() => toast(`${x.ic} إنجاز جديد: ${x.t}`), 2800 + i * 1400));
+      fresh.forEach((x, i) => setTimeout(() => toast(`🎖️ إنجاز جديد: ${x.t}`), 2800 + i * 1400));
     }, 600);
   } catch (e) { console.warn("xp", e); }
 }
@@ -2390,7 +2392,8 @@ function showProfile(uid) {
       ${f ? `<span class="chip-st ${isOnline(f) ? "on" : ""}">${isOnline(f) ? "أونلاين الحين" : "مو أونلاين"}</span>` : ""}
       ${lvlTag(p)}
       ${p.bio ? `<p class="pcard-bio">${esc(p.bio)}</p>` : ""}
-      ${(() => { const g = achGot(p.stats, p.xp, p.username); return g.length ? `<div class="ach-mini" aria-label="الإنجازات">${g.map(x => `<span title="${esc(x.t)}">${x.ic}</span>`).join("")}</div>` : ""; })()}
+      ${(() => { const g = achGot(p.stats, p.xp, p.username); if (!g.length) return ""; const top = [...g].sort((q, r) => TIER_RANK[r.tier] - TIER_RANK[q.tier]).slice(0, 3);
+        return `<div class="ach-mini" aria-label="الإنجازات">${top.map(x => medal(x)).join("")}<span class="ach-n">${ar(g.length)} ${g.length > 2 && g.length < 11 ? "إنجازات" : "إنجاز"}</span></div>`; })()}
       <div class="pcard-acts">${acts}</div>
       ${modRow}
       <button class="btn ghost" id="pfClose">إغلاق</button>
@@ -2452,7 +2455,7 @@ VIEWS.profile = () => {
       <p class="hint">توصلك العزايم وطلبات الصداقة والرسائل حتى لو جلسة مقفلة.</p></div>
 
     <div class="field"><span class="label">🎖️ إنجازاتك (${ar(achGot(me.stats, me.xp, me.username).length)} من ${ar(ACH.length)})</span>
-      <div class="achs">${ACH.map(x => { const ok = STAFF(me.username) || x.ok(me.stats || {}, me.xp || 0); return `<div class="ach ${ok ? "on" : ""}"><span class="ach-ic">${ok ? x.ic : "🔒"}</span><b>${x.t}</b><span>${x.d}</span></div>`; }).join("")}</div></div>
+      <div class="achs">${ACH.map(x => { const ok = STAFF(me.username) || x.ok(me.stats || {}, me.xp || 0); return `<div class="ach ${ok ? "on" : ""}">${medal(x, ok)}<b>${x.t}</b><span>${x.d}</span></div>`; }).join("")}</div></div>
 
     <div class="field"><span class="label">🎨 أشكالك</span>
       <span class="hint">شكل الطاولة</span>
