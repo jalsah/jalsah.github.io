@@ -9,9 +9,9 @@ import {
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
   getCountFromServer, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, authUrl } from "./firebase-config.js?v=12";
-import { WORDS, MOST, FIVE } from "./content.js?v=12";
-import { ICONS } from "./icons.js?v=12";
+import { firebaseConfig, authUrl } from "./firebase-config.js?v=13";
+import { WORDS, MOST, FIVE } from "./content.js?v=13";
+import { ICONS } from "./icons.js?v=13";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -595,13 +595,13 @@ VIEWS.auth = () => {
     </div>
     <div class="foot">
       <button class="btn google" id="login"><span class="g-logo" aria-hidden="true">${GOOGLE_G}</span>كمّل بحساب قوقل</button>
-      <button class="btn ghost" id="byEmail">سجّل بالإيميل</button>
+      <button class="btn ghost" id="byEmail">تسجيل الدخول</button>
       <div class="or"><span>أو</span></div>
       <button class="btn ghost" id="local">العب بدون حساب</button>
       <p class="hint center">بدون حساب تلعبون بجوال واحد. للعب أونلاين وإضافة الأصحاب تحتاج حساب.</p>
     </div></section>`;
   on("login", "click", login);
-  on("byEmail", "click", () => { ui.emailMode = "signup"; go("email"); });
+  on("byEmail", "click", () => { ui.emailMode = "login"; go("email"); });
   on("local", "click", () => go("local"));
 };
 
@@ -651,29 +651,26 @@ VIEWS.email = () => {
   if (!ui.loginBy) ui.loginBy = authUrl ? "username" : "email";
   const byUser = !signup && ui.loginBy === "username";
   V.innerHTML = `<section>
-    <div><h2>${signup ? "سوّ حساب جديد" : "سجّل دخول"}</h2>
+    <div><h2>${signup ? "إنشاء حساب" : "تسجيل الدخول"}</h2>
     <p class="lead">${signup ? "بعدها تختار يوزرك وتبدأ تضيف أصحابك." : byUser ? "ادخل بيوزرك وكلمة السر." : "ادخل بالإيميل وكلمة السر اللي سجلت فيها."}</p></div>
-    <div class="tabs" role="tablist">
-      <button class="tab" role="tab" id="tSignup" aria-selected="${signup}">حساب جديد</button>
-      <button class="tab" role="tab" id="tLogin" aria-selected="${!signup}">عندي حساب</button>
-    </div>
     <form class="field" id="emailF" novalidate>
       ${byUser ? `<label class="label" for="un">اليوزر</label>
       <div class="uinput"><span>@</span><input id="un" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="D-A-L-P"></div>`
       : `<label class="label" for="em">الإيميل</label>
       <input class="txt" id="em" type="email" dir="ltr" autocomplete="email" autocapitalize="none" inputmode="email" placeholder="name@gmail.com">`}
       <label class="label" for="pw">كلمة السر</label>
-      <div class="pwbox"><input class="txt" id="pw" type="password" dir="ltr" autocomplete="${signup ? "new-password" : "current-password"}" placeholder="${signup ? "مثال: Dalp2026" : ""}">${eyeBtn("pw")}</div>
+      <div class="pwbox"><input class="txt" id="pw" type="password" dir="ltr" autocomplete="${signup ? "new-password" : "current-password"}" placeholder="${signup ? "Dalp2026" : ""}">${eyeBtn("pw")}</div>
       ${signup ? `<p class="hint" id="pwHint">٨ خانات أو أكثر، وفيها حرف إنجليزي كبير واحد على الأقل.</p>` : ""}
       ${signup ? `<label class="label" for="pw2">أكّد كلمة السر</label>
       <div class="pwbox"><input class="txt" id="pw2" type="password" dir="ltr" autocomplete="new-password">${eyeBtn("pw2")}</div>` : ""}
       <p class="hint msg-bad" id="emMsg" role="alert"></p>
-      <button class="btn" id="emGo">${signup ? "سوّ الحساب" : "دخول"}</button>
+      <button class="btn" id="emGo">${signup ? "إنشاء الحساب" : "دخول"}</button>
       ${signup ? "" : `<div class="links">
         <button type="button" class="link" id="forgot">نسيت كلمة السر؟</button>
         ${authUrl ? `<button type="button" class="link" id="switchBy">${byUser ? "نسيت اليوزر؟ ادخل بالإيميل" : "ادخل باليوزر"}</button>` : ""}
       </div>`}
     </form>
+    <p class="switch">${signup ? "عندك حساب؟" : "ما عندك حساب؟"} <button type="button" class="link" id="switchMode">${signup ? "تسجيل الدخول" : "إنشاء حساب"}</button></p>
     <div class="foot"><button class="btn ghost" id="gInstead"><span class="g-logo" aria-hidden="true">${GOOGLE_G}</span>أو كمّل بقوقل</button></div>
   </section>`;
   const msg = document.getElementById("emMsg");
@@ -685,8 +682,7 @@ VIEWS.email = () => {
     pwHint.textContent = !v ? "٨ خانات أو أكثر، وفيها حرف إنجليزي كبير واحد على الأقل."
       : (okLen ? "✓ ٨ خانات" : "✗ ٨ خانات أو أكثر") + "  ·  " + (okUp ? "✓ حرف كبير" : "✗ حرف كبير (A-Z)");
   });
-  on("tSignup", "click", () => { ui.emailMode = "signup"; render(true); });
-  on("tLogin", "click", () => { ui.emailMode = "login"; render(true); });
+  on("switchMode", "click", () => { ui.emailMode = signup ? "login" : "signup"; render(true); });
   on("switchBy", "click", () => { ui.loginBy = byUser ? "email" : "username"; render(true); });
   on("gInstead", "click", login);
   on("forgot", "click", () => go("forgot"));
@@ -695,7 +691,7 @@ VIEWS.email = () => {
     msg.className = "hint msg-bad"; msg.textContent = "";
     const pw = document.getElementById("pw").value;
     const btn = document.getElementById("emGo");
-    const busy = on => { btn.disabled = on; btn.textContent = on ? "لحظة…" : (signup ? "سوّ الحساب" : "دخول"); };
+    const busy = on => { btn.disabled = on; btn.textContent = on ? "لحظة…" : (signup ? "إنشاء الحساب" : "دخول"); };
     if (byUser) {
       const un = document.getElementById("un").value.trim().replace(/^@/, "");
       if (!USER_RE.test(un)) { msg.textContent = "اكتب يوزرك صح."; return; }
