@@ -406,21 +406,22 @@ body:has(#chatFab) main{padding-bottom:78px}
 .useat.flash .us-c{background:var(--rose)}
 @keyframes pulse{50%{transform:scale(1.07)}}
 .ucenter{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:16px;z-index:1}
-.upile,.udisc{position:relative;width:64px;aspect-ratio:2/3}
+.upile,.udisc{position:relative;width:68px;aspect-ratio:2/3}
 .upile{background:none;border:none;padding:0;cursor:pointer;filter:drop-shadow(0 6px 10px rgba(0,0,0,.5))}
 .upile:disabled{cursor:default}
-.upile::before{content:"";position:absolute;inset:0;transform:translate(3px,3px);border-radius:8px;background:#0f0b1c}
+.upile::before{content:"";position:absolute;inset:0;border-radius:8px;background:#e9e2d6;box-shadow:1px 2px 0 #cfc6b6,2px 4px 0 #e9e2d6,3px 6px 0 #cfc6b6,4px 8px 0 #e3dccf,5px 10px 0 #bdb3a2,6px 12px 8px rgba(0,0,0,.45)}
 .upile svg{position:relative}
 .upile.go{animation:bob 1.2s ease-in-out infinite}
 .upile.go::after{content:"اسحب";position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:700;color:var(--saffron);white-space:nowrap}
 .up-n{position:absolute;top:-8px;right:-8px;background:var(--bg);border:1px solid var(--line);color:var(--muted);border-radius:999px;font-size:10px;padding:0 6px;font-variant-numeric:tabular-nums}
 @keyframes bob{50%{transform:translateY(-4px)}}
-.udisc .ring{position:absolute;inset:-9px;border-radius:14px;border:4px solid var(--cur);box-shadow:0 0 20px 2px color-mix(in srgb,var(--cur) 55%,transparent)}
-.udisc .ucard{position:absolute;inset:0;transform:rotate(-6deg);filter:drop-shadow(0 8px 12px rgba(0,0,0,.5))}
+.udisc .ring{position:absolute;inset:-16px;border-radius:50%;background:radial-gradient(closest-side,color-mix(in srgb,var(--cur) 55%,transparent),transparent);opacity:.9}
+.udisc .ucard{position:absolute;inset:0;transform:translate(var(--x,0),var(--y,0)) rotate(var(--r,-6deg));filter:drop-shadow(0 4px 6px rgba(0,0,0,.45))}
+.udisc .ucard.old{filter:drop-shadow(0 2px 3px rgba(0,0,0,.4)) brightness(.9)}
 .udisc .ucard.top{animation:land .35s cubic-bezier(.2,1.4,.4,1)}
-@keyframes land{from{transform:translateY(-40px) rotate(-30deg) scale(1.2);opacity:.2}}
+@keyframes land{from{transform:translate(0,90px) rotate(20deg) scale(1.25);opacity:.3}}
 .ucard-svg{width:100%;height:100%;display:block}
-.udir{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);font-size:150px;line-height:1;color:rgba(242,177,52,.12);pointer-events:none;animation:spin 9s linear infinite}
+.udir{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);font-size:150px;line-height:1;color:rgba(255,240,200,.07);pointer-events:none;animation:spin 9s linear infinite}
 .udir.rev{animation-direction:reverse}
 .ubar{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:10px 14px}
 .ubar.mine{border-color:var(--saffron);background:color-mix(in srgb,var(--saffron) 14%,var(--surface))}
@@ -429,12 +430,16 @@ body:has(#chatFab) main{padding-bottom:78px}
 .ub-col i{width:14px;height:14px;border-radius:50%}
 .ulast{margin:0;text-align:center;color:var(--muted);font-size:13.5px}
 .uno-call{align-self:center;font-family:var(--display);font-size:24px;color:var(--bg);background:var(--rose);border-radius:999px;padding:4px 18px;box-shadow:0 8px 20px rgba(0,0,0,.4)}
-.uhand{display:flex;gap:0;overflow-x:auto;padding:22px 10px 6px;scrollbar-width:none;min-height:130px}
-.uhand .ucard{flex:none;width:68px;aspect-ratio:2/3;margin-inline-start:-18px;background:none;border:none;padding:0;cursor:pointer;transition:transform .15s;filter:drop-shadow(0 6px 10px rgba(0,0,0,.45))}
-.uhand .ucard:first-child{margin-inline-start:0}
-.uhand .ucard.ok{transform:translateY(-14px)}
-.uhand .ucard.ok:active{transform:translateY(-20px) scale(1.04)}
-.uhand .ucard.no{filter:brightness(.55) drop-shadow(0 6px 10px rgba(0,0,0,.45))}
+.uhand{position:relative;height:160px;margin-top:4px;touch-action:none;overflow:visible}
+.uhand .ucard{position:absolute;left:calc(50% - 37px);bottom:8px;width:74px;aspect-ratio:2/3;background:none;border:none;padding:0;cursor:pointer;transform-origin:50% 100%;transform:translate(var(--x),var(--y)) rotate(var(--r));transition:transform .18s ease,filter .18s;filter:drop-shadow(0 6px 8px rgba(0,0,0,.5));touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.uhand .ucard.ok{transform:translate(var(--x),calc(var(--y) - 18px)) rotate(var(--r))}
+.uhand .ucard.ok:active{transform:translate(var(--x),calc(var(--y) - 26px)) rotate(var(--r)) scale(1.05)}
+.uhand .ucard.no{filter:brightness(.6) saturate(.8) drop-shadow(0 6px 8px rgba(0,0,0,.5))}
+.uhand.wait .ucard{filter:brightness(.85) drop-shadow(0 6px 8px rgba(0,0,0,.5))}
+.uhand .ucard.lifted{opacity:.25}
+.ughost{position:fixed;z-index:60;pointer-events:none;filter:drop-shadow(0 18px 22px rgba(0,0,0,.55));will-change:transform}
+.ughost svg{width:100%;height:100%;display:block}
+.ughost.over{filter:drop-shadow(0 0 14px rgba(242,196,107,.9)) drop-shadow(0 18px 22px rgba(0,0,0,.55))}
 .uhand .ucard:focus-visible{outline:3px solid var(--mint);outline-offset:2px;border-radius:8px}
 .ucolors{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%}
 .ucol{min-height:72px;border:none;border-radius:18px;background:var(--c);color:#1c1530;font:inherit;font-family:var(--display);font-size:22px;cursor:pointer;box-shadow:inset 0 -6px 0 rgba(0,0,0,.18)}
@@ -554,6 +559,6 @@ body:has(#chatFab) main{padding-bottom:78px}
   <main id="view"><div class="spinner" aria-label="جاري التحميل"></div></main>
 </div>
 <noscript><section style="padding:24px"><h1>جلسة: ألعاب الجلسات مع أصحابك</h1><p>ألعاب الجلسات مع الشلة من جوالك: ارسم وخمّن، الدخيل، أونو، مين قالها، صح ولا خطأ، ومين أكثر واحد. أونلاين أو بجوال واحد، ومجانية.</p><p>شغّل الجافاسكربت عشان تلعب.</p></section></noscript>
-<script type="module" src="./app.js?v=32"></script>
+<script type="module" src="./app.js?v=33"></script>
 </body>
 </html>

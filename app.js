@@ -13,7 +13,7 @@ import {
 import { firebaseConfig, authUrl } from "./firebase-config.js?v=27";
 import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=27";
 import { ICONS } from "./icons.js?v=27";
-import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=27";
+import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, TABLE_SVG, seatSpots, isWild, cColor, cVal } from "./uno.js?v=28";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -703,7 +703,6 @@ function unoApply(u, mv, uno, st) {
   if (mv.type === "play") {
     const idx = hand.indexOf(mv.card);
     if (idx < 0 || !canPlay(mv.card, uno.top, uno.color)) return null;
-    if (uno.drew === u && mv.card !== uno.drewCard) return null;
     hand.splice(idx, 1); changed.add(u);
     st.discard.push(uno.top); uno.top = mv.card;
     uno.color = isWild(mv.card) ? (UCOLORS[mv.color] ? mv.color : "r") : cColor(mv.card);
@@ -813,6 +812,44 @@ async function unoKick() {
   const uno = unoState(); if (!uno || !isHost()) return;
   const u = uno.order[uno.turn];
   await unoProcess([{ u, mv: { round: room.round, seq: (UNO.processed[u] || 0) + 1, type: "kick" } }]);
+}
+// سحب الورقة بالإصبع وإفلاتها في الوسط
+function unoDragCard(b, tryPlay) {
+  b.addEventListener("pointerdown", e => {
+    if (e.button > 0) return;
+    const r0 = b.getBoundingClientRect(), sx = e.clientX, sy = e.clientY;
+    let ghost = null;
+    const move = ev => {
+      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      if (!ghost) {
+        if (Math.hypot(dx, dy) < 8) return;
+        ghost = document.createElement("div"); ghost.className = "ughost"; ghost.innerHTML = b.innerHTML;
+        ghost.style.cssText = `left:${r0.left}px;top:${r0.top}px;width:${r0.width}px;height:${r0.height}px`;
+        document.body.appendChild(ghost); b.classList.add("lifted");
+      }
+      ev.preventDefault();
+      ghost.style.transform = `translate(${dx}px,${dy}px) rotate(${Math.max(-14, Math.min(14, dx / 10))}deg) scale(1.12)`;
+      const d = document.getElementById("uDisc")?.getBoundingClientRect();
+      ghost.classList.toggle("over", !!d && ev.clientX > d.left - 40 && ev.clientX < d.right + 40 && ev.clientY > d.top - 50 && ev.clientY < d.bottom + 50);
+    };
+    const up = ev => {
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up);
+      if (!ghost) return;
+      ui.unoDragged = true; setTimeout(() => ui.unoDragged = false, 50);
+      const d = document.getElementById("uDisc")?.getBoundingClientRect();
+      const inside = d && ev.clientX > d.left - 40 && ev.clientX < d.right + 40 && ev.clientY > d.top - 50 && ev.clientY < d.bottom + 50;
+      const ok = (inside || ev.clientY < sy - 110) && ev.type === "pointerup" && tryPlay(b.dataset.card);
+      if (ok && d) {
+        ghost.style.transition = "transform .22s ease-in, opacity .22s";
+        ghost.style.transform = `translate(${d.left + d.width / 2 - r0.left - r0.width / 2}px,${d.top + d.height / 2 - r0.top - r0.height / 2}px) rotate(-8deg) scale(.95)`;
+        ghost.style.opacity = "0"; setTimeout(() => ghost.remove(), 240);
+      } else {
+        ghost.style.transition = "transform .2s ease-out"; ghost.style.transform = "none";
+        setTimeout(() => { ghost.remove(); b.classList.remove("lifted"); }, 200);
+      }
+    };
+    window.addEventListener("pointermove", move, { passive: false }); window.addEventListener("pointerup", up); window.addEventListener("pointercancel", up);
+  });
 }
 function unoPickColor(card) {
   document.getElementById("uColor")?.remove();
@@ -2655,8 +2692,20 @@ const ROOM_VIEWS = {
     const spots = seatSpots(others.length);
     const col = UCOLORS[uno.color];
     const canDraw = myTurn && uno.drew !== me.uid && !waiting;
-    const playable = c => myTurn && !waiting && canPlay(c, uno.top, uno.color) && (uno.drew !== me.uid || c === uno.drewCard);
+    const playable = c => myTurn && !waiting && canPlay(c, uno.top, uno.color);
     const anyPlayable = myHand.some(playable);
+    // كومة اللعب: آخر كم ورقة تحت بعض بزوايا عشوائية مثل الواقع
+    if (!ui.unoTrail || ui.unoTrail.round !== room.round) ui.unoTrail = { round: room.round, list: [] };
+    const tr = ui.unoTrail.list;
+    if (!tr.length || tr[tr.length - 1].v !== uno.v && tr[tr.length - 1].c !== uno.top) tr.push({ c: uno.top, v: uno.v, r: ((uno.v * 47) % 34) - 17, x: ((uno.v * 29) % 14) - 7, y: ((uno.v * 13) % 10) - 5 });
+    else if (tr[tr.length - 1].c === uno.top) tr[tr.length - 1].v = uno.v;
+    if (tr.length > 4) tr.splice(0, tr.length - 4);
+    const under = tr.slice(0, -1), topT = tr[tr.length - 1];
+    // اليد على شكل مروحة مثل ما تمسك الأوراق
+    const ORD = { r: 0, y: 1, g: 2, b: 3, w: 4 }, VO = v => "0123456789SRDWF".indexOf(v);
+    const hand = myHand.map((c, i) => ({ c, i })).sort((p, q) => (ORD[cColor(p.c)] - ORD[cColor(q.c)]) || (VO(cVal(p.c)) - VO(cVal(q.c))));
+    const hn = hand.length, HW = Math.min(V.clientWidth || 360, 520) - 24, step = hn > 1 ? Math.min(46, (HW - 74) / (hn - 1)) : 0, da = Math.min(5, 40 / Math.max(hn, 1));
+    const fan = k => { const d = k - (hn - 1) / 2, r = d * da; return `--x:${(d * step).toFixed(1)}px;--r:${r.toFixed(2)}deg;--y:${(r * r * .22).toFixed(1)}px;z-index:${k + 1}`; };
     V.innerHTML = `<section class="uno">
       ${statusBar()}
       <div class="utable" style="--cur:${col.fill}">
@@ -2665,17 +2714,17 @@ const ROOM_VIEWS = {
           ${avatar(pname(u), prof(u)?.photo, 40)}<span class="us-n" dir="ltr">${esc(pname(u))}</span><span class="us-c">🃏 ${ar(uno.counts[u] || 0)}</span></button>`).join("")}
         <div class="ucenter">
           <button class="upile ${canDraw ? "go" : ""}" id="uDraw" ${canDraw ? "" : "disabled"} aria-label="اسحب ورقة">${cardSVG(null)}<span class="up-n">${ar(uno.deck)}</span></button>
-          <div class="udisc" aria-label="الورقة اللي فوق: ${esc(cardName(uno.top))}"><span class="ring"></span><span class="ucard top" data-v="${uno.v}">${cardSVG(uno.top)}</span></div>
+          <div class="udisc" id="uDisc" aria-label="الورقة اللي فوق: ${esc(cardName(uno.top))}"><span class="ring"></span>${under.map(t => `<span class="ucard old" style="--r:${t.r}deg;--x:${t.x}px;--y:${t.y}px">${cardSVG(t.c)}</span>`).join("")}<span class="ucard top" data-v="${uno.v}" style="--r:${topT.r}deg;--x:${topT.x}px;--y:${topT.y}px">${cardSVG(uno.top)}</span></div>
         </div>
         <div class="udir ${uno.dir < 0 ? "rev" : ""}" aria-hidden="true">⟳</div>
       </div>
       <div class="ubar ${myTurn ? "mine" : ""}">
-        <span class="ub-t">${uno.winner ? "" : myTurn ? (waiting ? "لحظة…" : uno.drew === me.uid ? "سحبت ورقة تنلعب. العبها أو عدّي" : anyPlayable ? "دورك! اختر ورقة 👇" : "دورك! ما عندك ورقة تنلعب، اسحب من الكومة") : `دور ${at(pname(turnU))}`}</span>
+        <span class="ub-t">${uno.winner ? "" : myTurn ? (waiting ? "لحظة…" : uno.drew === me.uid ? "سحبت ورقة. العب ورقة أو عدّي" : anyPlayable ? "دورك! حط ورقة في الوسط 👇" : "دورك! ما عندك ورقة تنلعب، اسحب من الكومة") : `مو دورك، ننتظر ${at(pname(turnU))}`}</span>
         <span class="ub-col"><i style="background:${col.fill}"></i>${col.name}</span>
       </div>
       <p class="ulast">${esc(uno.last || "")}</p>
       ${uno.flash && uno.flash !== me.uid ? `<div class="uno-call pop">أونو! 🔥 ${at(pname(uno.flash))}</div>` : uno.flash === me.uid ? `<div class="uno-call pop">أونو! 🔥 باقي لك ورقة</div>` : ""}
-      <div class="uhand" id="uHand">${myHand.map((c, i) => `<button class="ucard ${playable(c) ? "ok" : myTurn ? "no" : ""}" data-card="${esc(c)}" data-i="${i}" ${playable(c) ? "" : "aria-disabled=\"true\""} aria-label="${esc(cardName(c))}">${cardSVG(c)}</button>`).join("")}</div>
+      <div class="uhand ${myTurn ? "" : "wait"}" id="uHand">${hand.map(({ c, i }, k) => `<button class="ucard ${playable(c) ? "ok" : myTurn ? "no" : ""}" style="${fan(k)}" data-card="${esc(c)}" data-i="${i}" ${playable(c) ? "" : "aria-disabled=\"true\""} aria-label="${esc(cardName(c))}">${cardSVG(c)}</button>`).join("")}</div>
       <p class="hint center">عندك ${ar(myHand.length)} ${myHand.length === 1 ? "ورقة" : "أوراق"}</p>
       <div class="foot">
         ${myTurn && uno.drew === me.uid && !waiting ? `<button class="btn ghost" id="uPass">عدّي</button>` : ""}
@@ -2685,11 +2734,17 @@ const ROOM_VIEWS = {
     on("uDraw", "click", () => unoMove("draw"));
     on("uPass", "click", () => unoMove("pass"));
     on("uKick", "click", e => { if (confirmTap(e.currentTarget, "يسحب ورقة وينتقل الدور، متأكد؟")) unoKick(); });
-    V.querySelectorAll("[data-card]").forEach(b => b.addEventListener("click", () => {
-      const c = b.dataset.card;
-      if (!playable(c)) { if (myTurn && !waiting) toast("هذي الورقة ما تنلعب الحين"); return; }
+    const tryPlay = c => {
+      if (!myTurn) { toast(uno.winner ? "انتهت اللعبة" : "مو دورك، ننتظر @" + pname(turnU)); return false; }
+      if (waiting) return false;
+      if (!playable(c)) { toast("هذي الورقة ما تنلعب على اللي في الوسط"); return false; }
       if (isWild(c)) unoPickColor(c); else unoMove("play", c);
-    }));
+      return true;
+    };
+    V.querySelectorAll("[data-card]").forEach(b => {
+      b.addEventListener("click", () => { if (ui.unoDragged) { ui.unoDragged = false; return; } tryPlay(b.dataset.card); });
+      unoDragCard(b, tryPlay);
+    });
     onAll("[data-pf]", b => showProfile(b.dataset.pf));
   },
 
