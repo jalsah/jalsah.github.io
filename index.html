@@ -43,7 +43,10 @@ h2{font-family:var(--display);font-weight:400;font-size:28px;line-height:1.25;ma
 .mode b{font-family:var(--display);font-weight:400;font-size:22px}
 .mode > span:last-child{color:var(--muted);font-size:14px;line-height:1.5}
 .mode.joinbox{cursor:default}
-.mode.joinbox .row{min-width:0}
+.mode.joinbox .row{min-width:0;grid-column:1/-1}
+.mode.joinbox .btn.small{min-width:76px}
+.btn.small{white-space:nowrap}
+.crown{font-size:.85em;margin-inline-start:2px}
 .badge{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:var(--rose);color:var(--bg);font-family:var(--body);font-size:13px;font-weight:700;margin-inline-start:6px;vertical-align:middle}
 .tag{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:1px 10px;color:var(--muted);white-space:nowrap}
 .field{display:flex;flex-direction:column;gap:8px}

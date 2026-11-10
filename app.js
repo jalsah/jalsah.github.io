@@ -37,6 +37,10 @@ function confirmTap(btn, label) {
 }
 
 const USER_RE = /^[a-z0-9_-]{3,20}$/;
+// صاحب اللعبة: يطلع جنب يوزره تاج
+const OWNER = "b_1";
+const RESERVED = new Set(["admin", "owner", "jalsah", "jalsa", "support", "official", "moderator", "mod", "staff", "team"]);
+const at = name => `@${esc(name)}${name === OWNER ? ' <span class="crown" title="صاحب اللعبة" aria-label="صاحب اللعبة">👑</span>' : ""}`;
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const ONLINE_MS = 150000;
 const INVITE_MS = 15 * 60 * 1000;
@@ -115,7 +119,7 @@ function renderHeader() {
   if (back) h += `<button class="pill" id="hBack">رجوع</button>`;
   if (me?.username && !back && screen !== "room") {
     h += `<button class="pill" id="hFriends">الأصدقاء${reqIn.length ? `<span class="badge">${ar(reqIn.length)}</span>` : ""}</button>`;
-    h += `<button class="pill" id="hMe" dir="ltr">@${esc(me.username)}</button>`;
+    h += `<button class="pill" id="hMe" dir="ltr">${at(me.username)}</button>`;
   }
   HDR.innerHTML = h;
   HDR.querySelector("#hRoom")?.addEventListener("click", () => go("room"));
@@ -130,7 +134,7 @@ function renderBanner() {
     return now - t < INVITE_MS && i.code !== roomCode;
   });
   BANNER.innerHTML = list.map(i => `
-    <div class="inv"><span class="txt"><span dir="ltr">@${esc(i.fromName)}</span> عزمك على غرفة</span>
+    <div class="inv"><span class="txt"><span dir="ltr">${at(i.fromName)}</span> عزمك على غرفة</span>
     <button class="btn small" data-ij="${esc(i.id)}">ادخل</button>
     <button class="btn small ghost" data-ix="${esc(i.id)}">تجاهل</button></div>`).join("");
   BANNER.querySelectorAll("[data-ij]").forEach(b => b.addEventListener("click", async () => {
@@ -415,12 +419,13 @@ VIEWS.username = () => {
     if (!v) { msg.className = "hint"; msg.textContent = "حروف إنجليزية صغيرة وأرقام و _ و - ، من ٣ إلى ٢٠ خانة، بدون مسافات."; }
     else if (/[^a-z0-9_-]/.test(v)) { msg.className = "hint msg-bad"; msg.textContent = "مسموح بس: a-z و 0-9 و _ و -"; }
     else if (v.length < 3) { msg.className = "hint msg-bad"; msg.textContent = "اليوزر لازم يكون ٣ خانات أو أكثر"; }
+    else if (RESERVED.has(v)) { btn.disabled = true; msg.className = "hint msg-bad"; msg.textContent = "هذا اليوزر محجوز، جرّب غيره"; }
     else { msg.className = "hint msg-ok"; msg.textContent = "@" + v + " شكله حلو"; }
   };
   inp.addEventListener("input", check); check();
   btn.addEventListener("click", async () => {
     const name = inp.value;
-    if (!USER_RE.test(name)) return;
+    if (!USER_RE.test(name) || RESERVED.has(name)) return;
     btn.disabled = true; btn.textContent = "لحظة…";
     try {
       await claimUsername(name);
@@ -455,7 +460,7 @@ VIEWS.home = () => {
 
 VIEWS.profile = () => {
   V.innerHTML = `<section>
-    <div><h2 dir="ltr" style="text-align:right">@${esc(me.username)}</h2><p class="lead">هذا يوزرك. أرسله لأصحابك عشان يضيفونك.</p></div>
+    <div><h2 dir="ltr" style="text-align:right">${at(me.username)}</h2><p class="lead">هذا يوزرك. أرسله لأصحابك عشان يضيفونك.</p></div>
     <button class="btn ghost" id="copy">انسخ يوزري</button>
     <div class="foot"><button class="btn ghost" id="out">تسجيل خروج</button></div></section>`;
   on("copy", "click", () => copyText("@" + me.username, "انسخ اليوزر"));
@@ -466,21 +471,21 @@ VIEWS.friends = () => {
   const list = [...friends.entries()].sort((a, b) => (isOnline(b[1]) - isOnline(a[1])) || a[1].username.localeCompare(b[1].username));
   V.innerHTML = `<section>
     <h2>الأصدقاء</h2>
-    <p class="lead">يوزرك <b dir="ltr">@${esc(me.username)}</b> <button class="link" id="copyMe">انسخ</button></p>
+    <p class="lead">يوزرك <b dir="ltr">${at(me.username)}</b> <button class="link" id="copyMe">انسخ</button></p>
     <form class="addf" id="addF"><div class="uinput"><span>@</span><input id="addName" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="يوزر صديقك" aria-label="يوزر صديقك"></div><button class="btn small">أضف</button></form>
     ${reqIn.length ? `<div class="field"><span class="label">طلبات صداقة</span><div class="list">${reqIn.map(r => `
-      <div class="li"><span class="nm" dir="ltr">@${esc(r.fromName)}</span>
+      <div class="li"><span class="nm" dir="ltr">${at(r.fromName)}</span>
       <button class="btn small good" data-acc="${esc(r.from)}">قبول</button>
       <button class="btn small ghost" data-dec="${esc(r.from)}">رفض</button></div>`).join("")}</div></div>` : ""}
     <div class="field"><span class="label">أصحابك (${ar(list.length)})</span>
     ${list.length ? `<div class="list">${list.map(([uid, f]) => `
       <div class="li"><i class="dot ${isOnline(f) ? "on" : ""}" title="${isOnline(f) ? "أونلاين" : "مو أونلاين"}"></i>
-      <span class="nm" dir="ltr">@${esc(f.username)}</span>
+      <span class="nm" dir="ltr">${at(f.username)}</span>
       ${roomCode && !room?.players?.[uid] ? `<button class="btn small" data-inv="${esc(uid)}">اعزمه</button>` : ""}
       <button class="btn small ghost" data-rm="${esc(uid)}">حذف</button></div>`).join("")}</div>`
       : `<p class="hint">ما عندك أصدقاء للحين. اكتب يوزر صديقك فوق وأرسل له طلب.</p>`}</div>
     ${reqOut.length ? `<div class="field"><span class="label">طلبات أرسلتها</span><div class="list">${reqOut.map(r => `
-      <div class="li"><span class="nm" dir="ltr">@${esc(r.toName)}</span><span class="tag">ينتظر</span>
+      <div class="li"><span class="nm" dir="ltr">${at(r.toName)}</span><span class="tag">ينتظر</span>
       <button class="btn small ghost" data-can="${esc(r.to)}">إلغاء</button></div>`).join("")}</div></div>` : ""}
   </section>`;
   on("copyMe", "click", () => copyText("@" + me.username, "انسخ اليوزر"));
@@ -500,17 +505,17 @@ function scoreBoard(ids) {
   const rows = ids.map(u => ({ u, pts: room.scores?.[u] || 0 })).sort((a, b) => b.pts - a.pts);
   const top = rows[0]?.pts || 0;
   return `<div class="board">${rows.map((r, k) => `<div class="r ${r.pts > 0 && r.pts === top ? "top" : ""}">
-    <span class="rank">${ar(k + 1)}</span><span class="nm" dir="ltr">@${esc(pname(r.u))}</span><span class="pts">${ar(r.pts)}</span></div>`).join("")}</div>`;
+    <span class="rank">${ar(k + 1)}</span><span class="nm" dir="ltr">${at(pname(r.u))}</span><span class="pts">${ar(r.pts)}</span></div>`).join("")}</div>`;
 }
 function tallyList(tally, ids) {
   const rows = ids.map(u => ({ u, n: tally[u] || 0 })).sort((a, b) => b.n - a.n);
   const max = Math.max(1, ...rows.map(r => r.n));
-  return `<div class="tally">${rows.map(r => `<div class="t"><span dir="ltr" style="text-align:right">@${esc(pname(r.u))}</span><span class="n">${ar(r.n)}</span>
+  return `<div class="tally">${rows.map(r => `<div class="t"><span dir="ltr" style="text-align:right">${at(pname(r.u))}</span><span class="n">${ar(r.n)}</span>
     <div class="bar"><i style="width:${(r.n / max) * 100}%"></i></div></div>`).join("")}</div>`;
 }
 function voteList(ids, mine) {
   return `<div class="list">${ids.map(u => `<button class="vote" data-vote="${esc(u)}" aria-pressed="${mine === u}">
-    <span class="nm" dir="ltr">@${esc(pname(u))}${u === me.uid ? " (أنت)" : ""}</span>${mine === u ? `<span class="tag">صوتك</span>` : ""}</button>`).join("")}</div>`;
+    <span class="nm" dir="ltr">${at(pname(u))}${u === me.uid ? " (أنت)" : ""}</span>${mine === u ? `<span class="tag">صوتك</span>` : ""}</button>`).join("")}</div>`;
 }
 function votedCount() {
   const ps = roundPlayers();
@@ -537,7 +542,7 @@ const ROOM_VIEWS = {
       <div class="codebox"><span class="label">كود الغرفة</span><span class="code" dir="ltr">${esc(roomCode)}</span>
         <button class="btn small ghost" id="copyLink">انسخ رابط الدعوة</button></div>
       <div class="field"><span class="label">اللاعبين (${ar(n)} من ١٢)</span><div class="list">${ps.map(u => `
-        <div class="li"><span class="nm" dir="ltr">@${esc(pname(u))}</span>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}</div>`).join("")}</div></div>
+        <div class="li"><span class="nm" dir="ltr">${at(pname(u))}</span>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}</div>`).join("")}</div></div>
       ${host ? `
         <div class="field"><span class="label">اللعبة</span><div class="chips">${Object.entries(GAMES).map(([k, t]) => `<button class="chip" data-game="${k}" aria-pressed="${room.game === k}">${t}</button>`).join("")}</div></div>
         ${room.game === "imp" ? `
@@ -548,7 +553,7 @@ const ROOM_VIEWS = {
           ${n < 7 ? `<p class="hint">دخيلين يحتاجون ٧ لاعبين أو أكثر.</p>` : ""}</div>` : ""}`
       : `<p class="hint center">اللعبة: <b>${GAMES[room.game]}</b>${room.game === "imp" ? ` · الفئة: <b>${esc(room.cat)}</b>` : ""}<br>ننتظر المضيف يبدأ.</p>`}
       ${onlineFriends.length ? `<div class="field"><span class="label">أصحابك الأونلاين</span><div class="list">${onlineFriends.map(([u, f]) => `
-        <div class="li"><i class="dot on"></i><span class="nm" dir="ltr">@${esc(f.username)}</span><button class="btn small" data-inv="${esc(u)}">اعزمه</button></div>`).join("")}</div></div>` : ""}
+        <div class="li"><i class="dot on"></i><span class="nm" dir="ltr">${at(f.username)}</span><button class="btn small" data-inv="${esc(u)}">اعزمه</button></div>`).join("")}</div></div>` : ""}
       ${hasScores ? `<div class="field"><span class="label">النقاط</span>${scoreBoard(ps)}</div>` : ""}
       <div class="foot">
         ${host ? `<button class="btn" id="start" ${n < 3 ? "disabled" : ""}>${n < 3 ? "تحتاجون ٣ لاعبين على الأقل" : "ابدأ"}</button>` : ""}
@@ -581,7 +586,7 @@ const ROOM_VIEWS = {
   discuss() {
     const mine = secret && secret.round === room.round ? secret : null;
     V.innerHTML = `<section>${statusBar()}
-      <div class="card pop"><span class="eyebrow">يبدأ الأسئلة</span><span class="big" dir="ltr">@${esc(pname(room.starter))}</span>
+      <div class="card pop"><span class="eyebrow">يبدأ الأسئلة</span><span class="big" dir="ltr">${at(pname(room.starter))}</span>
       <span class="hint">كل واحد يسأل اللي بعده سؤال عن الكلمة بدون ما يفضحها. تكلموا بالصوت أو وأنتم قاعدين.</span></div>
       ${mine ? `<button class="btn ghost" id="peek">${ui.peek ? (mine.role === "imp" ? "أنت الدخيل" : "كلمتك: " + esc(mine.word)) : "شف كلمتك مرة ثانية"}</button>` : ""}
       <div class="foot">${isHost() ? `<button class="btn danger" id="next">ابدأوا التصويت</button>` : `<p class="hint center">المضيف يفتح التصويت لما تخلصون.</p>`}${leaveBtn()}</div></section>`;
@@ -604,7 +609,7 @@ const ROOM_VIEWS = {
     V.innerHTML = `<section>${statusBar()}
       <div class="card ${r.caught ? "safe" : "imposter"} pop">
         <span class="eyebrow">${r.caught ? "مسكتوا الدخيل!" : "الدخيل نجا!"}</span>
-        <span class="big" dir="ltr">${imps.map(u => "@" + esc(pname(u))).join(" و ")}</span>
+        <span class="big" dir="ltr">${imps.map(u => at(pname(u))).join(" و ")}</span>
         <span class="hint">الكلمة كانت: <b>${esc(r.word)}</b>${r.guessed ? " · الدخيل خمّنها" : ""}</span></div>
       <div class="field"><span class="label">الأصوات</span>${tallyList(r.tally || {}, ps)}</div>
       <div class="field"><span class="label">النقاط</span>${scoreBoard(order())}</div>
@@ -634,7 +639,7 @@ const ROOM_VIEWS = {
     const tops = ps.filter(u => max > 0 && tally[u] === max);
     V.innerHTML = `<section>${statusBar()}
       <div class="card prompt pop" style="min-height:180px"><span class="eyebrow">${esc(room.prompt)}؟</span>
-      <span class="big" dir="ltr">${tops.length ? tops.map(u => "@" + esc(pname(u))).join(" و ") : "محد"}</span></div>
+      <span class="big" dir="ltr">${tops.length ? tops.map(u => at(pname(u))).join(" و ") : "محد"}</span></div>
       ${tallyList(tally, ps)}
       <div class="foot">${isHost() ? `<button class="btn" id="again">سؤال ثاني</button><button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يجيب السؤال الجاي.</p>`}
       ${leaveBtn()}</div></section>`;
