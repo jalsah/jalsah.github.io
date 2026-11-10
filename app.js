@@ -9,9 +9,9 @@ import {
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
   getCountFromServer, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, authUrl } from "./firebase-config.js?v=11";
-import { WORDS, MOST, FIVE } from "./content.js?v=11";
-import { ICONS } from "./icons.js?v=11";
+import { firebaseConfig, authUrl } from "./firebase-config.js?v=12";
+import { WORDS, MOST, FIVE } from "./content.js?v=12";
+import { ICONS } from "./icons.js?v=12";
 
 /* ================= helpers ================= */
 const ar = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
@@ -47,6 +47,17 @@ const OWNER = "b_1";
 const RESERVED = new Set(["admin", "owner", "jalsah", "jalsa", "support", "official", "moderator", "mod", "staff", "team"]);
 const isOwner = () => String(me?.username || "").toLowerCase() === OWNER;
 const at = name => `@${esc(name)}${String(name).toLowerCase() === OWNER ? ' <span class="crown" title="صاحب اللعبة" aria-label="صاحب اللعبة">👑</span>' : ""}`;
+// صورة البروفايل: صورة اللاعب، أو أول حرف من يوزره بلون ثابت
+const AV_COLORS = ["#ef6f6c", "#f2b134", "#74d6b8", "#8f7bea", "#5fb0f0", "#f08a24", "#e66aa8", "#4fc48a"];
+const avColor = name => { let h = 0; for (const c of String(name || "")) h = (h * 31 + c.charCodeAt(0)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; };
+const safePhoto = p => typeof p === "string" && p.startsWith("data:image/jpeg;base64,") ? p : "";
+function avatar(name, photo, size = 40, label) {
+  const p = safePhoto(photo);
+  const st = `width:${size}px;height:${size}px;font-size:${Math.round(size * .44)}px`;
+  if (p) return `<span class="av" style="${st}"><img src="${esc(p)}" alt=""></span>`;
+  const ch = label || String(name || "?").replace(/^@/, "").charAt(0).toUpperCase() || "?";
+  return `<span class="av" style="${st};background:${avColor(name)}" aria-hidden="true">${esc(ch)}</span>`;
+}
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const ONLINE_MS = 150000;
 const INVITE_MS = 15 * 60 * 1000;
@@ -80,6 +91,18 @@ function off(k) { const u = subs.get(k); if (u) { u(); subs.delete(k); } }
 function offAll() { [...subs.keys()].forEach(off); }
 
 let announce = null, banned = false;
+const profiles = new Map();   // uid -> { username, photo, bio }
+const profWant = new Set();
+function prof(uid) {
+  if (uid === me?.uid) return { username: me.username, photo: me.photo, bio: me.bio };
+  const f = friends.get(uid); if (f && f.username !== "…") return f;
+  if (profiles.has(uid)) return profiles.get(uid);
+  if (db && me && !profWant.has(uid)) {
+    profWant.add(uid);
+    getDoc(doc(db, "users", uid)).then(s => { if (s.exists()) { profiles.set(uid, s.data()); refresh(); } }).catch(() => {});
+  }
+  return null;
+}
 let pendingJoin = (new URLSearchParams(location.search).get("r") || "").toUpperCase() || null;
 
 const isOnline = f => { const t = f?.lastSeen?.toMillis?.(); return !!t && Date.now() - t < ONLINE_MS; };
@@ -126,9 +149,9 @@ function renderHeader() {
   const back = BACK[screen];
   if (back) h += `<button class="pill" id="hBack">رجوع</button>`;
   if (me?.username && !back && screen !== "room") {
-    h += `<button class="pill" id="hFriends">الأصدقاء${reqIn.length ? `<span class="badge">${ar(reqIn.length)}</span>` : ""}</button>`;
-    h += `<button class="pill" id="hMe" dir="ltr">${at(me.username)}</button>`;
-    if (isOwner()) h += `<button class="pill hot" id="hAdmin">لوحة المالك</button>`;
+    if (isOwner()) h += `<button class="pill hot" id="hAdmin" aria-label="لوحة المالك">👑</button>`;
+    h += `<button class="pill add" id="hFriends"><span aria-hidden="true">+</span> أضف صديق${reqIn.length ? `<span class="badge">${ar(reqIn.length)}</span>` : ""}</button>`;
+    h += `<button class="me-btn" id="hMe" aria-label="بروفايلي">${avatar(me.username, me.photo, 38)}</button>`;
   }
   HDR.innerHTML = h;
   HDR.querySelector("#hRoom")?.addEventListener("click", () => go("room"));
@@ -241,7 +264,7 @@ function startGlobal() {
     for (const uid of ids) if (!subs.has("f:" + uid)) {
       friends.set(uid, { username: "…", lastSeen: null });
       sub("f:" + uid, onSnapshot(doc(db, "users", uid), s => {
-        if (s.exists()) friends.set(uid, { username: s.data().username, lastSeen: s.data().lastSeen });
+        if (s.exists()) { const d = s.data(); friends.set(uid, { username: d.username, lastSeen: d.lastSeen, photo: d.photo || "", bio: d.bio || "" }); }
         refresh();
       }));
     }
@@ -780,28 +803,126 @@ VIEWS.username = () => {
 };
 
 VIEWS.home = () => {
-  const online = [...friends.values()].filter(isOnline).length;
+  const onl = [...friends.entries()].filter(([, f]) => isOnline(f));
   V.innerHTML = `<section>
-    <div><h2>وش نلعب الليلة؟</h2>
-    <p class="lead">${online ? `${ar(online)} من أصحابك أونلاين الحين.` : "العب أونلاين مع أصحابك، أو بجوال واحد."}</p></div>
-    <div class="modes">
-      <button class="mode" id="create"><span class="glyph">${ICONS.create}</span><b>غرفة جديدة</b><span>سوّ غرفة واعزم أصحابك، كل واحد يلعب من جواله.</span></button>
-      <div class="mode joinbox"><span class="glyph">${ICONS.join}</span><b>ادخل بكود</b>
-        <form class="row" id="joinF"><input id="code" dir="ltr" maxlength="5" placeholder="K7M2P" autocomplete="off" autocapitalize="characters" aria-label="كود الغرفة"><button class="btn small">دخول</button></form></div>
-      <button class="mode" id="fr"><span class="glyph">${ICONS.friends}</span><b>الأصدقاء${reqIn.length ? `<span class="badge">${ar(reqIn.length)}</span>` : ""}</b><span>أضف أصحابك بيوزراتهم وشوف مين أونلاين.</span></button>
-      <button class="mode" id="local"><span class="glyph">${ICONS.local}</span><b>بجوال واحد</b><span>الدخيل، مين أكثر واحد، خمسة بعشر. مرّروا الجوال بينكم.</span></button>
-    </div></section>`;
+    <div class="hello">
+      <button class="hello-av" id="hProf" aria-label="بروفايلي">${avatar(me.username, me.photo, 56)}</button>
+      <div class="hello-t"><span class="hint">هلا والله</span><b dir="ltr">${at(me.username)}</b></div>
+    </div>
+
+    <h2>وش نلعب الليلة؟</h2>
+    <div class="big2">
+      <button class="bigbtn create" id="create"><span class="bb-ic">${ICONS.create}</span><b>${roomCode ? "ارجع لغرفتك" : "غرفة جديدة"}</b><span>واعزم أصحابك</span></button>
+      <button class="bigbtn join" id="joinBtn"><span class="bb-ic">${ICONS.join}</span><b>ادخل بكود</b><span>عندك كود غرفة؟</span></button>
+    </div>
+    <form class="joinrow" id="joinF" ${ui.showJoin ? "" : "hidden"}>
+      <input id="code" dir="ltr" maxlength="5" placeholder="K7M2P" autocomplete="off" autocapitalize="characters" aria-label="كود الغرفة">
+      <button class="btn small">دخول</button>
+    </form>
+
+    ${onl.length ? `<div class="field"><span class="label">أونلاين الحين (${ar(onl.length)})</span>
+      <div class="onl">${onl.map(([u, f]) => `<button class="onl-i" data-pf="${esc(u)}">${avatar(f.username, f.photo, 48)}<i class="dot on"></i><span dir="ltr">${esc(f.username)}</span></button>`).join("")}</div></div>` : ""}
+
+    <button class="mode wide" id="local"><span class="glyph">${ICONS.local}</span><b>بجوال واحد</b><span>الدخيل، مين أكثر واحد، خمسة بعشر. مرّروا الجوال بينكم.</span></button>
+  </section>`;
+  on("hProf", "click", () => go("profile"));
   on("create", "click", () => roomCode ? go("room") : createRoom());
+  on("joinBtn", "click", () => { ui.showJoin = true; const f = document.getElementById("joinF"); f.hidden = false; document.getElementById("code").focus(); });
   on("joinF", "submit", e => { e.preventDefault(); joinRoom(document.getElementById("code").value); });
-  on("fr", "click", () => go("friends"));
+  onAll("[data-pf]", b => showProfile(b.dataset.pf));
   on("local", "click", () => go("local"));
 };
 
+// بطاقة بروفايل لاعب ثاني
+function showProfile(uid) {
+  const p = prof(uid); if (!p) return;
+  document.getElementById("pfModal")?.remove();
+  const el = document.createElement("div");
+  el.id = "pfModal"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true");
+  const f = friends.get(uid);
+  el.innerHTML = `<div class="sheet">
+    ${avatar(p.username, p.photo, 96)}
+    <b class="pf-name" dir="ltr">${at(p.username)}</b>
+    ${f ? `<span class="hint">${isOnline(f) ? "🟢 أونلاين" : "مو أونلاين"}</span>` : ""}
+    ${p.bio ? `<p class="pf-bio">${esc(p.bio)}</p>` : `<p class="hint">ما كتب نبذة للحين.</p>`}
+    <div class="row">
+      ${f && roomCode && !room?.players?.[uid] ? `<button class="btn" id="pfInv">اعزمه لغرفتك</button>` : ""}
+      <button class="btn ghost" id="pfClose">سكّر</button>
+    </div></div>`;
+  document.body.appendChild(el);
+  const close = () => el.remove();
+  el.addEventListener("click", e => { if (e.target === el) close(); });
+  el.querySelector("#pfClose").addEventListener("click", close);
+  el.querySelector("#pfInv")?.addEventListener("click", () => { sendInvite(uid); close(); });
+  el.querySelector("#pfClose").focus({ preventScroll: true });
+}
+
+// نصغّر الصورة لمربع ١٦٠ بكسل، عشان تنحفظ مجانًا داخل قاعدة البيانات
+async function shrinkPhoto(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+    const S = 160, c = document.createElement("canvas"); c.width = c.height = S;
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    c.getContext("2d").drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, S, S);
+    let q = .82, out = c.toDataURL("image/jpeg", q);
+    while (out.length > 60000 && q > .4) { q -= .12; out = c.toDataURL("image/jpeg", q); }
+    return out;
+  } finally { URL.revokeObjectURL(url); }
+}
+
 VIEWS.profile = () => {
+  const draft = ui.bioDraft ?? me.bio ?? "";
   V.innerHTML = `<section>
-    <div><h2 dir="ltr" style="text-align:right">${at(me.username)}</h2><p class="lead">هذا يوزرك. أرسله لأصحابك عشان يضيفونك.</p></div>
-    <button class="btn ghost" id="copy">انسخ يوزري</button>
+    <div class="pf-head">
+      <div class="pf-av">${avatar(me.username, me.photo, 112)}
+        <label class="pf-cam" for="photoIn" aria-label="غيّر الصورة">📷</label>
+        <input type="file" id="photoIn" accept="image/*" hidden>
+      </div>
+      <b class="pf-name" dir="ltr">${at(me.username)}</b>
+      <div class="row pf-acts">
+        <label class="btn small ghost" for="photoIn">${me.photo ? "غيّر الصورة" : "أضف صورة"}</label>
+        ${me.photo ? `<button class="btn small ghost" id="rmPhoto">شيل الصورة</button>` : ""}
+      </div>
+    </div>
+
+    <div class="field"><label class="label" for="bio">نبذة عنك (اختياري)</label>
+      <textarea class="txt" id="bio" rows="3" maxlength="120" placeholder="مثال: ملك الدخيل 🕵️ ما أحد يكشفني">${esc(draft)}</textarea>
+      <div class="row-h"><span class="hint" id="bioCount">${ar(draft.length)} / ١٢٠</span>
+      <button class="btn small" id="saveBio" ${draft === (me.bio || "") ? "disabled" : ""}>احفظ</button></div>
+    </div>
+
+    <div class="field"><span class="label">يوزرك</span>
+      <div class="li"><span class="nm" dir="ltr">@${esc(me.username)}</span><button class="btn small ghost" id="copy">انسخ</button></div>
+      <p class="hint">أرسله لأصحابك عشان يضيفونك.</p></div>
+
     <div class="foot"><button class="btn ghost" id="out">تسجيل خروج</button></div></section>`;
+  const bio = document.getElementById("bio"), save = document.getElementById("saveBio");
+  bio.addEventListener("input", () => {
+    ui.bioDraft = bio.value;
+    document.getElementById("bioCount").textContent = ar(bio.value.length) + " / ١٢٠";
+    save.disabled = bio.value.trim() === (me.bio || "");
+  });
+  save.addEventListener("click", async () => {
+    const v = bio.value.trim().slice(0, 120);
+    save.disabled = true; save.textContent = "لحظة…";
+    try { await updateDoc(doc(db, "users", me.uid), { bio: v }); me.bio = v; ui.bioDraft = null; toast("انحفظت النبذة"); render(true); }
+    catch (e) { console.error(e); save.disabled = false; save.textContent = "احفظ"; toast("ما قدرنا نحفظ النبذة"); }
+  });
+  on("photoIn", "change", async e => {
+    const file = e.target.files?.[0]; if (!file) return;
+    if (!file.type.startsWith("image/")) return toast("اختر صورة");
+    toast("نرفع الصورة…");
+    try {
+      const data = await shrinkPhoto(file);
+      await updateDoc(doc(db, "users", me.uid), { photo: data });
+      me.photo = data; toast("تغيّرت الصورة 👌"); render(true);
+    } catch (err) { console.error(err); toast("ما قدرنا نرفع الصورة، جرّب صورة ثانية"); }
+  });
+  on("rmPhoto", "click", async e => {
+    if (!confirmTap(e.currentTarget, "متأكد؟")) return;
+    try { await updateDoc(doc(db, "users", me.uid), { photo: "" }); me.photo = ""; render(true); } catch (err) { console.error(err); }
+  });
   on("copy", "click", () => copyText("@" + me.username, "انسخ اليوزر"));
   on("out", "click", async e => { if (!confirmTap(e.currentTarget)) return; await leaveRoom(true); signOut(auth); });
 };
@@ -809,17 +930,17 @@ VIEWS.profile = () => {
 VIEWS.friends = () => {
   const list = [...friends.entries()].sort((a, b) => (isOnline(b[1]) - isOnline(a[1])) || a[1].username.localeCompare(b[1].username));
   V.innerHTML = `<section>
-    <h2>الأصدقاء</h2>
-    <p class="lead">يوزرك <b dir="ltr">${at(me.username)}</b> <button class="link" id="copyMe">انسخ</button></p>
+    <h2>أضف صديق</h2>
+    <p class="lead">اكتب يوزر صديقك. ويوزرك <b dir="ltr">@${esc(me.username)}</b> <button class="link" id="copyMe">انسخ</button></p>
     <form class="addf" id="addF"><div class="uinput"><span>@</span><input id="addName" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="يوزر صديقك" aria-label="يوزر صديقك"></div><button class="btn small">أضف</button></form>
     ${reqIn.length ? `<div class="field"><span class="label">طلبات صداقة</span><div class="list">${reqIn.map(r => `
-      <div class="li"><span class="nm" dir="ltr">${at(r.fromName)}</span>
+      <div class="li">${avatar(r.fromName, prof(r.from)?.photo, 36)}<span class="nm" dir="ltr">${at(r.fromName)}</span>
       <button class="btn small good" data-acc="${esc(r.from)}">قبول</button>
       <button class="btn small ghost" data-dec="${esc(r.from)}">رفض</button></div>`).join("")}</div></div>` : ""}
     <div class="field"><span class="label">أصحابك (${ar(list.length)})</span>
     ${list.length ? `<div class="list">${list.map(([uid, f]) => `
-      <div class="li"><i class="dot ${isOnline(f) ? "on" : ""}" title="${isOnline(f) ? "أونلاين" : "مو أونلاين"}"></i>
-      <span class="nm" dir="ltr">${at(f.username)}</span>
+      <div class="li"><button class="li-who" data-pf="${esc(uid)}"><span class="av-wrap">${avatar(f.username, f.photo, 40)}<i class="dot ${isOnline(f) ? "on" : ""}" title="${isOnline(f) ? "أونلاين" : "مو أونلاين"}"></i></span>
+      <span class="who-t"><span class="nm" dir="ltr">${at(f.username)}</span>${f.bio ? `<span class="who-bio">${esc(f.bio)}</span>` : ""}</span></button>
       ${roomCode && !room?.players?.[uid] ? `<button class="btn small" data-inv="${esc(uid)}">اعزمه</button>` : ""}
       <button class="btn small ghost" data-rm="${esc(uid)}">حذف</button></div>`).join("")}</div>`
       : `<p class="hint">ما عندك أصدقاء للحين. اكتب يوزر صديقك فوق وأرسل له طلب.</p>`}</div>
@@ -830,6 +951,7 @@ VIEWS.friends = () => {
   on("copyMe", "click", () => copyText("@" + me.username, "انسخ اليوزر"));
   on("addF", "submit", e => { e.preventDefault(); sendRequest(document.getElementById("addName").value); });
   onAll("[data-acc]", b => acceptRequest(b.dataset.acc));
+  onAll("[data-pf]", b => showProfile(b.dataset.pf));
   onAll("[data-dec]", b => deleteDoc(doc(db, "friendRequests", b.dataset.dec + "_" + me.uid)).catch(err));
   onAll("[data-can]", b => deleteDoc(doc(db, "friendRequests", me.uid + "_" + b.dataset.can)).catch(err));
   onAll("[data-inv]", b => { b.disabled = true; sendInvite(b.dataset.inv); });
@@ -854,7 +976,7 @@ function tallyList(tally, ids) {
 }
 function voteList(ids, mine) {
   return `<div class="list">${ids.map(u => `<button class="vote" data-vote="${esc(u)}" aria-pressed="${mine === u}">
-    <span class="nm" dir="ltr">${at(pname(u))}${u === me.uid ? " (أنت)" : ""}</span>${mine === u ? `<span class="tag">صوتك</span>` : ""}</button>`).join("")}</div>`;
+    ${avatar(pname(u), prof(u)?.photo, 32)}<span class="nm" dir="ltr">${at(pname(u))}${u === me.uid ? " (أنت)" : ""}</span>${mine === u ? `<span class="tag">صوتك</span>` : ""}</button>`).join("")}</div>`;
 }
 function votedCount() {
   const ps = roundPlayers();
@@ -881,7 +1003,7 @@ const ROOM_VIEWS = {
       <div class="codebox"><span class="label">كود الغرفة</span><span class="code" dir="ltr">${esc(roomCode)}</span>
         <button class="btn small ghost" id="copyLink">انسخ رابط الدعوة</button></div>
       <div class="field"><span class="label">اللاعبين (${ar(n)} من ١٢)</span><div class="list">${ps.map(u => `
-        <div class="li"><span class="nm" dir="ltr">${at(pname(u))}</span>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}</div>`).join("")}</div></div>
+        <div class="li"><button class="li-who" data-pf="${esc(u)}">${avatar(pname(u), prof(u)?.photo, 36)}<span class="nm" dir="ltr">${at(pname(u))}</span></button>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}</div>`).join("")}</div></div>
       ${host ? `
         <div class="field"><span class="label">اللعبة</span><div class="chips">${Object.entries(GAMES).map(([k, t]) => `<button class="chip" data-game="${k}" aria-pressed="${room.game === k}">${t}</button>`).join("")}</div></div>
         ${room.game === "imp" ? `
@@ -900,6 +1022,7 @@ const ROOM_VIEWS = {
       </div></section>`;
     on("copyLink", "click", () => copyText(location.origin + location.pathname + "?r=" + roomCode, "انسخ رابط الدعوة"));
     onAll("[data-inv]", b => { b.disabled = true; sendInvite(b.dataset.inv); });
+    onAll("[data-pf]", b => { if (b.dataset.pf !== me.uid) showProfile(b.dataset.pf); else go("profile"); });
     onAll("[data-game]", b => setRoom({ game: b.dataset.game }));
     onAll("[data-cat]", b => setRoom({ cat: b.dataset.cat }));
     onAll("[data-imps]", b => setRoom({ imps: Number(b.dataset.imps) }));
@@ -1001,7 +1124,12 @@ function stopLocalTimers() { clearInterval(L.timer); L.timer = null; if (L.raf) 
 VIEWS.local = () => {
   V.innerHTML = `<section>
     <div><h2>بجوال واحد</h2><p class="lead">مرّروا الجوال بينكم وخلوا السوالف تبدأ.</p></div>
-    <button class="roster" id="roster"><b>${ar(L.count)} لاعبين</b><span class="names">${esc(Array.from({ length: L.count }, (_, i) => lname(i)).join("، "))}</span><span class="edit">تعديل</span></button>
+    <div class="players-card">
+      <div class="row-h"><b class="pc-t">اللاعبين <span class="pc-n">${ar(L.count)}</span></b>
+      <button class="btn small" id="roster">✏️ عدّل اللاعبين</button></div>
+      <div class="pchips">${Array.from({ length: L.count }, (_, i) => `<span class="pchip">${avatar(lname(i), "", 30, (L.names[i] || "").trim() ? "" : ar(i + 1))}<span>${esc(lname(i))}</span></span>`).join("")}</div>
+      ${L.names.slice(0, L.count).some(n => (n || "").trim()) ? "" : `<p class="hint">اكتبوا أسماءكم عشان تطلع في اللعب والنقاط.</p>`}
+    </div>
     <div class="modes">
       <button class="mode" id="m1"><span class="glyph">${ICONS.imp}</span><b>الدخيل</b><span>الكل يعرف الكلمة إلا واحد. اكشفوه قبل ما يكشف الكلمة.</span></button>
       <button class="mode" id="m2"><span class="glyph">${ICONS.most}</span><b>مين أكثر واحد؟</b><span>سؤال على الشاشة، وعلى العد الكل يأشر على واحد.</span></button>
@@ -1157,7 +1285,7 @@ if (configured) {
     try {
       const s = await getDoc(doc(db, "users", user.uid));
       if (!s.exists()) { me = { uid: user.uid }; go("username"); return; }
-      me = { uid: user.uid, username: s.data().username };
+      me = { uid: user.uid, username: s.data().username, photo: s.data().photo || "", bio: s.data().bio || "" };
       startGlobal();
       const b = await getDoc(doc(db, "bans", user.uid)).catch(() => null);
       if (b?.exists()) { banned = true; go("banned"); return; }
