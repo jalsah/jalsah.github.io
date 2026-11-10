@@ -90,8 +90,7 @@ const SHOP = [
   { id: "b_royal", name: "ظهر الورق الملكي", desc: "عنابي بتاج ذهبي", price: 19, grants: ["b_royal"], days: 0 }
 ];
 const FRAMES = { f_gold: "ذهبي", f_fire: "ناري", f_sadu: "سدو" };
-const SHOP_URL = "https://slt1.store";
-let shopCfg = null; // روابط المنتجات في متجر سايلنت
+let shopCfg = null; // روابط المنتجات في متجر جلسة
 const vipOn = p => (p?.vipUntil || 0) > Date.now();
 const owns = (p, id) => STAFF(p?.username) || vipOn(p) || (p?.owned || []).includes(id);
 const lookOpen = (t, p = me) => t.shop ? owns(p, t.shop) : lvlOfP(p) >= t.lvl;
@@ -1682,9 +1681,10 @@ VIEWS.admin = () => {
       ${adm.codes ? `<div class="codes-out"><p class="hint">${ar(adm.codes.list.length)} كود لـ «${esc(adm.codes.name)}». انسخها وحطها في المنتج حقها في متجرك (كل كود في سطر).</p>
         <textarea class="txt" id="genOut" rows="6" dir="ltr" readonly>${adm.codes.list.join("\n")}</textarea>
         <button class="btn small" id="genCopy">انسخ الأكواد</button></div>` : ""}
-      <details class="links"><summary>روابط المنتجات في متجرك</summary>
-        <p class="hint">حط رابط كل منتج من slt1.store عشان زر «اشترِ» يفتحه على طول. إذا خليته فاضي يفتح الصفحة الرئيسية للمتجر.</p>
-        ${SHOP.map(it => `<label class="lk"><span>${it.name}</span><input class="txt" data-link="${it.id}" dir="ltr" placeholder="https://slt1.store/..." value="${esc(shopCfg?.links?.[it.id] || "")}"></label>`).join("")}
+      <details class="links" ${shopCfg?.base ? "" : "open"}><summary>رابط المتجر وروابط المنتجات</summary>
+        <label class="lk"><span><b>رابط المتجر</b></span><input class="txt" id="shopBaseIn" dir="ltr" placeholder="https://jalsah.rmz.gg" value="${esc(shopCfg?.base || "")}"></label>
+        <p class="hint">وتحت رابط كل منتج عشان زر «اشترِ» يفتحه على طول. إذا خليته فاضي يفتح رابط المتجر.</p>
+        ${SHOP.map(it => `<label class="lk"><span>${it.name}</span><input class="txt" data-link="${it.id}" dir="ltr" placeholder="https://..." value="${esc(shopCfg?.links?.[it.id] || "")}"></label>`).join("")}
         <button class="btn small" id="saveLinks">احفظ الروابط</button></details></div>
 
     <div class="field"><span class="label">🤖 فك كتم / صفّر تحذيرات البوت</span>
@@ -1737,7 +1737,8 @@ VIEWS.admin = () => {
   on("saveLinks", "click", async () => {
     const links = {};
     V.querySelectorAll("[data-link]").forEach(i => { const v = i.value.trim(); if (/^https:\/\//.test(v)) links[i.dataset.link] = v; });
-    try { await setDoc(doc(db, "config", "shop"), { links }); toast("انحفظت الروابط ✅"); } catch (err) { console.error(err); toast("ما انحفظت"); }
+    const base = document.getElementById("shopBaseIn").value.trim();
+    try { await setDoc(doc(db, "config", "shop"), { links, base: /^https:\/\//.test(base) ? base : "" }); toast("انحفظت الروابط ✅"); } catch (err) { console.error(err); toast("ما انحفظت"); }
   });
   on("unmuteF", "submit", async e => {
     e.preventDefault();
@@ -2301,7 +2302,8 @@ async function enablePush() {
 const showPushCard = () => me?.uid && ["default", "ios"].includes(pushState()) && Date.now() - store.get("pushHide", 0) > 3 * 864e5;
 
 /* ================= صفحة المتجر ================= */
-const shopLink = id => { const l = shopCfg?.links?.[id]; return /^https:\/\//.test(l || "") ? l : SHOP_URL; };
+const shopBase = () => /^https:\/\//.test(shopCfg?.base || "") ? shopCfg.base : "https://jalsah.rmz.gg";
+const shopLink = id => { const l = shopCfg?.links?.[id]; return /^https:\/\//.test(l || "") ? l : shopBase(); };
 function shopPreview(it) {
   const g = it.grants || [];
   if (it.id === "king") return `<span class="sp-king">👑</span>`;
@@ -2350,7 +2352,7 @@ async function redeemCode(raw) {
 VIEWS.shop = () => {
   const p = prof(me.uid), vip = vipOn(p);
   V.innerHTML = `<section>
-    <div><h2>متجر جلسة 🛍️</h2><p class="lead">تميّز قدام أصحابك. تشتري من متجر <b>Silent Store</b>، ويوصلك كود تكتبه هنا.</p></div>
+    <div><h2>متجر جلسة 🛍️</h2><p class="lead">تميّز قدام أصحابك. تشتري من متجر جلسة، ويوصلك كود تكتبه هنا.</p></div>
     <form class="redeem" id="codeF">
       <span class="label">عندك كود؟</span>
       <div class="row"><input class="txt" id="codeIn" dir="ltr" maxlength="14" placeholder="XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="الكود">
@@ -2363,7 +2365,7 @@ VIEWS.shop = () => {
         ${it.hot ? `<span class="s-hot">الأقوى 🔥</span>` : ""}
         <div class="s-pv">${shopPreview(it)}</div>
         <b class="s-name">${it.name}</b><span class="s-desc">${it.desc}</span>
-        ${mine ? `<span class="s-own">✓ عندك</span>` : `<a class="btn small" href="${esc(shopLink(it.id))}" target="_blank" rel="noopener"><span>اشترِ</span><span class="s-price">${ar(it.price)} ريال</span></a>`}
+        ${mine ? `<span class="s-own">✓ عندك</span>` : !shopLink(it.id) ? `<button class="btn small ghost" disabled><span>قريبًا</span><span class="s-price">${ar(it.price)} ريال</span></button>` : `<a class="btn small" href="${esc(shopLink(it.id))}" target="_blank" rel="noopener"><span>اشترِ</span><span class="s-price">${ar(it.price)} ريال</span></a>`}
       </div>`; }).join("")}</div>
     <p class="hint center">بعد الدفع يوصلك الكود من المتجر. انسخه واكتبه فوق في «عندك كود؟».</p>
   </section>`;
