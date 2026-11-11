@@ -81,11 +81,7 @@ const medal = (x, on = true) => `<span class="medal ${on ? "t-" + x.tier : "off"
 const achGot = (s, xp, name) => STAFF(name) ? ACH : ACH.filter(x => x.ok(s || {}, xp || 0));
 /* ================= متجر روق ================= */
 const SHOP = [
-  { id: "king", name: "باقة الملك", desc: "كل الحصريات + VIP سنة كاملة", price: 399, grants: ["t_royal", "b_royal", "f_gold", "f_fire", "f_sadu", "e_royal", "th_najd", "np_najd", "th_neon", "np_neon", "th_gold", "np_gold", "th_falcon", "np_falcon", "ns_rainbow"], days: 365, hot: 1 },
-  { id: "c_najd", name: "مجموعة ليالي نجد", desc: "ثيم بروفايل بشهب متحركة + لوحة اسمك في الغرف", price: 35, grants: ["th_najd", "np_najd"], days: 0, col: "najd" },
-  { id: "c_neon", name: "مجموعة نيون الرياض", desc: "ثيم بروفايل بنيون يلمع + لوحة اسمك في الغرف", price: 35, grants: ["th_neon", "np_neon"], days: 0, col: "neon" },
-  { id: "c_gold", name: "مجموعة الذهب الأسود", desc: "ثيم بروفايل بغبار ذهب + لوحة اسمك في الغرف", price: 35, grants: ["th_gold", "np_gold"], days: 0, col: "gold" },
-  { id: "c_falcon", name: "مجموعة الصقّار", desc: "ثيم بروفايل بريش يطيح + لوحة اسمك في الغرف", price: 35, grants: ["th_falcon", "np_falcon"], days: 0, col: "falcon" },
+  { id: "king", name: "باقة الملك", desc: "كل الحصريات + VIP سنة كاملة", price: 399, grants: ["t_royal", "b_royal", "f_gold", "f_fire", "f_sadu", "e_royal", "ns_rainbow"], days: 365, hot: 1 },
   { id: "vip365", name: "VIP سنة", desc: "شارة VIP وكل الحصريات لمدة سنة", price: 249, grants: [], days: 365 },
   { id: "vip30", name: "VIP شهر", desc: "شارة VIP وكل الحصريات لمدة شهر", price: 39, grants: [], days: 30 },
   { id: "t_royal", name: "الطاولة الملكية", desc: "مخمل أحمر وإطار ذهبي يلمع", price: 39, grants: ["t_royal"], days: 0 },
@@ -106,8 +102,10 @@ const lookOpen = (t, p = me) => t.shop ? owns(p, t.shop) : lvlOfP(p) >= t.lvl;
 const myLook = () => ({ t: TABLES[me?.look?.t] && lookOpen(TABLES[me.look.t]) ? me.look.t : "felt", b: BACKS[me?.look?.b] && lookOpen(BACKS[me.look.b]) ? me.look.b : "classic",
   th: themeOf(prof(me?.uid)), np: plateOf(prof(me?.uid)), ns: nsOf(prof(me?.uid)), fav: favOf(prof(me?.uid)) });
 // زينة البروفايل (كلها محفوظة داخل look)
-const themeOf = p => { const k = p?.look?.th; return k && DECO[k] && owns(p, "th_" + k) ? k : ""; };
-const plateOf = p => { const k = p?.look?.np; return k && DECO[k] && owns(p, "np_" + k) ? k : ""; };
+// الثيمات ولوحات الأسماء موقفة مؤقتًا لين نجهز رسومات احترافية
+const DECO_ON = false;
+const themeOf = p => { const k = p?.look?.th; return DECO_ON && k && DECO[k] && owns(p, "th_" + k) ? k : ""; };
+const plateOf = p => { const k = p?.look?.np; return DECO_ON && k && DECO[k] && owns(p, "np_" + k) ? k : ""; };
 const nsOpen = (k, p) => { const n = NSTYLES[k]; return !!n && (n.shop ? owns(p, n.shop) : lvlOfP(p) >= n.lvl); };
 const nsOf = p => { const k = p?.look?.ns; return k && nsOpen(k, p) ? k : ""; };
 const favOf = p => { const k = p?.look?.fav; return k && GAMES[k] ? k : ""; };
@@ -3343,12 +3341,13 @@ VIEWS.profile = () => {
       <span class="hint">ستايل الاسم (يطلع في بروفايلك وفي الغرف)</span>
       <div class="nss">${[["", "كلاسيك"], ...Object.entries(NSTYLES).map(([k, n]) => [k, n.name])].map(([k, n]) => { const open = !k || nsOpen(k, prof(me.uid)), sel = nsOf(prof(me.uid)) === k, ns = NSTYLES[k];
         return `<button class="nsb ${sel ? "sel" : ""}" data-ns="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><b class="${k ? "ns ns-" + k : ""}" dir="ltr">${esc(me.username)}</b><span class="hint">${open ? (sel ? "مختار ✓" : n) : ns.shop ? "👑 VIP" : "🔒 مستوى " + ar(ns.lvl)}</span></button>`; }).join("")}</div>
-      <span class="hint">ثيم البروفايل (يلوّن بروفايلك كامل مع تأثير متحرك، يشوفه كل من يفتح بروفايلك)</span>
-      <div class="ths">${[["", null], ...Object.entries(DECO)].map(([k, d]) => { const open = !k || owns(prof(me.uid), "th_" + k), sel = themeOf(prof(me.uid)) === k;
-        return `<button class="thb ${sel ? "sel" : ""}" data-th="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><span class="thb-pv${thC(k)}"><span class="thb-av">${avatar(me.username, me.photo, 30)}</span><i></i><i></i></span><b>${k ? d.name : "بدون"}</b><span class="hint">${open ? (sel ? "مختار ✓" : k ? "✨ " + d.fxName : "متاح") : "🛍️ من المتجر"}</span></button>`; }).join("")}</div>
+      ${DECO_ON ? `      <span class="hint">ثيم البروفايل (يلوّن بروفايلك كامل مع تأثير متحرك، يشوفه كل من يفتح بروفايلك)</span>
+      <div class="ths">\${[["", null], ...Object.entries(DECO)].map(([k, d]) => { const open = !k || owns(prof(me.uid), "th_" + k), sel = themeOf(prof(me.uid)) === k;
+        return \`<button class="thb \${sel ? "sel" : ""}" data-th="\${k}" \${open ? "" : "aria-disabled=\"true\""} aria-pressed="\${sel}"><span class="thb-pv\${thC(k)}"><span class="thb-av">\${avatar(me.username, me.photo, 30)}</span><i></i><i></i></span><b>\${k ? d.name : "بدون"}</b><span class="hint">\${open ? (sel ? "مختار ✓" : k ? "✨ " + d.fxName : "متاح") : "🛍️ من المتجر"}</span></button>\`; }).join("")}</div>
       <span class="hint">لوحة الاسم (تطلع خلف اسمك في قائمة اللاعبين)</span>
-      <div class="nps">${[["", null], ...Object.entries(DECO)].map(([k, d]) => { const open = !k || owns(prof(me.uid), "np_" + k), sel = plateOf(prof(me.uid)) === k;
-        return `<button class="npb li ${k ? "np" : ""} ${sel ? "sel" : ""}" data-np="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}">${k ? `<span class="np-art">${d.art(360, 60)}</span>` : ""}${avF(prof(me.uid), 32)}<span class="nm${nsC(prof(me.uid))}" dir="ltr">@${esc(me.username)}</span><span class="tag">${open ? (sel ? "✓" : k ? d.name : "بدون") : "🛍️"}</span></button>`; }).join("")}</div>
+      <div class="nps">\${[["", null], ...Object.entries(DECO)].map(([k, d]) => { const open = !k || owns(prof(me.uid), "np_" + k), sel = plateOf(prof(me.uid)) === k;
+        return \`<button class="npb li \${k ? "np" : ""} \${sel ? "sel" : ""}" data-np="\${k}" \${open ? "" : "aria-disabled=\"true\""} aria-pressed="\${sel}">\${k ? \`<span class="np-art">\${d.art(360, 60)}</span>\` : ""}\${avF(prof(me.uid), 32)}<span class="nm\${nsC(prof(me.uid))}" dir="ltr">@\${esc(me.username)}</span><span class="tag">\${open ? (sel ? "✓" : k ? d.name : "بدون") : "🛍️"}</span></button>\`; }).join("")}</div>
+` : ""}
       <span class="hint">لعبتي المفضلة (تطلع في بروفايلك مع عدد جولاتك)</span>
       <div class="favs">${[["", "ولا وحدة"], ...Object.entries(GAMES)].map(([k, n]) => { const sel = favOf(prof(me.uid)) === k, c = CATALOG.find(x => x.id === k);
         return `<button class="favb ${sel ? "sel" : ""}" data-fav="${k}" aria-pressed="${sel}">${c ? `<span class="favb-ic">${ICONS[c.icon]}</span>` : ""}<b>${n}</b></button>`; }).join("")}</div>
