@@ -891,6 +891,30 @@ background:linear-gradient(120deg,#5c0a1e,#9e1838 45%,#5c0a1e);border:2px solid 
 .pf-head.pfx>.pf-acts{justify-content:flex-end}
 .bc-frame{aspect-ratio:17/6}
 .bc-av{left:4.3%;top:63%;width:25%;transform:none}
+
+/* رياكشنات طايرة */
+.rx-bar{position:fixed;left:max(16px,env(safe-area-inset-left,0px));bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:15;display:flex;align-items:center;gap:8px;flex-direction:row-reverse}
+.rx-tog{width:52px;height:52px;border-radius:50%;border:none;background:var(--surface);box-shadow:0 8px 20px rgba(0,0,0,.4),0 0 0 1px var(--line);font-size:26px;cursor:pointer}
+.rx-tray{display:none;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:5px 8px;box-shadow:0 8px 20px rgba(0,0,0,.4)}
+.rx-bar.open .rx-tray{display:flex;animation:cardIn .25s ease-out}
+.rx-tray button{width:42px;height:42px;border:none;background:none;font-size:26px;border-radius:50%;cursor:pointer;transition:transform .15s}
+.rx-tray button:active{transform:scale(1.35)}
+.rx-fly{position:fixed;left:var(--x);bottom:120px;z-index:40;pointer-events:none;display:flex;flex-direction:column;align-items:center;animation:rxUp 2.5s ease-out forwards}
+.rx-fly b{font-size:46px;line-height:1;filter:drop-shadow(0 4px 10px rgba(0,0,0,.4))}
+.rx-fly span{font-size:11px;font-weight:700;background:rgba(0,0,0,.55);color:#fff;border-radius:99px;padding:1px 8px;margin-top:2px}
+@keyframes rxUp{0%{opacity:0;transform:translate(0,20px) scale(.4)}12%{opacity:1;transform:translate(0,0) scale(1.15)}25%{transform:translate(0,-40px) scale(1)}100%{opacity:0;transform:translate(var(--w),-340px) scale(.9)}}
+/* ستريك الشلة ويلعب الحين */
+.fstk{flex:none;font-size:14px;font-weight:800;color:#ffb347;margin-inline-start:6px;white-space:nowrap}
+.fstk.risk{color:var(--muted)}
+.tag.stk{color:#ffb347;border-color:color-mix(in srgb,#ffb347 50%,var(--line))}
+.who-play{display:block;font-size:12.5px;font-weight:700;color:var(--mint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.who-n{display:flex;align-items:center;gap:4px;min-width:0}.who-n .nm{flex:0 1 auto}
+.who-t{min-width:0}
+.onl-i{position:relative}
+.onl-stk{position:absolute;top:-4px;left:-2px;font-style:normal;font-size:11px;font-weight:800;background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:0 5px;color:#ffb347}
+.onl-i em{display:block;font-style:normal;font-size:10.5px;font-weight:700;color:var(--mint);white-space:nowrap}
+.onl-i em.go{color:var(--bg);background:var(--mint);border-radius:99px;padding:1px 7px;margin-top:2px}
+@media (prefers-reduced-motion:reduce){.rx-fly{animation-duration:1.2s}}
 @media (prefers-reduced-motion:reduce){.fx{display:none}.ns{animation:none}}
 </style>
 </head>
@@ -905,6 +929,6 @@ background:linear-gradient(120deg,#5c0a1e,#9e1838 45%,#5c0a1e);border:2px solid 
   <main id="view"><div class="spinner" aria-label="جاري التحميل"></div></main>
 </div>
 <noscript><section style="padding:24px"><h1>روق: ألعاب الجلسات مع أصحابك</h1><p>ألعاب الجلسات مع الشلة من جوالك: ارسم وخمّن، الدخيل، أونو، مين قالها، صح ولا خطأ، ومين أكثر واحد. أونلاين أو بجوال واحد، ومجانية.</p><p>شغّل الجافاسكربت عشان تلعب.</p></section></noscript>
-<script type="module" src="./app.js?v=68"></script>
+<script type="module" src="./app.js?v=69"></script>
 </body>
 </html>

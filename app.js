@@ -189,6 +189,7 @@ let pubRooms = null;          // الغرف العامة
 let inbox = [];               // محادثات الخاص
 let roomChat = [];            // شات الغرفة
 const profiles = new Map();   // uid -> { username, photo, bio }
+const fStreak = new Map();    // uid صاحبي -> { n, day } ستريك الشلة
 const profWant = new Set();
 function prof(uid) {
   if (uid === me?.uid) return { username: me.username, photo: me.photo, bio: me.bio, xp: me.xp, stats: me.stats, owned: me.owned, vipUntil: me.vipUntil, frame: me.frame, look: me.look, banner: me.banner };
@@ -208,6 +209,31 @@ let pendingJoin = (new URLSearchParams(location.search).get("r") || "").toUpperC
 
 const isOnline = f => { const t = f?.lastSeen?.toMillis?.(); return !!t && Date.now() - t < ONLINE_MS; };
 const pairId = (a, b) => [a, b].sort().join("_");
+/* ---- ستريك الشلة: تلعبون مع بعض كل يوم والرقم يكبر 🔥 ---- */
+function streakOf(u) { const s = fStreak.get(u); if (!s?.n) return null; const t = dayKey(Date.now());
+  if (s.day === t) return { n: s.n, risk: false }; if (s.day === dayKey(Date.now() - 864e5)) return { n: s.n, risk: true }; return null; }
+const streakTag = u => { const s = streakOf(u); return s && s.n >= 2 ? `<span class="fstk ${s.risk ? "risk" : ""}" title="${s.risk ? "العبوا اليوم لا يضيع الستريك" : "ستريك الشلة"}">🔥${ar(s.n)}${s.risk ? "⏳" : ""}</span>` : ""; };
+async function bumpStreaks() {
+  if (!room?.players || me?.guest) return;
+  const t = dayKey(Date.now()), y = dayKey(Date.now() - 864e5);
+  for (const u of Object.keys(room.players)) {
+    if (u === me.uid || !friends.has(u) || fStreak.get(u)?.day === t) continue;
+    try { await runTransaction(db, async tx => {
+      const r = doc(db, "friendships", pairId(me.uid, u)), s = await tx.get(r); if (!s.exists()) return;
+      const d = s.data(); if (d.sDay === t) return;
+      tx.update(r, { streak: d.sDay === y ? (d.streak || 0) + 1 : 1, sDay: t });
+    }); } catch (e) { console.error(e); }
+  }
+}
+/* ---- يلعب الحين: أصحابك يشوفون وش تلعب ويدخلون معك ---- */
+function setPlaying() {
+  if (!me?.uid || me.guest || !roomCode || !room?.game) return;
+  const k = roomCode + ":" + room.game; if (ui.playKey === k && Date.now() - (ui.playAt || 0) < 150000) return;
+  ui.playKey = k; ui.playAt = Date.now();
+  updateDoc(doc(db, "users", me.uid), { playing: { g: String(room.game).slice(0, 8), c: roomCode, at: serverTimestamp() } }).catch(() => {});
+}
+function clearPlaying() { if (!me?.uid || me.guest || !ui.playKey) return; ui.playKey = null; updateDoc(doc(db, "users", me.uid), { playing: deleteField() }).catch(() => {}); }
+const playingOf = f => { const p = f?.playing, t = p?.at?.toMillis?.() || 0; return p?.c && GAMES[p.g] && isOnline(f) && Date.now() - t < ONLINE_MS ? p : null; };
 
 /* ================= navigation & rendering ================= */
 const REFRESH = new Set(["home", "friends", "room", "profile", "admin", "inbox", "shop"]);
@@ -217,7 +243,7 @@ function go(name) {
   stopLocalTimers();
   if (screen === "dm" && name !== "dm") { off("dm"); ui.dmWith = null; }
   if (name !== "pub") { off("pub"); pubRooms = null; }
-  if (name !== "room") { document.getElementById("chatPanel")?.remove(); document.getElementById("chatFab")?.remove(); }
+  if (name !== "room") { document.getElementById("chatPanel")?.remove(); document.getElementById("chatFab")?.remove(); document.getElementById("rxBar")?.remove(); }
   screen = name;
   render(true);
   window.scrollTo(0, 0);
@@ -601,7 +627,7 @@ async function claimUsername(name) {
 function startGlobal() {
   setTimeout(claimStreak, 1500);
   if (pushState() === "granted") setTimeout(() => pushSaveToken(true), 3000);
-  const ping = () => { if (document.visibilityState === "visible") updateDoc(doc(db, "users", me.uid), { lastSeen: serverTimestamp() }).catch(() => {}); };
+  const ping = () => { if (document.visibilityState === "visible") { ui.playAt = 0; updateDoc(doc(db, "users", me.uid), roomCode && room?.game ? { lastSeen: serverTimestamp(), playing: { g: String(room.game).slice(0, 8), c: roomCode, at: serverTimestamp() } } : { lastSeen: serverTimestamp() }).catch(() => {}); if (roomCode) { ui.playKey = roomCode + ":" + room?.game; ui.playAt = Date.now(); } } };
   ping();
   presenceTimer = setInterval(ping, 180000);
   document.addEventListener("visibilitychange", onVisible);
@@ -615,7 +641,7 @@ function startGlobal() {
 
   sub("friendships", onSnapshot(query(collection(db, "friendships"), where("members", "array-contains", me.uid)), snap => {
     const ids = new Set();
-    snap.forEach(d => { const m = d.data().members; ids.add(m[0] === me.uid ? m[1] : m[0]); });
+    snap.forEach(d => { const x = d.data(), m = x.members, o = m[0] === me.uid ? m[1] : m[0]; ids.add(o); fStreak.set(o, { n: x.streak || 0, day: x.sDay || "" }); });
     for (const uid of [...friends.keys()]) if (!ids.has(uid)) { friends.delete(uid); off("f:" + uid); }
     for (const uid of ids) if (!subs.has("f:" + uid)) {
       friends.set(uid, { username: "…", lastSeen: null });
@@ -756,7 +782,9 @@ function enterRoom(code) {
   roomCode = code; room = null; votes = {}; secret = null; ui.shownRound = 0;
   sub("room", onSnapshot(doc(db, "rooms", code), s => {
     if (!s.exists()) { exitRoomLocal("انتهت الغرفة"); return; }
-    room = s.data();
+    const prevPhase = room?.phase; room = s.data();
+    if (prevPhase === "lobby" && room.phase !== "lobby" && room.players?.[me.uid]) bumpStreaks();
+    if (room.players?.[me.uid]) setPlaying();
     if (!room.players?.[me.uid]) { exitRoomLocal(room.kicked?.[me.uid] ? "المضيف طردك من الغرفة 🚫" : "طلعت من الغرفة"); return; }
     if (!subs.has("secret")) sub("secret", onSnapshot(doc(db, "rooms", code, "secrets", me.uid), d => { secret = d.exists() ? d.data() : null; if (screen === "room") render(false); }, err));
     if (!subs.has("votes")) sub("votes", onSnapshot(collection(db, "rooms", code, "votes"), q => {
@@ -766,6 +794,11 @@ function enterRoom(code) {
       roomChat = q.docs.map(d => ({ id: d.id, ...d.data() })).reverse();
       updateRoomChat();
     }, err));
+    if (!subs.has("rx")) { let first = true; const seen = {}; sub("rx", onSnapshot(collection(db, "rooms", code, "rx"), q => {
+      q.forEach(d => { const x = d.data(), was = seen[d.id]; seen[d.id] = x.n;
+        if (first || was === x.n || d.id === me.uid || isBlocked(d.id) || !RX.includes(x.e)) return; floatRx(x.e, room?.players?.[d.id]?.name); });
+      first = false;
+    }, () => {})); }
     if (room.phase === "hq" && !subs.has("hdone")) watchHhnjDone();
     if (screen === "room") render(false); else renderHeader();
   }, e => { console.error(e); exitRoomLocal("انقطع الاتصال بالغرفة"); }));
@@ -775,8 +808,8 @@ function enterRoom(code) {
 }
 function exitRoomLocal(msg) {
   clearInterval(ui.pingTimer); ui.pingTimer = null;
-  off("room"); off("secret"); off("votes"); off("rchat"); off("hdone"); off("umoves"); off("priv"); off("dguess"); off("dcanvas"); DRAWS.strokes = []; DRAWS.sRound = 0; UNO.st = null; UNO.processed = {}; clearInterval(ui.hTimer); ui.hTimer = null;
-  roomChat = []; closeChatPanel(); ui.chatSeen = 0;
+  off("room"); off("secret"); off("votes"); off("rchat"); off("rx"); off("hdone"); off("umoves"); off("priv"); off("dguess"); off("dcanvas"); DRAWS.strokes = []; DRAWS.sRound = 0; UNO.st = null; UNO.processed = {}; clearInterval(ui.hTimer); ui.hTimer = null;
+  roomChat = []; closeChatPanel(); ui.chatSeen = 0; clearPlaying(); document.getElementById("rxBar")?.remove();
   room = null; roomCode = null; votes = {}; secret = null;
   if (msg) toast(msg);
   if (screen === "room") go("home"); else renderHeader();
@@ -2002,12 +2035,38 @@ function bindEmoji(root) {
   }));
 }
 
+// ---- رياكشنات طايرة داخل الغرفة ----
+const RX = ["😂", "🔥", "💀", "😱", "👏", "❤️"];
+function floatRx(e, name) {
+  if (screen !== "room") return;
+  const el = document.createElement("div"); el.className = "rx-fly"; el.setAttribute("aria-hidden", "true");
+  el.style.setProperty("--x", (10 + Math.random() * 70).toFixed(1) + "vw"); el.style.setProperty("--w", (Math.random() * 40 - 20).toFixed(0) + "px");
+  el.innerHTML = `<b>${e}</b>${name ? `<span dir="ltr">${esc(name)}</span>` : ""}`;
+  document.body.appendChild(el); setTimeout(() => el.remove(), 2600);
+}
+function sendRx(e) {
+  if (!roomCode || Date.now() - (ui.rxAt || 0) < 900) return; ui.rxAt = Date.now();
+  floatRx(e, me.username);
+  setDoc(doc(db, "rooms", roomCode, "rx", me.uid), { e, n: Date.now(), at: serverTimestamp() }).catch(() => {});
+}
+function showRxBar() {
+  let bar = document.getElementById("rxBar");
+  if (!roomCode || screen !== "room") { bar?.remove(); return; }
+  if (bar) return;
+  bar = document.createElement("div"); bar.id = "rxBar"; bar.className = "rx-bar";
+  bar.innerHTML = `<div class="rx-tray" role="group" aria-label="رياكشن">${RX.map(e => `<button data-rx="${e}" aria-label="${e}">${e}</button>`).join("")}</div><button class="rx-tog" aria-label="رياكشن" aria-expanded="false">😂</button>`;
+  bar.querySelector(".rx-tog").addEventListener("click", () => { const o = bar.classList.toggle("open"); bar.querySelector(".rx-tog").setAttribute("aria-expanded", o); });
+  bar.querySelectorAll("[data-rx]").forEach(b => b.addEventListener("click", () => sendRx(b.dataset.rx)));
+  document.body.appendChild(bar);
+}
+
 // ---- شات الغرفة ----
 function chatUnread() {
   const seen = ui.chatSeen || 0;
   return roomChat.filter(m => m.uid !== me?.uid && !isBlocked(m.uid) && (m.at?.toMillis?.() || 0) > seen).length;
 }
 function showChatFab() {
+  showRxBar();
   let fab = document.getElementById("chatFab");
   if (!roomCode || screen !== "room") { fab?.remove(); return; }
   if (!fab) {
@@ -3121,7 +3180,7 @@ VIEWS.home = () => {
     <button class="shopbtn invbtn" id="invBtn"><span class="sb-ic" aria-hidden="true">🎁</span><span class="pb-t"><b>جيب ربعك</b><span>كل واحد يسجّل منك = VIP أسبوع لكم 👑</span></span><span class="pb-go">←</span></button>
 
     ${onl.length ? `<div class="field"><span class="label">أونلاين الحين (${ar(onl.length)})</span>
-      <div class="onl">${onl.map(([u, f]) => `<button class="onl-i" data-pf="${esc(u)}">${avatar(f.username, f.photo, 48)}<i class="dot on"></i><span dir="ltr">${esc(f.username)}</span></button>`).join("")}</div></div>` : ""}
+      <div class="onl">${onl.map(([u, f]) => { const pl = playingOf(f); return `<button class="onl-i ${pl ? "pl" : ""}" ${pl && pl.c !== roomCode ? `data-jn="${esc(pl.c)}"` : `data-pf="${esc(u)}"`}>${avatar(f.username, f.photo, 48)}<i class="dot on"></i>${streakOf(u)?.n >= 2 ? `<i class="onl-stk">🔥${ar(streakOf(u).n)}</i>` : ""}<span dir="ltr">${esc(f.username)}</span>${pl ? `<em>🎮 ${GAMES[pl.g]}</em><em class="go">ادخل معه</em>` : ""}</button>`; }).join("")}</div></div>` : ""}
 
     <div class="field"><div class="row-h"><span class="label">الألعاب</span><span class="hint">اضغط أي لعبة</span></div>
       <div class="games">${CATALOG.map(g => `<button class="gcard ${g.hot ? "hot" : ""}" data-game-card="${g.id}">${g.hot ? `<span class="gc-new">جديد 🔥</span>` : ""}
@@ -3146,6 +3205,7 @@ VIEWS.home = () => {
   codeInput(document.getElementById("code"));
   on("joinF", "submit", e => { e.preventDefault(); joinRoom(document.getElementById("code").value); });
   onAll("[data-pf]", b => showProfile(b.dataset.pf));
+  onAll("[data-jn]", b => joinRoom(b.dataset.jn));
   on("local", "click", () => go("local"));
 };
 
@@ -3202,7 +3262,7 @@ function showProfile(uid) {
     <div class="pcard-body">
       <b class="pf-name${nsC(p)}" dir="ltr">${at(p.username)}</b>
       ${f ? `<span class="chip-st ${isOnline(f) ? "on" : ""}">${isOnline(f) ? "أونلاين الحين" : "مو أونلاين"}</span>` : ""}
-      <div class="row tags">${lvlTag(p)}${vipTag(p)}</div>
+      <div class="row tags">${lvlTag(p)}${vipTag(p)}${streakOf(uid)?.n >= 1 ? `<span class="tag stk">🔥 ${ar(streakOf(uid).n)} ${streakOf(uid).n > 2 && streakOf(uid).n < 11 ? "أيام" : "يوم"} ستريك${streakOf(uid).risk ? " ⏳" : ""}</span>` : ""}</div>
       ${p.bio ? `<p class="pcard-bio">${esc(p.bio)}</p>` : ""}
       ${favCard(p)}
       ${(() => { const g = achGot(p.stats, p.xp, p.username); if (!g.length) return ""; const top = [...g].sort((q, r) => TIER_RANK[r.tier] - TIER_RANK[q.tier]).slice(0, 3);
@@ -3500,10 +3560,11 @@ VIEWS.friends = () => {
     <div class="field"><span class="label">أصحابك (${ar(list.length)})</span>
     ${list.length ? `<div class="list">${list.map(([uid, f]) => `
       <div class="li"><button class="li-who" data-pf="${esc(uid)}"><span class="av-wrap">${avatar(f.username, f.photo, 40)}<i class="dot ${isOnline(f) ? "on" : ""}" title="${isOnline(f) ? "أونلاين" : "مو أونلاين"}"></i></span>
-      <span class="who-t"><span class="nm" dir="ltr">${at(f.username)}</span>${f.bio ? `<span class="who-bio">${esc(f.bio)}</span>` : ""}</span></button>
+      <span class="who-t"><span class="who-n"><span class="nm" dir="ltr">${at(f.username)}</span>${streakTag(uid)}</span>${playingOf(f) ? `<span class="who-play">🎮 يلعب ${GAMES[playingOf(f).g]}</span>` : f.bio ? `<span class="who-bio">${esc(f.bio)}</span>` : ""}</span></button>
+      ${playingOf(f) && playingOf(f).c !== roomCode ? `<button class="btn small good" data-jn="${esc(playingOf(f).c)}">ادخل معه</button>` : ""}
       <button class="btn small ghost" data-msg="${esc(uid)}" aria-label="رسالة">💬</button>
       ${roomCode && !room?.players?.[uid] ? `<button class="btn small" data-inv="${esc(uid)}">اعزمه</button>` : ""}
-      <button class="btn small ghost" data-rm="${esc(uid)}">حذف</button></div>`).join("")}</div>`
+      ${playingOf(f) && playingOf(f).c !== roomCode ? "" : `<button class="btn small ghost" data-rm="${esc(uid)}">حذف</button>`}</div>`).join("")}</div>`
       : `<p class="hint">ما عندك أصدقاء للحين. اكتب يوزر صديقك فوق وأرسل له طلب.</p>`}</div>
     ${reqOut.length ? `<div class="field"><span class="label">طلبات أرسلتها</span><div class="list">${reqOut.map(r => `
       <div class="li"><span class="nm" dir="ltr">${at(r.toName)}</span><span class="tag">ينتظر</span>
@@ -3514,6 +3575,7 @@ VIEWS.friends = () => {
   onAll("[data-acc]", b => acceptRequest(b.dataset.acc));
   onAll("[data-pf]", b => showProfile(b.dataset.pf));
   onAll("[data-msg]", b => openDm(b.dataset.msg));
+  onAll("[data-jn]", b => joinRoom(b.dataset.jn));
   onAll("[data-dec]", b => deleteDoc(doc(db, "friendRequests", b.dataset.dec + "_" + me.uid)).catch(err));
   onAll("[data-can]", b => deleteDoc(doc(db, "friendRequests", me.uid + "_" + b.dataset.can)).catch(err));
   onAll("[data-inv]", b => { b.disabled = true; sendInvite(b.dataset.inv); });
