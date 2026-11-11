@@ -12,7 +12,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getMessaging, getToken, isSupported as pushSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import { firebaseConfig, authUrl } from "./firebase-config.js?v=27";
-import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW, KALIMA } from "./content.js?v=28";
+import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW, KALIMA } from "./content.js?v=29";
 import { ICONS } from "./icons.js?v=29";
 import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, tableSVG, TABLES, BACKS, seatSpots, isWild, cColor, cVal } from "./uno.js?v=34";
 
