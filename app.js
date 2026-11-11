@@ -407,7 +407,7 @@ function openInvite() {
 const GUEST_BAD = new Set([OWNER, OFFICIAL, "jalsa", "admin", "owner", "support", "official", "روق", "الادارة", "الإدارة"]);
 async function guestJoin(name, code) {
   name = cleanMsg(name).replace(/\s+/g, " ").slice(0, 14);
-  code = String(code || "").trim().toUpperCase();
+  code = roomCodeFrom(code);
   if ([...name].length < 2) return toast("اكتب اسمك (حرفين على الأقل)");
   if (GUEST_BAD.has(name.toLowerCase().replace(/^@/, "")) || name.startsWith("@")) return toast("اختر اسم ثاني");
   if (botBad(name)) return toast("اختر اسم مناسب 🙏");
@@ -442,14 +442,14 @@ function viewGjoin() {
       <label class="label" for="gjName">اسمك</label>
       <input class="txt" id="gjName" maxlength="14" dir="auto" placeholder="مثلًا: أبو فهد" value="${esc(store.get("gname", ""))}">
       <label class="label" for="gjCode">كود الغرفة</label>
-      <input class="txt gj-code" id="gjCode" dir="ltr" maxlength="5" autocapitalize="characters" placeholder="K7M2P" value="${esc(code)}">
+      <input class="txt gj-code" id="gjCode" dir="ltr" autocapitalize="characters" autocomplete="off" placeholder="K7M2P" value="${esc(code)}">
       <button class="btn">ادخل الغرفة 🚪</button>
     </form>
     <div class="foot"><p class="hint center legal-hint">بدخولك توافق على ${LEGAL_LINKS}، وتأكد إن عمرك ١٨ أو أكثر.</p>
       <div class="or"><span>أو</span></div>
       <button class="btn ghost" id="gjAcc">عندي حساب، سجّل دخول</button></div></section>`;
   const nm = document.getElementById("gjName"), cd = document.getElementById("gjCode");
-  cd.addEventListener("input", () => { ui.gCode = cd.value.toUpperCase(); });
+  codeInput(cd); cd.addEventListener("input", () => { ui.gCode = cd.value; });
   setTimeout(() => (nm.value ? cd.value ? null : cd : nm)?.focus(), 60);
   on("gjF", "submit", e => { e.preventDefault(); const b = e.currentTarget.querySelector("button"); b.disabled = true; guestJoin(nm.value, cd.value).finally(() => { if (document.body.contains(b)) b.disabled = false; }); });
   on("gjAcc", "click", () => go("auth"));
@@ -688,8 +688,22 @@ async function createRoom(game = "imp") {
     enterRoom(code);
   } catch (e) { console.error(e); toast("ما قدرنا نسوي الغرفة"); }
 }
+// يطلّع كود الغرفة حتى لو لصقوا الرابط كامل أو رسالة الواتساب
+function roomCodeFrom(raw) {
+  const s = String(raw || "").trim();
+  const m = s.match(/[?&]r=([A-Za-z0-9]{5})/); if (m) return m[1].toUpperCase();
+  const t = s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (t.length <= 5) return t;
+  const w = (s.match(/(?:^|[^A-Za-z0-9])([A-Za-z0-9]{5})(?![A-Za-z0-9])/g) || []).map(x => x.replace(/[^A-Za-z0-9]/g, "").toUpperCase()).filter(x => !/^(HTTPS|RAWQ|GITHUB)$/.test(x));
+  return w.pop() || t.slice(0, 5);
+}
+function codeInput(el) {
+  if (!el) return;
+  const fix = () => { const v = roomCodeFrom(el.value); if (v !== el.value) el.value = v; };
+  el.addEventListener("input", fix); el.addEventListener("paste", () => setTimeout(fix, 0));
+}
 async function joinRoom(raw) {
-  const code = String(raw || "").trim().toUpperCase();
+  const code = roomCodeFrom(raw);
   if (!/^[A-Z0-9]{5}$/.test(code)) return toast("الكود ٥ خانات");
   if (code === roomCode) return go("room");
   try {
@@ -3036,7 +3050,7 @@ VIEWS.home = () => {
     </div>
     <button class="pubbtn" id="pubBtn"><span class="pb-ic">${ICONS.pub}</span><span class="pb-t"><b>غرف عامة</b><span>ادخل والعب مع ناس جدد</span></span><span class="pb-go">←</span></button>
     <form class="joinrow" id="joinF" ${ui.showJoin ? "" : "hidden"}>
-      <input id="code" dir="ltr" maxlength="5" placeholder="K7M2P" autocomplete="off" autocapitalize="characters" aria-label="كود الغرفة">
+      <input id="code" dir="ltr" placeholder="K7M2P" autocomplete="off" autocapitalize="characters" aria-label="كود الغرفة">
       <button class="btn small">دخول</button>
     </form>
     <button class="shopbtn invbtn" id="invBtn"><span class="sb-ic" aria-hidden="true">🎁</span><span class="pb-t"><b>جيب ربعك</b><span>كل واحد يسجّل منك = VIP أسبوع لكم 👑</span></span><span class="pb-go">←</span></button>
@@ -3063,6 +3077,7 @@ VIEWS.home = () => {
   on("create", "click", () => roomCode ? go("room") : createRoom());
   onAll("[data-game-card]", b => gameSheet(b.dataset.gameCard));
   on("joinBtn", "click", () => { ui.showJoin = true; const f = document.getElementById("joinF"); f.hidden = false; document.getElementById("code").focus(); });
+  codeInput(document.getElementById("code"));
   on("joinF", "submit", e => { e.preventDefault(); joinRoom(document.getElementById("code").value); });
   onAll("[data-pf]", b => showProfile(b.dataset.pf));
   on("local", "click", () => go("local"));
