@@ -583,6 +583,13 @@ function startGlobal() {
   ping();
   presenceTimer = setInterval(ping, 180000);
   document.addEventListener("visibilitychange", onVisible);
+  // حسابي الحي: لو جاته هدية أو اشترى أو تغير شي من الإدارة، يتحدث على طول
+  sub("me", onSnapshot(doc(db, "users", me.uid), snap => {
+    if (!snap.exists() || !me?.uid) return;
+    const d = snap.data(), was = JSON.stringify([me.owned, me.vipUntil]);
+    Object.assign(me, { owned: d.owned || [], vipUntil: d.vipUntil || 0, warns: d.warns || 0, mutedUntil: d.mutedUntil || 0, refs: d.refs || 0, xp: Math.max(me.xp || 0, d.xp || 0), frame: d.frame || "", look: d.look || me.look });
+    if (JSON.stringify([me.owned, me.vipUntil]) !== was) refresh();
+  }));
 
   sub("friendships", onSnapshot(query(collection(db, "friendships"), where("members", "array-contains", me.uid)), snap => {
     const ids = new Set();
