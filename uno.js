@@ -1,4 +1,4 @@
-// أونو جلسة: الأوراق، القواعد، الرسم
+// أونو روق: الأوراق، القواعد، الرسم
 
 export const UCOLORS = {
   r: { name: "أحمر", fill: "#ef6f6c", dark: "#b8324a" },
@@ -96,19 +96,19 @@ export const BACKS = {
   royal: { name: "ملكي", lvl: 9999, shop: "b_royal" }
 };
 function backSVG(id, back) {
-  const word = (fill, stroke = "#1a1426") => `<text x="30" y="51" text-anchor="middle" ${FONT} font-size="18" fill="${fill}" stroke="${stroke}" stroke-linejoin="round" paint-order="stroke" stroke-width="2.4" transform="rotate(-30 30 45)">جلسة</text>`;
+  const word = (fill, stroke = "#1a1426") => `<text x="30" y="51" text-anchor="middle" ${FONT} font-size="18" fill="${fill}" stroke="${stroke}" stroke-linejoin="round" paint-order="stroke" stroke-width="2.4" transform="rotate(-30 30 45)">روق</text>`;
   if (back === "sadu") {
     const rows = [10, 22, 34, 46, 58, 70].map((y, i) => `<path d="${Array.from({ length: 7 }, (_, k) => `M${4 + k * 8} ${y + 8} l4 -8 l4 8z`).join(" ")}" fill="${i % 2 ? "#f2b134" : "#fff3e0"}" opacity=".9"/>`).join("");
     return `<svg viewBox="0 0 60 90" class="ucard-svg" aria-hidden="true">${frame(id, "#b8323a", "#6d1420")}
       <clipPath id="${id}c"><rect x="3.5" y="3.5" width="53" height="83" rx="5"/></clipPath><g clip-path="url(#${id}c)">${rows}<rect x="3.5" y="80" width="53" height="7" fill="#1a1426"/></g>
       <rect x="10" y="33" width="40" height="24" rx="12" fill="#1a1426" stroke="#f2b134" stroke-width="1.2"/>
-      <text x="30" y="51" text-anchor="middle" ${FONT} font-size="16" fill="#f7c948">جلسة</text>${gloss(id)}</svg>`;
+      <text x="30" y="51" text-anchor="middle" ${FONT} font-size="16" fill="#f7c948">روق</text>${gloss(id)}</svg>`;
   }
   if (back === "night") {
     const stars = [[12, 14], [46, 12], [20, 74], [50, 70], [9, 48], [52, 40], [38, 80], [28, 10]].map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="${i % 3 ? .8 : 1.3}" fill="#fff" opacity=".85"/>`).join("");
     return `<svg viewBox="0 0 60 90" class="ucard-svg" aria-hidden="true">${frame(id, "#3e2f8a", "#120c2e")}${stars}
       <path d="M38 24 a12 12 0 1 0 6 20 a10 10 0 1 1 -6 -20z" fill="#f7c948"/>
-      <text x="30" y="68" text-anchor="middle" ${FONT} font-size="15" fill="#fff" stroke="#120c2e" stroke-width="2" paint-order="stroke">جلسة</text>${gloss(id)}</svg>`;
+      <text x="30" y="68" text-anchor="middle" ${FONT} font-size="15" fill="#fff" stroke="#120c2e" stroke-width="2" paint-order="stroke">روق</text>${gloss(id)}</svg>`;
   }
   if (back === "royal") {
     return `<svg viewBox="0 0 60 90" class="ucard-svg" aria-hidden="true">${frame(id, "#8e1430", "#3a0612")}
@@ -118,7 +118,7 @@ function backSVG(id, back) {
       <path d="M17 44 l4 -12 l9 8 l9 -8 l4 12 z" fill="url(#${id}au)" stroke="#3a0612" stroke-width=".8" stroke-linejoin="round"/>
       <rect x="17" y="45" width="26" height="4" rx="1" fill="url(#${id}au)"/>
       <circle cx="21" cy="31" r="1.8" fill="#fff1b8"/><circle cx="30" cy="38" r="1.8" fill="#fff1b8"/><circle cx="39" cy="31" r="1.8" fill="#fff1b8"/>
-      <text x="30" y="64" text-anchor="middle" ${FONT} font-size="13" fill="url(#${id}au)">جلسة</text>${gloss(id)}</svg>`;
+      <text x="30" y="64" text-anchor="middle" ${FONT} font-size="13" fill="url(#${id}au)">روق</text>${gloss(id)}</svg>`;
   }
   if (back === "gold") {
     return `<svg viewBox="0 0 60 90" class="ucard-svg" aria-hidden="true">${frame(id, "#1d1d22", "#050506")}
@@ -168,7 +168,7 @@ export function tableSVG(key = "felt") {
   <rect x="23" y="23" width="354" height="354" rx="80" fill="none" stroke="url(#${k}sh)" stroke-width="24"/>` : ""}
   <rect x="40" y="41" width="320" height="320" rx="68" fill="none" stroke="rgba(0,0,0,.45)" stroke-width="6"/>
   <rect x="56" y="57" width="288" height="288" rx="54" fill="none" stroke="${t.line}" stroke-opacity=".4" stroke-width="1.5" stroke-dasharray="5 5"/>
-  <text x="200" y="312" text-anchor="middle" font-family="Lalezar,Tahoma,sans-serif" font-size="28" fill="${t.mark}">جلسة</text>
+  <text x="200" y="312" text-anchor="middle" font-family="Lalezar,Tahoma,sans-serif" font-size="28" fill="${t.mark}">روق</text>
 </svg>`;
 }
 export const TABLE_SVG = tableSVG("felt");
