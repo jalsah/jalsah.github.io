@@ -3241,6 +3241,44 @@ async function shrinkProfileBanner(file) {
     return out;
   } finally { URL.revokeObjectURL(url); }
 }
+// قصّ البنر: اسحب الصورة وكبّرها واختر الجزء اللي يطلع (مثل ديسكورد)
+async function openBannerCrop(file) {
+  const url = URL.createObjectURL(file);
+  let img;
+  try { img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; }); }
+  catch (e) { URL.revokeObjectURL(url); return toast("ما قدرنا نفتح الصورة، جرّب صورة ثانية"); }
+  const el = sheet(`<div class="bcrop"><b class="pf-name">عدّل البنر</b><span class="hint">اسحب الصورة بإصبعك، وكبّرها من الشريط</span>
+    <div class="bc-frame" id="bcF"><img id="bcI" src="${url}" alt="" draggable="false"><span class="bc-av" aria-hidden="true"></span></div>
+    <label class="bc-zoom"><span aria-hidden="true">➖</span><input type="range" id="bcZ" min="1" max="3" step="0.01" value="1" aria-label="التكبير"><span aria-hidden="true">➕</span></label>
+    <div class="row"><button class="btn" id="bcSave">احفظ البنر</button><button class="btn ghost" data-close>إلغاء</button></div></div>`);
+  const F = el.querySelector("#bcF"), I = el.querySelector("#bcI"), Z = el.querySelector("#bcZ");
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  let z = 1, ox = 0, oy = 0, W = 0, H = 0;
+  const base = () => Math.max(W / iw, H / ih);
+  const clamp = () => { const w = iw * base() * z, h = ih * base() * z; ox = Math.min(0, Math.max(W - w, ox)); oy = Math.min(0, Math.max(H - h, oy)); };
+  const draw = () => { clamp(); const sc = base() * z; I.style.width = iw * sc + "px"; I.style.height = ih * sc + "px"; I.style.transform = `translate(${ox}px,${oy}px)`; };
+  const measure = () => { const r = F.getBoundingClientRect(), pw = W; W = r.width; H = r.height;
+    if (!pw) { const sc = base(); ox = (W - iw * sc) / 2; oy = (H - ih * sc) / 2; } draw(); };
+  requestAnimationFrame(measure);
+  let drag = null;
+  F.addEventListener("pointerdown", e => { drag = { x: e.clientX, y: e.clientY, ox, oy }; F.setPointerCapture(e.pointerId); });
+  F.addEventListener("pointermove", e => { if (!drag) return; ox = drag.ox + e.clientX - drag.x; oy = drag.oy + e.clientY - drag.y; draw(); });
+  const end = () => drag = null; F.addEventListener("pointerup", end); F.addEventListener("pointercancel", end);
+  Z.addEventListener("input", () => { const cx = W / 2, cy = H / 2, nz = +Z.value; ox = cx - (cx - ox) * nz / z; oy = cy - (cy - oy) * nz / z; z = nz; draw(); });
+  const obs = new MutationObserver(() => { if (!el.isConnected) { URL.revokeObjectURL(url); obs.disconnect(); } }); obs.observe(document.body, { childList: true });
+  el.querySelector("#bcSave").addEventListener("click", async e => {
+    const btn = e.currentTarget; btn.disabled = true; btn.textContent = "نرفع البنر…";
+    try {
+      const CW = 600, CH = 240, k = CW / W, sc = base() * z, c = document.createElement("canvas"); c.width = CW; c.height = CH;
+      c.getContext("2d").drawImage(img, ox * k, oy * k, iw * sc * k, ih * sc * k);
+      let q = .8, out = c.toDataURL("image/jpeg", q);
+      while (out.length > 60000 && q > .3) { q -= .08; out = c.toDataURL("image/jpeg", q); }
+      if (out.length > 79000) throw new Error("big");
+      await updateDoc(doc(db, "users", me.uid), { banner: out });
+      me.banner = out; el.remove(); toast("تغيّر البنر 👌"); render(true);
+    } catch (err) { console.error(err); btn.disabled = false; btn.textContent = "احفظ البنر"; toast("ما قدرنا نرفع الصورة، جرّب صورة ثانية"); }
+  });
+}
 // نصغّر الصورة لمربع ١٦٠ بكسل، عشان تنحفظ مجانًا داخل قاعدة البيانات
 async function shrinkPhoto(file) {
   const url = URL.createObjectURL(file);
@@ -3373,15 +3411,10 @@ VIEWS.profile = () => {
       me.photo = data; toast("تغيّرت الصورة 👌"); render(true);
     } catch (err) { console.error(err); toast("ما قدرنا نرفع الصورة، جرّب صورة ثانية"); }
   });
-  on("bannerIn", "change", async e => {
-    const file = e.target.files?.[0]; if (!file) return;
+  on("bannerIn", "change", e => {
+    const file = e.target.files?.[0]; e.target.value = ""; if (!file) return;
     if (!file.type.startsWith("image/")) return toast("اختر صورة");
-    toast("نرفع البنر…");
-    try {
-      const data = await shrinkProfileBanner(file);
-      await updateDoc(doc(db, "users", me.uid), { banner: data });
-      me.banner = data; toast("تغيّر البنر 👌"); render(true);
-    } catch (err) { console.error(err); toast("ما قدرنا نرفع الصورة، جرّب صورة ثانية"); }
+    openBannerCrop(file);
   });
   on("rmBanner", "click", async e => {
     if (!confirmTap(e.currentTarget, "متأكد؟")) return;
