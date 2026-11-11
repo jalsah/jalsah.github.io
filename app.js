@@ -179,6 +179,10 @@ function prof(uid) {
   return null;
 }
 let pendingJoin = (new URLSearchParams(location.search).get("r") || "").toUpperCase() || null;
+// رابط دعوة صاحب: ?ref=يوزره
+(() => { const r = (new URLSearchParams(location.search).get("ref") || "").toLowerCase();
+  if (/^[a-z0-9_-]{3,20}$/.test(r)) { try { localStorage.setItem("jalsa:ref", JSON.stringify({ u: r, at: Date.now() })); } catch (e) {}
+    if (!pendingJoin) history.replaceState(null, "", location.pathname); } })();
 
 const isOnline = f => { const t = f?.lastSeen?.toMillis?.(); return !!t && Date.now() - t < ONLINE_MS; };
 const pairId = (a, b) => [a, b].sort().join("_");
@@ -333,6 +337,68 @@ async function loginApple() {
 }
 const APPLE_LOGO = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.37 12.6c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.47.83-.72 0-1.82-.81-2.99-.79-1.54.02-2.96.9-3.75 2.27-1.6 2.78-.41 6.89 1.15 9.14.76 1.1 1.67 2.34 2.86 2.3 1.15-.05 1.58-.74 2.97-.74 1.38 0 1.78.74 2.99.72 1.24-.02 2.02-1.12 2.77-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.4-.92-2.42-3.66zM14.1 5.86c.63-.77 1.06-1.83.94-2.89-.91.04-2.01.61-2.66 1.37-.58.67-1.1 1.76-.96 2.79 1.01.08 2.05-.51 2.68-1.27z"/></svg>`;
 
+/* ================= ادعُ صاحبك واكسب ================= */
+const REF_DAYS = 7, REF_MAX = 20;
+const refLink = () => location.origin + location.pathname.replace(/index\.html$/, "") + "?ref=" + encodeURIComponent((me?.username || "").toLowerCase());
+const refMsg = () => `تعال العب معي في روق 🎉 ألعاب جلسات: الدخيل وأونو وكمّل الكلمة وارسم وخمّن.\nسجّل من رابطي والعب جولة، وناخذ أنا وأنت VIP أسبوع مجاني 👑\n${refLink()}`;
+// اللاعب الجديد: يسجّل مين دعاه (مرة وحدة بعد ما يسوي حسابه)
+async function refRecord() {
+  const r = store.get("ref", null); if (!r?.u || !me?.uid) return;
+  store.set("ref", null);
+  if (r.u === (me.username || "").toLowerCase() || Date.now() - (r.at || 0) > 30 * 864e5) return;
+  try {
+    const n = await getDoc(doc(db, "usernames", r.u)); if (!n.exists() || n.data().uid === me.uid) return;
+    await setDoc(doc(db, "referrals", me.uid), { by: n.data().uid, byName: r.u, at: serverTimestamp() });
+    ui.refBy = r.u;
+  } catch (e) { console.error(e); }
+}
+// نعطي الجائزة: كل طرف يستلم جائزته بنفسه، والقواعد تتأكد إن صاحبه لعب جولة
+async function refClaimOne(rid, side) {
+  const vip = Math.max(Date.now() - 120000, me.vipUntil || 0) + REF_DAYS * 864e5, refs = (me.refs || 0) + 1;
+  const b = writeBatch(db);
+  b.update(doc(db, "referrals", rid), { [side]: true });
+  b.update(doc(db, "users", me.uid), { vipUntil: vip, refs, lastRef: rid });
+  await b.commit();
+  me.vipUntil = vip; me.refs = refs;
+}
+let refBusy = false;
+async function refCheck() {
+  if (refBusy || !me?.uid || !me.username || (me.refs || 0) >= REF_MAX) return;
+  refBusy = true;
+  const got = [];
+  try {
+    // أنا اللاعب الجديد
+    const mine = await getDoc(doc(db, "referrals", me.uid)).catch(() => null);
+    if (mine?.exists() && !mine.data().cB && (me.stats?.games || 0) >= 1) { await refClaimOne(me.uid, "cB"); got.push(mine.data().byName); }
+    // أنا اللي دعيت
+    const q = await getDocs(query(collection(db, "referrals"), where("by", "==", me.uid))).catch(() => null);
+    ui.refCount = 0;
+    for (const d of q?.docs || []) {
+      if (d.data().cA) { ui.refCount++; continue; }
+      if ((me.refs || 0) >= REF_MAX) break;
+      const u = await getDoc(doc(db, "users", d.id)).catch(() => null);
+      if (!u?.exists() || (u.data().stats?.games || 0) < 1) continue;
+      await refClaimOne(d.id, "cA"); ui.refCount++; got.push(u.data().username);
+    }
+  } catch (e) { console.error(e); }
+  refBusy = false;
+  if (got.length) {
+    const show = () => { if (document.querySelector(".sheet-bg")) return setTimeout(show, 1000); sheet(`<div class="ref-gift"><span class="rg-ic" aria-hidden="true">👑</span><b class="pf-name">حصلت VIP ${got.length > 1 ? `${ar(got.length)} أسابيع` : "أسبوع"} 🎉</b>
+      <p class="pf-bio">بسبب ${got.map(n => `<b dir="ltr">@${esc(n)}</b>`).join(" و ")}. استمتع بكل الأشكال الحصرية!</p>
+      <button class="btn" data-close>يا سلام</button></div>`); };
+    show(); render(false);
+  }
+}
+function openInvite() {
+  const el = sheet(`<div class="ref-sheet"><span class="rg-ic" aria-hidden="true">🎁</span><b class="pf-name">ادعُ صاحبك وخذ VIP</b>
+    <p class="pf-bio">أرسل رابطك لصاحبك. إذا سجّل منه ولعب جولة وحدة، <b>تاخذون أنتم الثنين VIP أسبوع مجاني</b> 👑</p>
+    <div class="ref-link" dir="ltr">${esc(refLink())}</div>
+    <div class="row"><button class="btn" id="refWa">أرسله واتساب</button><button class="btn ghost" id="refCopy">انسخ الرابط</button></div>
+    <p class="hint center">${ui.refCount ? `دعيت ${ar(ui.refCount)} ${ui.refCount > 1 ? "أصحاب" : "صاحب"} لين الحين 🔥` : "كل صاحب يسجّل = أسبوع VIP لك."} (لين ${ar(REF_MAX)} أسبوع)</p></div>`);
+  el.querySelector("#refCopy").addEventListener("click", () => copyText(refMsg(), "انسخ الرابط"));
+  el.querySelector("#refWa").addEventListener("click", () => window.open("https://wa.me/?text=" + encodeURIComponent(refMsg()), "_blank"));
+}
+
 /* ================= شروط الاستخدام ================= */
 const TERMS_V = 1;
 const termsOk = () => !!me?.uid && store.get("terms:" + me.uid, 0) >= TERMS_V;
@@ -431,6 +497,7 @@ function openSwitcher() {
 function afterLogin() {
   rememberAccount();
   setTimeout(termsSheet, 400);
+  setTimeout(refCheck, 2500);
   if (pendingJoin) {
     const c = pendingJoin; pendingJoin = null;
     history.replaceState(null, "", location.pathname);
@@ -1000,6 +1067,7 @@ async function awardXp() {
   try {
     await updateDoc(doc(db, "users", me.uid), { xp: (me.xp || 0) + add, xpAt: serverTimestamp(), stats: s });
     me.xp = (me.xp || 0) + add; me.stats = s;
+    if (s.games <= 3) setTimeout(refCheck, 4000);
     const fresh = achGot(s, me.xp, me.username).filter(x => !before.includes(x.id));
     setTimeout(() => {
       toast(`+${ar(add)} خبرة ⭐`);
@@ -2443,7 +2511,7 @@ VIEWS.username = () => {
     btn.disabled = true; btn.textContent = "لحظة…";
     try {
       await claimUsername(name);
-      me.username = name; termsAccept();
+      me.username = name; termsAccept(); refRecord();
       startGlobal(); rememberAccount(); ui.slide = 0; go("welcome");
     } catch (e) {
       btn.disabled = false; btn.textContent = "اعتمد اليوزر";
@@ -2871,6 +2939,7 @@ VIEWS.home = () => {
       <button class="bigbtn join" id="joinBtn"><span class="bb-ic">${ICONS.join}</span><b>ادخل بكود</b><span>عندك كود غرفة؟</span></button>
     </div>
     <button class="shopbtn" id="shopBtn"><span class="sb-ic" aria-hidden="true">🛍️</span><span class="pb-t"><b>متجر روق</b><span>أشكال حصرية واشتراك VIP</span></span><span class="pb-go">←</span></button>
+    <button class="shopbtn invbtn" id="invBtn"><span class="sb-ic" aria-hidden="true">🎁</span><span class="pb-t"><b>ادعُ صاحبك</b><span>وتاخذون أنتم الثنين VIP أسبوع مجاني</span></span><span class="pb-go">←</span></button>
     <button class="pubbtn" id="pubBtn"><span class="pb-ic">${ICONS.pub}</span><span class="pb-t"><b>غرف عامة</b><span>ادخل والعب مع ناس جدد</span></span><span class="pb-go">←</span></button>
     <form class="joinrow" id="joinF" ${ui.showJoin ? "" : "hidden"}>
       <input id="code" dir="ltr" maxlength="5" placeholder="K7M2P" autocomplete="off" autocapitalize="characters" aria-label="كود الغرفة">
@@ -2895,6 +2964,7 @@ VIEWS.home = () => {
   on("pushHide", "click", () => { store.set("pushHide", Date.now()); render(false); });
   on("pubBtn", "click", () => go("pub"));
   on("shopBtn", "click", () => go("shop"));
+  on("invBtn", "click", openInvite);
   on("instHide", "click", () => { store.set("instHide", Date.now()); render(false); });
   on("create", "click", () => roomCode ? go("room") : createRoom());
   onAll("[data-game-card]", b => gameSheet(b.dataset.gameCard));
@@ -4255,7 +4325,7 @@ if (configured) {
     try {
       const s = await getDoc(doc(db, "users", user.uid));
       if (!s.exists()) { me = { uid: user.uid }; go("username"); return; }
-      me = { uid: user.uid, username: s.data().username, photo: s.data().photo || "", bio: s.data().bio || "", xp: s.data().xp || 0, stats: s.data().stats || {}, look: s.data().look || null, owned: s.data().owned || [], vipUntil: s.data().vipUntil || 0, frame: s.data().frame || "", streak: s.data().streak || 0, streakAt: s.data().streakAt || null, renamedAt: s.data().usernameChangedAt || null, warns: s.data().warns || 0, mutedUntil: s.data().mutedUntil || 0 };
+      me = { uid: user.uid, username: s.data().username, photo: s.data().photo || "", bio: s.data().bio || "", xp: s.data().xp || 0, stats: s.data().stats || {}, look: s.data().look || null, owned: s.data().owned || [], vipUntil: s.data().vipUntil || 0, frame: s.data().frame || "", streak: s.data().streak || 0, streakAt: s.data().streakAt || null, renamedAt: s.data().usernameChangedAt || null, warns: s.data().warns || 0, mutedUntil: s.data().mutedUntil || 0, refs: s.data().refs || 0 };
       startGlobal();
       const b = await getDoc(doc(db, "bans", user.uid)).catch(() => null);
       if (b?.exists()) { banned = true; go("banned"); return; }
