@@ -112,8 +112,11 @@ const nsOpen = (k, p) => { const n = NSTYLES[k]; return !!n && (n.shop ? owns(p,
 const nsOf = p => { const k = p?.look?.ns; return k && nsOpen(k, p) ? k : ""; };
 const favOf = p => { const k = p?.look?.fav; return k && GAMES[k] ? k : ""; };
 const nsC = p => { const k = nsOf(p); return k ? ` ns ns-${k}` : ""; };
-// خلفية الثيم مع التأثير المتحرك
-const themeBg = (k, w = 440, h = 200, fx = true) => k ? `<span class="th-art">${DECO[k].art(w, h)}</span>${fx ? fxLayer(DECO[k].fx, 12) : ""}` : "";
+// الثيم يلوّن البروفايل كامل بالتدريج، والتأثير يتحرك فوقه
+const thC = k => k ? ` thm th-${k}` : "";
+const fxOf = (k, n = 16) => k ? fxLayer(DECO[k].fx, n) : "";
+// البنر: صورة يختارها اللاعب بنفسه
+const bannerOf = p => typeof p?.banner === "string" && p.banner.startsWith("data:image/jpeg") ? p.banner : "";
 // كرت لعبتي المفضلة
 const favCard = p => { const g = favOf(p); if (!g) return ""; const c = CATALOG.find(x => x.id === g), n = p?.stats?.["g_" + g] || 0;
   return `<div class="favc"><span class="favc-ic">${ICONS[c?.icon || g] || ""}</span><span class="favc-t"><span>لعبتي المفضلة</span><b>${GAMES[g]}</b></span>${n ? `<span class="favc-n">${ar(n)}<small>جولة</small></span>` : ""}</div>`; };
@@ -190,7 +193,7 @@ let roomChat = [];            // شات الغرفة
 const profiles = new Map();   // uid -> { username, photo, bio }
 const profWant = new Set();
 function prof(uid) {
-  if (uid === me?.uid) return { username: me.username, photo: me.photo, bio: me.bio, xp: me.xp, stats: me.stats, owned: me.owned, vipUntil: me.vipUntil, frame: me.frame, look: me.look };
+  if (uid === me?.uid) return { username: me.username, photo: me.photo, bio: me.bio, xp: me.xp, stats: me.stats, owned: me.owned, vipUntil: me.vipUntil, frame: me.frame, look: me.look, banner: me.banner };
   const f = friends.get(uid); if (f && f.username !== "…") return f;
   if (profiles.has(uid)) return profiles.get(uid);
   if (db && me && !profWant.has(uid)) {
@@ -608,7 +611,7 @@ function startGlobal() {
   sub("me", onSnapshot(doc(db, "users", me.uid), snap => {
     if (!snap.exists() || !me?.uid) return;
     const d = snap.data(), was = JSON.stringify([me.owned, me.vipUntil]);
-    Object.assign(me, { owned: d.owned || [], vipUntil: d.vipUntil || 0, warns: d.warns || 0, mutedUntil: d.mutedUntil || 0, refs: d.refs || 0, xp: Math.max(me.xp || 0, d.xp || 0), frame: d.frame || "", look: d.look || me.look });
+    Object.assign(me, { owned: d.owned || [], vipUntil: d.vipUntil || 0, warns: d.warns || 0, mutedUntil: d.mutedUntil || 0, refs: d.refs || 0, xp: Math.max(me.xp || 0, d.xp || 0), frame: d.frame || "", look: d.look || me.look, banner: d.banner || "" });
     if (JSON.stringify([me.owned, me.vipUntil]) !== was) refresh();
   }));
 
@@ -2953,7 +2956,7 @@ const shopLink = id => { const l = shopCfg?.links?.[id]; return /^https:\/\//.te
 function shopPreview(it) {
   const g = it.grants || [];
   if (it.id === "king") return `<span class="sp-king">👑</span>`;
-  if (it.col) return `<span class="sp-col">${themeBg(it.col, 220, 120)}<span class="sp-np">${DECO[it.col].art(200, 34)}<b dir="ltr">@${esc(me.username)}</b></span></span>`;
+  if (it.col) return `<span class="sp-col${thC(it.col)}">${fxOf(it.col, 8)}<span class="sp-av">${avatar(me.username, me.photo, 34)}</span><span class="sp-np">${DECO[it.col].art(200, 34)}<b dir="ltr">@${esc(me.username)}</b></span></span>`;
   if (it.days && !g.length) return `<span class="sp-vip">VIP</span>`;
   if (g[0] === "t_royal") return tableSVG("royal");
   if (g[0] === "e_royal") return `<span class="sp-ent"><span>👑</span>${avF(prof(me.uid), 40)}<b>دخل الجلسة</b></span>`;
@@ -3194,9 +3197,9 @@ function showProfile(uid) {
   else acts += `<button class="btn" id="pfAdd">+ أضف صديق</button>`;
   if (roomCode && isHost() && room?.players?.[uid]) acts += `<button class="btn danger" id="pfKick">اطرده من الغرفة</button>`;
   const modRow = `<div class="row pf-mod"><button class="btn small ghost" id="pfRep">🚩 بلّغ</button><button class="btn small ghost" id="pfBlk">${isBlocked(uid) ? "فك الحظر" : "🚫 احظر"}</button></div>`;
-  const th = themeOf(p);
-  el.innerHTML = `<div class="pcard ${th ? "themed th-" + th : ""}">
-    ${th ? `<div class="pcard-cover th" aria-hidden="true">${themeBg(th)}</div>` : `<div class="pcard-cover" style="--c:${col}" aria-hidden="true"><span class="pc-sadu"></span></div>`}
+  const th = themeOf(p), ban = bannerOf(p);
+  el.innerHTML = `<div class="pcard${thC(th)}">
+    ${ban ? `<div class="pcard-cover ban" aria-hidden="true"><img src="${ban}" alt=""></div>` : th ? `<div class="pcard-cover thc" aria-hidden="true"></div>` : `<div class="pcard-cover" style="--c:${col}" aria-hidden="true"><span class="pc-sadu"></span></div>`}
     <div class="pcard-av">${avF(p, 104)}</div>
     <div class="pcard-body">
       <b class="pf-name${nsC(p)}" dir="ltr">${at(p.username)}</b>
@@ -3209,7 +3212,7 @@ function showProfile(uid) {
       <div class="pcard-acts">${acts}</div>
       ${modRow}
       <button class="btn ghost" id="pfClose">إغلاق</button>
-    </div></div>`;
+    </div>${fxOf(th)}</div>`;
   document.body.appendChild(el);
   const close = () => el.remove();
   el.addEventListener("click", e => { if (e.target === el) close(); });
@@ -3224,6 +3227,20 @@ function showProfile(uid) {
   el.querySelector("#pfClose").focus({ preventScroll: true });
 }
 
+// البنر: نقصّه ٦٠٠×٢٤٠ ونضغطه عشان يبقى خفيف ومجاني
+async function shrinkProfileBanner(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+    const W = 600, H = 240, c = document.createElement("canvas"); c.width = W; c.height = H;
+    const r = Math.max(W / img.naturalWidth, H / img.naturalHeight), w = img.naturalWidth * r, h = img.naturalHeight * r;
+    c.getContext("2d").drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+    let q = .78, out = c.toDataURL("image/jpeg", q);
+    while (out.length > 60000 && q > .3) { q -= .08; out = c.toDataURL("image/jpeg", q); }
+    if (out.length > 79000) throw new Error("big");
+    return out;
+  } finally { URL.revokeObjectURL(url); }
+}
 // نصغّر الصورة لمربع ١٦٠ بكسل، عشان تنحفظ مجانًا داخل قاعدة البيانات
 async function shrinkPhoto(file) {
   const url = URL.createObjectURL(file);
@@ -3241,7 +3258,9 @@ async function shrinkPhoto(file) {
 VIEWS.profile = () => {
   const draft = ui.bioDraft ?? me.bio ?? "";
   V.innerHTML = `<section>
-    <div class="pf-head ${themeOf(prof(me.uid)) ? "themed" : ""}">${themeOf(prof(me.uid)) ? `<div class="pf-th" aria-hidden="true">${themeBg(themeOf(prof(me.uid)))}</div>` : ""}
+    <div class="pf-head pfx${thC(themeOf(prof(me.uid)))}">${fxOf(themeOf(prof(me.uid)))}
+      <div class="pf-ban ${bannerOf(me) ? "on" : ""}">${bannerOf(me) ? `<img src="${bannerOf(me)}" alt="">` : `<span>🖼️ حط بنر لبروفايلك</span>`}
+        <label class="pf-ban-btn" for="bannerIn">${bannerOf(me) ? "غيّر البنر" : "أضف بنر"}</label><input type="file" id="bannerIn" accept="image/*" hidden></div>
       <div class="pf-av">${avF(prof(me.uid), 112)}
         <label class="pf-cam" for="photoIn" aria-label="غيّر الصورة">📷</label>
         <input type="file" id="photoIn" accept="image/*" hidden>
@@ -3252,6 +3271,7 @@ VIEWS.profile = () => {
       <div class="row pf-acts">
         <label class="btn small ghost" for="photoIn">${me.photo ? "غيّر الصورة" : "أضف صورة"}</label>
         ${me.photo ? `<button class="btn small ghost" id="rmPhoto">شيل الصورة</button>` : ""}
+        ${bannerOf(me) ? `<button class="btn small ghost" id="rmBanner">شيل البنر</button>` : ""}
       </div>
     </div>
 
@@ -3285,9 +3305,9 @@ VIEWS.profile = () => {
       <span class="hint">ستايل الاسم (يطلع في بروفايلك وفي الغرف)</span>
       <div class="nss">${[["", "كلاسيك"], ...Object.entries(NSTYLES).map(([k, n]) => [k, n.name])].map(([k, n]) => { const open = !k || nsOpen(k, prof(me.uid)), sel = nsOf(prof(me.uid)) === k, ns = NSTYLES[k];
         return `<button class="nsb ${sel ? "sel" : ""}" data-ns="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><b class="${k ? "ns ns-" + k : ""}" dir="ltr">${esc(me.username)}</b><span class="hint">${open ? (sel ? "مختار ✓" : n) : ns.shop ? "👑 VIP" : "🔒 مستوى " + ar(ns.lvl)}</span></button>`; }).join("")}</div>
-      <span class="hint">ثيم البروفايل (خلفية متحركة يشوفها كل من يفتح بروفايلك)</span>
+      <span class="hint">ثيم البروفايل (يلوّن بروفايلك كامل مع تأثير متحرك، يشوفه كل من يفتح بروفايلك)</span>
       <div class="ths">${[["", null], ...Object.entries(DECO)].map(([k, d]) => { const open = !k || owns(prof(me.uid), "th_" + k), sel = themeOf(prof(me.uid)) === k;
-        return `<button class="thb ${sel ? "sel" : ""}" data-th="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><span class="thb-pv">${k ? themeBg(k, 200, 120, false) : ""}</span><b>${k ? d.name : "بدون"}</b><span class="hint">${open ? (sel ? "مختار ✓" : k ? "✨ " + d.fxName : "متاح") : "🛍️ من المتجر"}</span></button>`; }).join("")}</div>
+        return `<button class="thb ${sel ? "sel" : ""}" data-th="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><span class="thb-pv${thC(k)}"><span class="thb-av">${avatar(me.username, me.photo, 30)}</span><i></i><i></i></span><b>${k ? d.name : "بدون"}</b><span class="hint">${open ? (sel ? "مختار ✓" : k ? "✨ " + d.fxName : "متاح") : "🛍️ من المتجر"}</span></button>`; }).join("")}</div>
       <span class="hint">لوحة الاسم (تطلع خلف اسمك في قائمة اللاعبين)</span>
       <div class="nps">${[["", null], ...Object.entries(DECO)].map(([k, d]) => { const open = !k || owns(prof(me.uid), "np_" + k), sel = plateOf(prof(me.uid)) === k;
         return `<button class="npb li ${k ? "np" : ""} ${sel ? "sel" : ""}" data-np="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}">${k ? `<span class="np-art">${d.art(360, 60)}</span>` : ""}${avF(prof(me.uid), 32)}<span class="nm${nsC(prof(me.uid))}" dir="ltr">@${esc(me.username)}</span><span class="tag">${open ? (sel ? "✓" : k ? d.name : "بدون") : "🛍️"}</span></button>`; }).join("")}</div>
@@ -3352,6 +3372,20 @@ VIEWS.profile = () => {
       await updateDoc(doc(db, "users", me.uid), { photo: data });
       me.photo = data; toast("تغيّرت الصورة 👌"); render(true);
     } catch (err) { console.error(err); toast("ما قدرنا نرفع الصورة، جرّب صورة ثانية"); }
+  });
+  on("bannerIn", "change", async e => {
+    const file = e.target.files?.[0]; if (!file) return;
+    if (!file.type.startsWith("image/")) return toast("اختر صورة");
+    toast("نرفع البنر…");
+    try {
+      const data = await shrinkProfileBanner(file);
+      await updateDoc(doc(db, "users", me.uid), { banner: data });
+      me.banner = data; toast("تغيّر البنر 👌"); render(true);
+    } catch (err) { console.error(err); toast("ما قدرنا نرفع الصورة، جرّب صورة ثانية"); }
+  });
+  on("rmBanner", "click", async e => {
+    if (!confirmTap(e.currentTarget, "متأكد؟")) return;
+    try { await updateDoc(doc(db, "users", me.uid), { banner: "" }); me.banner = ""; render(true); } catch (err) { console.error(err); }
   });
   on("rmPhoto", "click", async e => {
     if (!confirmTap(e.currentTarget, "متأكد؟")) return;
@@ -4625,7 +4659,7 @@ if (configured) {
     try {
       const s = await getDoc(doc(db, "users", user.uid));
       if (!s.exists()) { me = { uid: user.uid }; go("username"); return; }
-      me = { uid: user.uid, username: s.data().username, photo: s.data().photo || "", bio: s.data().bio || "", xp: s.data().xp || 0, stats: s.data().stats || {}, look: s.data().look || null, owned: s.data().owned || [], vipUntil: s.data().vipUntil || 0, frame: s.data().frame || "", streak: s.data().streak || 0, streakAt: s.data().streakAt || null, renamedAt: s.data().usernameChangedAt || null, warns: s.data().warns || 0, mutedUntil: s.data().mutedUntil || 0, refs: s.data().refs || 0 };
+      me = { uid: user.uid, username: s.data().username, photo: s.data().photo || "", bio: s.data().bio || "", xp: s.data().xp || 0, stats: s.data().stats || {}, look: s.data().look || null, owned: s.data().owned || [], vipUntil: s.data().vipUntil || 0, frame: s.data().frame || "", banner: s.data().banner || "", streak: s.data().streak || 0, streakAt: s.data().streakAt || null, renamedAt: s.data().usernameChangedAt || null, warns: s.data().warns || 0, mutedUntil: s.data().mutedUntil || 0, refs: s.data().refs || 0 };
       startGlobal();
       const b = await getDoc(doc(db, "bans", user.uid)).catch(() => null);
       if (b?.exists()) { banned = true; go("banned"); return; }
