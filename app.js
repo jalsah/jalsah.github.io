@@ -1479,6 +1479,62 @@ function paintCanvas(cv = document.getElementById("dCanvas"), strokes = DRAWS.st
     g.stroke();
   });
 }
+/* ---- إعادة الرسمة: تنرسم قدامك من جديد، وتطلع فيديو للسناب ---- */
+function paintPartial(g, strokes, k, t) {
+  const total = strokes.reduce((n, s) => n + Math.max(1, s.p.length / 2), 0); let left = total * t;
+  g.lineCap = "round"; g.lineJoin = "round";
+  for (const s of strokes) { if (left <= 0) break; const pts = s.p.length / 2, n = Math.min(pts, Math.ceil(left)); left -= pts;
+    g.strokeStyle = DCOLORS[s.c]; g.fillStyle = DCOLORS[s.c]; g.lineWidth = DSIZES[s.w] * k; const p = s.p;
+    if (p.length === 2) { g.beginPath(); g.arc(p[0] * k, p[1] * k, DSIZES[s.w] * k / 2, 0, Math.PI * 2); g.fill(); continue; }
+    g.beginPath(); g.moveTo(p[0] * k, p[1] * k); for (let i = 1; i < n; i++) g.lineTo(p[i * 2] * k, p[i * 2 + 1] * k); g.stroke(); }
+}
+function replayDraw(cv = document.getElementById("dCanvas"), strokes = DRAWS.strokes, ms = 3500) {
+  if (!cv || !strokes?.length) return; const W = cv.width, k = W / 1000, g = cv.getContext("2d"); let t0 = 0;
+  const step = ts => { if (!cv.isConnected) return; if (!t0) t0 = ts; const t = Math.min(1, (ts - t0) / ms);
+    g.fillStyle = "#fffaf0"; g.fillRect(0, 0, W, W); paintPartial(g, strokes, k, t); if (t < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+async function makeDrawVideo(strokes, word, drawer) {
+  const W = 720, H = 1280, c = document.createElement("canvas"); c.width = W; c.height = H; const g = c.getContext("2d");
+  const types = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"], type = window.MediaRecorder && types.find(t => MediaRecorder.isTypeSupported?.(t));
+  if (!type || !c.captureStream) throw new Error("no-rec");
+  try { await document.fonts.load("80px Lalezar"); } catch (e) {}
+  const DISP = "Lalezar, Tahoma, sans-serif", BODY = "'IBM Plex Sans Arabic', Tahoma, sans-serif", S = 600, X = 60, Y = 330, DRAW = 4200, HOLD = 1800;
+  const frame = t => {
+    const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, "#2b1f4d"); bg.addColorStop(1, "#140f24"); g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    g.direction = "rtl"; g.textAlign = "center"; g.fillStyle = "#f2b134"; g.font = `110px ${DISP}`; g.fillText("روق", W / 2, 150);
+    g.fillStyle = "#f7f0e3"; g.font = `600 36px ${BODY}`; g.fillText("ارسم وخمّن 🎨", W / 2, 215);
+    g.fillStyle = "#b8adcf"; g.font = `500 30px ${BODY}`; g.fillText(`رسمة @${drawer}`, W / 2, 275);
+    g.save(); rr(g, X, Y, S, S, 36); g.clip(); g.fillStyle = "#fffaf0"; g.fillRect(X, Y, S, S); g.translate(X, Y); paintPartial(g, strokes, S / 1000, Math.min(1, t / DRAW)); g.restore();
+    g.strokeStyle = "#f2b134"; g.lineWidth = 6; rr(g, X, Y, S, S, 36); g.stroke();
+    if (t > DRAW) { const a = Math.min(1, (t - DRAW) / 400); g.globalAlpha = a; g.fillStyle = "#b8adcf"; g.font = `500 34px ${BODY}`; g.fillText("الكلمة كانت", W / 2, Y + S + 90);
+      g.fillStyle = "#74d6b8"; g.font = `86px ${DISP}`; g.fillText(word, W / 2, Y + S + 190); g.globalAlpha = 1; }
+    else { g.fillStyle = "#f7f0e3"; g.font = `80px ${DISP}`; g.fillText("وش هي؟ 🤔", W / 2, Y + S + 170); }
+    g.fillStyle = "#f2b134"; g.font = `600 30px ${BODY}`; g.fillText("تعالوا العبوا معنا 👇", W / 2, H - 84); g.fillStyle = "#f7f0e3"; g.font = `500 28px ${BODY}`; g.direction = "ltr"; g.fillText(appLink().replace(/^https?:\/\//, "").replace(/\/$/, ""), W / 2, H - 40); g.direction = "rtl";
+  };
+  frame(0);
+  const st = c.captureStream(30), rec = new MediaRecorder(st, { mimeType: type, videoBitsPerSecond: 2500000 }), chunks = [];
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  const done = new Promise(ok => rec.onstop = ok);
+  rec.start(200); const t0 = performance.now();
+  await new Promise(ok => { const step = () => { const t = performance.now() - t0; frame(t); if (t < DRAW + HOLD) requestAnimationFrame(step); else ok(); }; requestAnimationFrame(step); });
+  rec.stop(); await done; st.getTracks().forEach(x => x.stop());
+  return new Blob(chunks, { type: type.split(";")[0] });
+}
+async function openDrawVideo() {
+  const strokes = JSON.parse(JSON.stringify(DRAWS.strokes || [])), word = room?.result?.word || "؟", drawer = pname(room?.drawer) || "";
+  if (!strokes.length) return toast("ما فيه رسمة 😅");
+  const el = sheet(`<div class="share-sheet"><b class="pf-name">فيديو الرسمة 🎬</b><div class="share-prev" id="dvPrev"><div class="spinner" aria-label="نجهز الفيديو"></div></div>
+    <button class="btn" id="dvGo" disabled>شارك الفيديو 📤</button><p class="hint" id="dvHint">نسجل الفيديو… ثواني بس</p><button class="btn ghost" data-close>إغلاق</button></div>`);
+  try {
+    const blob = await makeDrawVideo(strokes, word, drawer); if (!el.isConnected) return;
+    const url = URL.createObjectURL(blob), ext = blob.type.includes("mp4") ? "mp4" : "webm";
+    el.querySelector("#dvPrev").innerHTML = `<video class="share-img" src="${url}" autoplay loop muted playsinline></video>`;
+    const file = new File([blob], "rawq-draw." + ext, { type: blob.type }), can = !!navigator.canShare?.({ files: [file] }), b = el.querySelector("#dvGo");
+    el.querySelector("#dvHint").textContent = can ? "اضغط «شارك الفيديو» واختر سناب 👻 أو «حفظ الفيديو»" : "اضغط مطوّل على الفيديو واحفظه";
+    if (can) { b.disabled = false; b.addEventListener("click", async () => { try { await navigator.share({ files: [file] }); } catch (e) { if (e?.name !== "AbortError") toast("احفظ الفيديو وشاركه"); } }); } else b.remove();
+  } catch (e) { console.error(e); if (el.isConnected) { el.querySelector("#dvPrev").innerHTML = ""; el.querySelector("#dvHint").textContent = "جوالك ما يدعم تسجيل الفيديو، شارك الصورة بدالها 📸"; el.querySelector("#dvGo").remove(); } }
+}
 function pushCanvas() {
   if (DRAWS.pushT) { DRAWS.dirty = true; return; }
   const s = encStrokes(DRAWS.strokes);
@@ -4177,10 +4233,14 @@ const ROOM_VIEWS = {
       <div class="card prompt pop" style="min-height:120px"><span class="eyebrow">الكلمة كانت</span><span class="big">${esc(r.word || "؟")}</span>
         <span class="hint">رسمها ${atL(room.drawer)}${ids.length ? ` (+${ar(ids.length)})` : ""}</span></div>
       <div class="dpad"><canvas id="dCanvas" aria-label="الرسمة"></canvas></div>
+      <div class="row dvrow"><button class="btn small ghost" id="dReplay">🔁 شوفها وهي تنرسم</button><button class="btn small" id="dVideo">🎬 فيديو للسناب</button></div>
       <div class="field"><span class="label">عرفوها</span>${ids.length ? `<div class="list">${ids.map(u => `<div class="li">${avatar(pname(u), prof(u)?.photo, 32)}<span class="nm" dir="ltr">${at(pname(u))}</span><span class="tag">+${ar(got[u] === 1 ? 3 : got[u] === 2 ? 2 : 1)}</span></div>`).join("")}</div>` : `<p class="lead">ولا أحد 😅</p>`}</div>
       <div class="field"><span class="label">النقاط</span>${scoreBoard(order())}</div>
       <div class="foot">${shareBtn()}${isHost() ? `<button class="btn" id="again">اللي بعده يرسم</button><button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يبدأ الجولة الجاية.</p>`}${leaveBtn()}</div></section>`;
     paintCanvas();
+    if (ui.dReplayed !== room.round) { const rd = room.round, go = n => { if (room?.phase !== "dres" || room.round !== rd) return; if (DRAWS.strokes?.length && DRAWS.sRound === rd) { ui.dReplayed = rd; replayDraw(); } else if (n < 8) setTimeout(() => go(n + 1), 400); }; setTimeout(() => go(0), 300); }
+    on("dReplay", "click", () => replayDraw());
+    on("dVideo", "click", openDrawVideo);
     on("again", "click", startDraw);
     on("lobby", "click", () => setRoom({ phase: "lobby" }));
   },
