@@ -117,7 +117,7 @@ function avatar(name, photo, size = 40, label) {
   return `<span class="av" style="${st};background:${avColor(name)}" aria-hidden="true">${esc(ch)}</span>`;
 }
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-const ONLINE_MS = 150000;
+const ONLINE_MS = 420000; // ٧ دقايق (النبضة كل ٣ دقايق عشان نوفر في Firebase)
 const INVITE_MS = 15 * 60 * 1000;
 const GAMES = { kal: "كمّل الكلمة", draw: "ارسم وخمّن", who: "مين قالها؟", tf: "صح ولا خطأ", uno: "أونو", imp: "الدخيل", most: "مين أكثر واحد", hhnj: "إنسان حيوان نبات جماد" };
 // كل ألعاب روق: وين تنلعب (أونلاين، بجوال واحد)
@@ -579,9 +579,9 @@ async function claimUsername(name) {
 function startGlobal() {
   setTimeout(claimStreak, 1500);
   if (pushState() === "granted") setTimeout(() => pushSaveToken(true), 3000);
-  const ping = () => updateDoc(doc(db, "users", me.uid), { lastSeen: serverTimestamp() }).catch(() => {});
+  const ping = () => { if (document.visibilityState === "visible") updateDoc(doc(db, "users", me.uid), { lastSeen: serverTimestamp() }).catch(() => {}); };
   ping();
-  presenceTimer = setInterval(ping, 60000);
+  presenceTimer = setInterval(ping, 180000);
   document.addEventListener("visibilitychange", onVisible);
 
   sub("friendships", onSnapshot(query(collection(db, "friendships"), where("members", "array-contains", me.uid)), snap => {
@@ -617,8 +617,11 @@ function startGlobal() {
     invites = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderBanner();
   }, err));
 }
+let lastVisPing = 0;
 function onVisible() {
-  if (document.visibilityState === "visible" && me?.username) updateDoc(doc(db, "users", me.uid), { lastSeen: serverTimestamp() }).catch(() => {});
+  if (document.visibilityState !== "visible" || !me?.username || me.guest || Date.now() - lastVisPing < 60000) return;
+  lastVisPing = Date.now();
+  updateDoc(doc(db, "users", me.uid), { lastSeen: serverTimestamp() }).catch(() => {});
 }
 function stopGlobal() {
   offAll(); clearInterval(presenceTimer); presenceTimer = null;
@@ -1379,7 +1382,7 @@ function pushCanvas() {
   if (s.length > 250000) { toast("اللوحة امتلت، امسح شوي"); return; }
   DRAWS.dirty = false;
   setDoc(doc(db, "rooms", roomCode, "canvas", "live"), { round: room.round, s }).catch(e => console.error(e));
-  DRAWS.pushT = setTimeout(() => { DRAWS.pushT = null; if (DRAWS.dirty) pushCanvas(); }, 600);
+  DRAWS.pushT = setTimeout(() => { DRAWS.pushT = null; if (DRAWS.dirty) pushCanvas(); }, 1000);
 }
 function watchCanvas() {
   sub("dcanvas", onSnapshot(doc(db, "rooms", roomCode, "canvas", "live"), d => {
@@ -1820,6 +1823,19 @@ async function loadStats() {
     });
   } catch (e) { console.error(e); toast("ما قدرنا نجيب الأرقام"); }
   adm.loading = false; render(false);
+  loadRetention();
+}
+// هل الناس يرجعون؟ نقارن آخر دخول بتاريخ التسجيل
+async function loadRetention() {
+  const now = Date.now(), D = 864e5, T = ms => Timestamp.fromMillis(ms);
+  try {
+    const cnt = since => getCountFromServer(query(collection(db, "users"), where("lastSeen", ">=", T(now - since)))).then(r => r.data().count).catch(() => null);
+    const cohort = (from, to) => getDocs(query(collection(db, "users"), where("createdAt", ">=", T(now - from)), where("createdAt", "<", T(now - to)), limit(500))).then(q => q.docs.map(d => d.data())).catch(() => []);
+    const [dau, wau, mau, c1, c7] = await Promise.all([cnt(D), cnt(7 * D), cnt(30 * D), cohort(8 * D, D), cohort(37 * D, 7 * D)]);
+    const back = (list, ms) => { const ok = list.filter(u => (u.lastSeen?.toMillis?.() || 0) - (u.createdAt?.toMillis?.() || 0) >= ms).length; return { n: list.length, pct: list.length ? Math.round(ok / list.length * 100) : null }; };
+    adm.ret = { dau, wau, mau, d1: back(c1, 20 * 3600e3), d7: back(c7, 6.5 * D) };
+  } catch (e) { console.error(e); }
+  if (screen === "admin") render(false);
 }
 async function banUser(raw) {
   const typed = raw.trim().replace(/^@/, ""), key = typed.toLowerCase();
@@ -2138,6 +2154,18 @@ VIEWS.admin = () => {
         `<div class="gbar"><span>${esc(GAMES[x.g])}</span><i style="--w:${Math.round(x.n / mx * 100)}%"></i><b>${ar(x.n)}</b></div>`).join("")}</div>`; })() : ""}
       ${st ? `<p class="hint">آخر تحديث ${esc(st.at.toLocaleTimeString("ar-SA", { hour: "numeric", minute: "2-digit" }))}</p>` : ""}
     </div>
+
+    ${(() => { const r = adm.ret; const pc = (x, good, ok) => x?.pct == null ? `<div class="stat"><span class="n">—</span><span class="l">ما فيه بيانات كافية</span></div>`
+        : `<div class="stat ${x.pct >= good ? "good" : x.pct >= ok ? "" : "bad"}"><span class="n">${ar(x.pct)}٪</span><span class="l">من ${ar(x.n)} لاعب جديد</span></div>`;
+      return `<div class="field"><span class="label">📈 هل الناس يرجعون؟</span>
+      ${r ? `<div class="stats">
+        <div class="stat good"><span class="n">${r.dau == null ? "—" : ar(r.dau)}</span><span class="l">لعبوا آخر ٢٤ ساعة</span></div>
+        <div class="stat"><span class="n">${r.wau == null ? "—" : ar(r.wau)}</span><span class="l">لعبوا هالأسبوع</span></div>
+        <div class="stat"><span class="n">${r.mau == null ? "—" : ar(r.mau)}</span><span class="l">لعبوا هالشهر</span></div>
+        <div class="stat"><span class="n">${r.dau && r.mau ? ar(Math.round(r.dau / r.mau * 100)) + "٪" : "—"}</span><span class="l">يدخلون يوميًا من لاعبين الشهر</span></div></div>
+        <span class="label">رجعوا بعد يوم من تسجيلهم</span><div class="stats">${pc(r.d1, 30, 20)}</div>
+        <span class="label">رجعوا بعد أسبوع</span><div class="stats">${pc(r.d7, 12, 6)}</div>
+        <p class="hint">المقياس: الألعاب الناجحة يرجع لها تقريبًا ٢٠–٣٠٪ بعد يوم، و ٨–١٢٪ بعد أسبوع. أخضر = ممتاز، أحمر = يحتاج شغل.</p>` : `<p class="hint">نحسب…</p>`}</div>`; })()}
 
     <div class="field"><span class="label">🔎 ابحث عن لاعب</span>
       <form class="addf" id="pFindF"><div class="uinput"><span>@</span><input id="pFind" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="يوزر اللاعب" aria-label="يوزر اللاعب" value="${esc(adm.player?.username || "")}"></div><button class="btn small">${adm.pLoading ? "…" : "ابحث"}</button></form>
@@ -4421,6 +4449,7 @@ function dFinish(n, won, tries) {
   const st = dStats();
   st.played++; if (won) { st.wins++; st.dist[tries - 1]++; st.streak = st.last === n - 1 ? st.streak + 1 : 1; st.best = Math.max(st.best, st.streak); } else st.streak = 0;
   st.last = won ? n : st.last; store.set("dailyStats", st);
+  if (me?.uid && me.username && !me.guest) setDoc(doc(db, "daily", String(n), "res", me.uid), { t: won ? tries : 7, name: me.username, at: serverTimestamp() }).then(() => { ui.dBoard = null; if (screen === "daily") dLoadBoard(n); }).catch(e => console.error(e));
   if (won && me?.uid && me.username && !me.guest) {
     const s = { ...(me.stats || {}) }; s.games = (s.games || 0) + 1; s.g_daily = (s.g_daily || 0) + 1; const add = Math.max(10, 40 - tries * 5);
     updateDoc(doc(db, "users", me.uid), { xp: (me.xp || 0) + add, xpAt: serverTimestamp(), stats: s }).then(() => { me.xp = (me.xp || 0) + add; me.stats = s; setTimeout(() => toast(`+${ar(add)} خبرة ⭐`), 1600); }).catch(e => console.error(e));
@@ -4429,6 +4458,29 @@ function dFinish(n, won, tries) {
 function dShareText(n, st) {
   const ans = dailyWord(n), rows = st.g.map(g => "‎" + dScore(g, ans).map(r => r === "g" ? "🟩" : r === "y" ? "🟨" : "⬛").reverse().join(""));
   return `روق · كلمة اليوم #${ar(n)}  ${st.won ? ar(st.g.length) : "✗"}/٦\n${rows.join("\n")}\n${appLink().replace(/^https?:\/\//, "")}`;
+}
+// ترتيب كلمة اليوم: الأقل محاولات أول، واللي حلها أبدر
+async function dLoadBoard(n) {
+  if (!me?.uid || me.guest || ui.dBoardBusy) return;
+  ui.dBoardBusy = true;
+  try {
+    const q = await getDocs(query(collection(db, "daily", String(n), "res"), orderBy("t"), limit(60)));
+    const rows = q.docs.map(d => ({ u: d.id, ...d.data() })).sort((a, b) => a.t - b.t || (a.at?.toMillis?.() || 0) - (b.at?.toMillis?.() || 0));
+    ui.dBoard = { n, rows };
+  } catch (e) { console.error(e); ui.dBoard = { n, rows: [], err: 1 }; }
+  ui.dBoardBusy = false;
+  if (screen === "daily") render(false);
+}
+function dBoardHtml(n) {
+  if (!me?.uid || me.guest) return `<p class="hint center">سوّ حساب عشان تدخل ترتيب اليوم وتنافس ربعك 🏆</p>`;
+  const b = ui.dBoard; if (!b || b.n !== n) { dLoadBoard(n); return `<p class="hint center">نجيب الترتيب…</p>`; }
+  if (!b.rows.length) return "";
+  const fr = b.rows.filter(r => r.u === me.uid || friends.has(r.u));
+  const line = (r, i) => `<div class="db-r ${r.u === me.uid ? "me" : ""}"><span class="db-k">${ar(i + 1)}</span><span class="db-n" dir="ltr">${at(r.name)}</span><span class="db-t">${r.t > 6 ? "✗" : ar(r.t) + "/٦"}</span></div>`;
+  return `<div class="dboard"><b>🏆 ترتيب اليوم</b>
+    ${fr.length > 1 ? `<span class="label">بين ربعك</span>${fr.slice(0, 8).map(line).join("")}` : ""}
+    <span class="label">الأسرع في روق</span>${b.rows.slice(0, 10).map(line).join("")}
+    ${b.rows.findIndex(r => r.u === me.uid) >= 10 ? `<p class="hint">ترتيبك: ${ar(b.rows.findIndex(r => r.u === me.uid) + 1)}</p>` : ""}</div>`;
 }
 VIEWS.daily = () => {
   const n = dailyNo(), ans = dailyWord(n), A = DN(ans), st = dState(n);
@@ -4447,7 +4499,8 @@ VIEWS.daily = () => {
     ${st.done ? `<div class="dend pop"><b>${st.won ? ["عبقري 🤯", "خطير 🔥", "كفو 👏", "حلو 😎", "نجحت 😅", "على الحافة 😮‍💨"][st.g.length - 1] : "ما لحقت 😢"}</b>
         <span class="hint">الكلمة كانت</span><span class="dans">${esc(ans)}</span>
         <div class="dstats"><span><b>${ar(S.played)}</b>لعبت</span><span><b>${ar(S.played ? Math.round(S.wins / S.played * 100) : 0)}٪</b>فزت</span><span><b>${ar(S.streak)}</b>السلسلة</span><span><b>${ar(S.best)}</b>أفضل سلسلة</span></div>
-        <button class="btn" id="dShare">شارك نتيجتك 📤</button><span class="hint" id="dNext">الكلمة الجاية بعد ${ar(Math.floor(next / 3600e3))} ساعة و${ar(Math.floor(next / 60000) % 60)} دقيقة</span></div>`
+        <button class="btn" id="dShare">شارك نتيجتك 📤</button><span class="hint" id="dNext">الكلمة الجاية بعد ${ar(Math.floor(next / 3600e3))} ساعة و${ar(Math.floor(next / 60000) % 60)} دقيقة</span></div>
+        ${dBoardHtml(n)}`
       : `<div class="dkeys">${D_KEYS.map(r => `<div class="dkr">${r.map(k => `<button class="dk ${k.length > 1 || k === "⏎" || k === "⌫" ? "wide" : ""} ${known[k] ? "k" + known[k] : ""}" data-dk="${k}" aria-label="${k === "⏎" ? "أدخل" : k === "⌫" ? "امسح" : k}">${k === "⏎" ? "أدخل" : k}</button>`).join("")}</div>`).join("")}</div>
         <p class="hint center">🟩 الحرف صح ومكانه صح · 🟨 الحرف موجود بمكان ثاني · ⬛ مو موجود. (ة = ه)</p>`}
   </section>`;
@@ -4479,10 +4532,11 @@ document.addEventListener("click", async () => {
 function startGuest(uid) {
   guestUid = uid;
   const ping = async () => {
+    if (document.visibilityState !== "visible") return;
     try { await updateDoc(doc(db, "guests", uid), { lastSeen: serverTimestamp() }); }
     catch (e) { setDoc(doc(db, "guests", uid), { firstSeen: serverTimestamp(), lastSeen: serverTimestamp() }).catch(() => {}); }
   };
-  ping(); guestTimer = setInterval(ping, 60000);
+  ping(); guestTimer = setInterval(ping, 300000);
 }
 function stopGuest() { clearInterval(guestTimer); guestTimer = null; guestUid = null; }
 
