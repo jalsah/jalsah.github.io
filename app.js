@@ -14,6 +14,7 @@ import { getMessaging, getToken, isSupported as pushSupported } from "https://ww
 import { firebaseConfig, authUrl } from "./firebase-config.js?v=27";
 import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW, KALIMA, DAILY } from "./content.js?v=30";
 import { ICONS } from "./icons.js?v=29";
+import { DECO, fxLayer } from "./deco.js?v=1";
 import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, tableSVG, TABLES, BACKS, seatSpots, isWild, cColor, cVal } from "./uno.js?v=34";
 
 /* ================= helpers ================= */
@@ -80,7 +81,11 @@ const medal = (x, on = true) => `<span class="medal ${on ? "t-" + x.tier : "off"
 const achGot = (s, xp, name) => STAFF(name) ? ACH : ACH.filter(x => x.ok(s || {}, xp || 0));
 /* ================= متجر روق ================= */
 const SHOP = [
-  { id: "king", name: "باقة الملك", desc: "كل الحصريات + VIP سنة كاملة", price: 399, grants: ["t_royal", "b_royal", "f_gold", "f_fire", "f_sadu", "e_royal"], days: 365, hot: 1 },
+  { id: "king", name: "باقة الملك", desc: "كل الحصريات + VIP سنة كاملة", price: 399, grants: ["t_royal", "b_royal", "f_gold", "f_fire", "f_sadu", "e_royal", "th_najd", "np_najd", "th_neon", "np_neon", "th_gold", "np_gold", "th_falcon", "np_falcon", "ns_rainbow"], days: 365, hot: 1 },
+  { id: "c_najd", name: "مجموعة ليالي نجد", desc: "ثيم بروفايل بشهب متحركة + لوحة اسمك في الغرف", price: 35, grants: ["th_najd", "np_najd"], days: 0, col: "najd" },
+  { id: "c_neon", name: "مجموعة نيون الرياض", desc: "ثيم بروفايل بنيون يلمع + لوحة اسمك في الغرف", price: 35, grants: ["th_neon", "np_neon"], days: 0, col: "neon" },
+  { id: "c_gold", name: "مجموعة الذهب الأسود", desc: "ثيم بروفايل بغبار ذهب + لوحة اسمك في الغرف", price: 35, grants: ["th_gold", "np_gold"], days: 0, col: "gold" },
+  { id: "c_falcon", name: "مجموعة الصقّار", desc: "ثيم بروفايل بريش يطيح + لوحة اسمك في الغرف", price: 35, grants: ["th_falcon", "np_falcon"], days: 0, col: "falcon" },
   { id: "vip365", name: "VIP سنة", desc: "شارة VIP وكل الحصريات لمدة سنة", price: 249, grants: [], days: 365 },
   { id: "vip30", name: "VIP شهر", desc: "شارة VIP وكل الحصريات لمدة شهر", price: 39, grants: [], days: 30 },
   { id: "t_royal", name: "الطاولة الملكية", desc: "مخمل أحمر وإطار ذهبي يلمع", price: 39, grants: ["t_royal"], days: 0 },
@@ -91,11 +96,27 @@ const SHOP = [
   { id: "b_royal", name: "ظهر الورق الملكي", desc: "عنابي بتاج ذهبي", price: 19, grants: ["b_royal"], days: 0 }
 ];
 const FRAMES = { f_gold: "ذهبي", f_fire: "ناري", f_sadu: "سدو" };
+// ستايل الاسم: تفتح بالمستوى، وقوس قزح للـ VIP
+const NSTYLES = { gold: { name: "ذهبي", lvl: 3 }, sea: { name: "بحري", lvl: 6 }, fire: { name: "ناري", lvl: 10 }, neon: { name: "نيون", lvl: 15 }, rainbow: { name: "قوس قزح", shop: "ns_rainbow" } };
+const DECO_NAMES = { ns_rainbow: "ستايل قوس قزح", ...Object.fromEntries(Object.entries(DECO).flatMap(([k, d]) => [["th_" + k, "ثيم " + d.name], ["np_" + k, "لوحة " + d.name]])) };
 let shopCfg = null; // روابط المنتجات في متجر روق
 const vipOn = p => (p?.vipUntil || 0) > Date.now();
 const owns = (p, id) => STAFF(p?.username) || vipOn(p) || (p?.owned || []).includes(id);
 const lookOpen = (t, p = me) => t.shop ? owns(p, t.shop) : lvlOfP(p) >= t.lvl;
-const myLook = () => ({ t: TABLES[me?.look?.t] && lookOpen(TABLES[me.look.t]) ? me.look.t : "felt", b: BACKS[me?.look?.b] && lookOpen(BACKS[me.look.b]) ? me.look.b : "classic" });
+const myLook = () => ({ t: TABLES[me?.look?.t] && lookOpen(TABLES[me.look.t]) ? me.look.t : "felt", b: BACKS[me?.look?.b] && lookOpen(BACKS[me.look.b]) ? me.look.b : "classic",
+  th: themeOf(prof(me?.uid)), np: plateOf(prof(me?.uid)), ns: nsOf(prof(me?.uid)), fav: favOf(prof(me?.uid)) });
+// زينة البروفايل (كلها محفوظة داخل look)
+const themeOf = p => { const k = p?.look?.th; return k && DECO[k] && owns(p, "th_" + k) ? k : ""; };
+const plateOf = p => { const k = p?.look?.np; return k && DECO[k] && owns(p, "np_" + k) ? k : ""; };
+const nsOpen = (k, p) => { const n = NSTYLES[k]; return !!n && (n.shop ? owns(p, n.shop) : lvlOfP(p) >= n.lvl); };
+const nsOf = p => { const k = p?.look?.ns; return k && nsOpen(k, p) ? k : ""; };
+const favOf = p => { const k = p?.look?.fav; return k && GAMES[k] ? k : ""; };
+const nsC = p => { const k = nsOf(p); return k ? ` ns ns-${k}` : ""; };
+// خلفية الثيم مع التأثير المتحرك
+const themeBg = (k, w = 440, h = 200, fx = true) => k ? `<span class="th-art">${DECO[k].art(w, h)}</span>${fx ? fxLayer(DECO[k].fx, 12) : ""}` : "";
+// كرت لعبتي المفضلة
+const favCard = p => { const g = favOf(p); if (!g) return ""; const c = CATALOG.find(x => x.id === g), n = p?.stats?.["g_" + g] || 0;
+  return `<div class="favc"><span class="favc-ic">${ICONS[c?.icon || g] || ""}</span><span class="favc-t"><span>لعبتي المفضلة</span><b>${GAMES[g]}</b></span>${n ? `<span class="favc-n">${ar(n)}<small>جولة</small></span>` : ""}</div>`; };
 const frameOf = p => p?.frame && FRAMES[p.frame] && owns(p, p.frame) ? p.frame : "";
 // الصورة مع الإطار (لو عنده)
 const avF = (p, size) => { const f = frameOf(p), av = avatar(p?.username, p?.photo, size); return f ? `<span class="fr ${f}" style="--fs:${Math.max(3, Math.round(size / 18))}px">${av}</span>` : av; };
@@ -169,7 +190,7 @@ let roomChat = [];            // شات الغرفة
 const profiles = new Map();   // uid -> { username, photo, bio }
 const profWant = new Set();
 function prof(uid) {
-  if (uid === me?.uid) return { username: me.username, photo: me.photo, bio: me.bio, xp: me.xp, stats: me.stats, owned: me.owned, vipUntil: me.vipUntil, frame: me.frame };
+  if (uid === me?.uid) return { username: me.username, photo: me.photo, bio: me.bio, xp: me.xp, stats: me.stats, owned: me.owned, vipUntil: me.vipUntil, frame: me.frame, look: me.look };
   const f = friends.get(uid); if (f && f.username !== "…") return f;
   if (profiles.has(uid)) return profiles.get(uid);
   if (db && me && !profWant.has(uid)) {
@@ -1902,9 +1923,9 @@ const tsAgo = t => { const ms = t?.toMillis ? t.toMillis() : 0; if (!ms) return 
   return m < 3 ? "أونلاين الحين" : m < 60 ? `قبل ${ar(m)} دقيقة` : m < 1440 ? `قبل ${ar(Math.round(m / 60))} ساعة` : `قبل ${ar(Math.round(m / 1440))} يوم`; };
 function playerCard(p) {
   const vip = (p.vipUntil || 0) > Date.now(), muted = (p.mutedUntil || 0) > Date.now();
-  const items = (p.owned || []).map(id => SHOP.find(x => x.id === id)?.name || FRAMES[id] || id);
+  const items = (p.owned || []).map(id => SHOP.find(x => x.id === id)?.name || FRAMES[id] || DECO_NAMES[id] || id);
   const row = (k, v) => `<div class="pk"><span>${k}</span><b>${v}</b></div>`;
-  return `<div class="pcard">
+  return `<div class="pcard apc">
     <div class="row-h"><div class="pc-who">${avatar(p.username, p.photo, 44)}<div><b dir="ltr">${at(p.username)}</b><span class="hint">${tsAgo(p.lastSeen)}</span></div></div>
       ${p.banned ? `<span class="tag bad">محظور</span>` : muted ? `<span class="tag bad">مكتوم</span>` : vip ? `<span class="tag">VIP</span>` : ""}</div>
     <div class="pkv">
@@ -2932,6 +2953,7 @@ const shopLink = id => { const l = shopCfg?.links?.[id]; return /^https:\/\//.te
 function shopPreview(it) {
   const g = it.grants || [];
   if (it.id === "king") return `<span class="sp-king">👑</span>`;
+  if (it.col) return `<span class="sp-col">${themeBg(it.col, 220, 120)}<span class="sp-np">${DECO[it.col].art(200, 34)}<b dir="ltr">@${esc(me.username)}</b></span></span>`;
   if (it.days && !g.length) return `<span class="sp-vip">VIP</span>`;
   if (g[0] === "t_royal") return tableSVG("royal");
   if (g[0] === "e_royal") return `<span class="sp-ent"><span>👑</span>${avF(prof(me.uid), 40)}<b>دخل الجلسة</b></span>`;
@@ -3172,14 +3194,16 @@ function showProfile(uid) {
   else acts += `<button class="btn" id="pfAdd">+ أضف صديق</button>`;
   if (roomCode && isHost() && room?.players?.[uid]) acts += `<button class="btn danger" id="pfKick">اطرده من الغرفة</button>`;
   const modRow = `<div class="row pf-mod"><button class="btn small ghost" id="pfRep">🚩 بلّغ</button><button class="btn small ghost" id="pfBlk">${isBlocked(uid) ? "فك الحظر" : "🚫 احظر"}</button></div>`;
-  el.innerHTML = `<div class="pcard">
-    <div class="pcard-cover" style="--c:${col}" aria-hidden="true"><span class="pc-sadu"></span></div>
+  const th = themeOf(p);
+  el.innerHTML = `<div class="pcard ${th ? "themed th-" + th : ""}">
+    ${th ? `<div class="pcard-cover th" aria-hidden="true">${themeBg(th)}</div>` : `<div class="pcard-cover" style="--c:${col}" aria-hidden="true"><span class="pc-sadu"></span></div>`}
     <div class="pcard-av">${avF(p, 104)}</div>
     <div class="pcard-body">
-      <b class="pf-name" dir="ltr">${at(p.username)}</b>
+      <b class="pf-name${nsC(p)}" dir="ltr">${at(p.username)}</b>
       ${f ? `<span class="chip-st ${isOnline(f) ? "on" : ""}">${isOnline(f) ? "أونلاين الحين" : "مو أونلاين"}</span>` : ""}
       <div class="row tags">${lvlTag(p)}${vipTag(p)}</div>
       ${p.bio ? `<p class="pcard-bio">${esc(p.bio)}</p>` : ""}
+      ${favCard(p)}
       ${(() => { const g = achGot(p.stats, p.xp, p.username); if (!g.length) return ""; const top = [...g].sort((q, r) => TIER_RANK[r.tier] - TIER_RANK[q.tier]).slice(0, 3);
         return `<div class="ach-mini" aria-label="الإنجازات">${top.map(x => medal(x)).join("")}<span class="ach-n">${ar(g.length)} ${g.length > 2 && g.length < 11 ? "إنجازات" : "إنجاز"}</span></div>`; })()}
       <div class="pcard-acts">${acts}</div>
@@ -3217,12 +3241,12 @@ async function shrinkPhoto(file) {
 VIEWS.profile = () => {
   const draft = ui.bioDraft ?? me.bio ?? "";
   V.innerHTML = `<section>
-    <div class="pf-head">
+    <div class="pf-head ${themeOf(prof(me.uid)) ? "themed" : ""}">${themeOf(prof(me.uid)) ? `<div class="pf-th" aria-hidden="true">${themeBg(themeOf(prof(me.uid)))}</div>` : ""}
       <div class="pf-av">${avF(prof(me.uid), 112)}
         <label class="pf-cam" for="photoIn" aria-label="غيّر الصورة">📷</label>
         <input type="file" id="photoIn" accept="image/*" hidden>
       </div>
-      <b class="pf-name" dir="ltr">${at(me.username)}</b>
+      <b class="pf-name${nsC(prof(me.uid))}" dir="ltr">${at(me.username)}</b>
       ${STAFF(me.username) ? `<div class="lvlbox max"><div class="row-h"><b>👑 المستوى ${ar(MAXL)}</b><span class="hint">${me.username.toLowerCase() === OWNER ? "صاحب اللعبة" : "الحساب الرسمي"}</span></div><div class="lvlbar"><i style="width:100%"></i></div><span class="hint">كل الأشكال والإنجازات مفتوحة لك.</span></div>` : (() => { const L = lvlOf(me.xp), a0 = lvlXp(L), a1 = lvlXp(L + 1), pc = Math.round(((me.xp || 0) - a0) / (a1 - a0) * 100);
         return `<div class="lvlbox"><div class="row-h"><b>⭐ المستوى ${ar(L)}</b><span class="hint">${ar((me.xp || 0) - a0)} / ${ar(a1 - a0)} خبرة</span></div><div class="lvlbar"><i style="width:${pc}%"></i></div><span class="hint">العب جولات واكسب خبرة. الفوز يعطيك أكثر.</span></div>`; })()}
       <div class="row pf-acts">
@@ -3257,6 +3281,21 @@ VIEWS.profile = () => {
         return `<button class="look frm ${sel ? "sel" : ""} ${k ? "excl" : ""}" data-lf="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><span class="look-pv">${k ? `<span class="fr ${k}" style="--fs:4px">${avatar(me.username, me.photo, 56)}</span>` : avatar(me.username, me.photo, 56)}</span><b>${n}</b><span class="hint">${open ? (sel ? "مختار ✓" : "متاح") : "🛍️ من المتجر"}</span></button>`; }).join("")}</div>
       <button class="btn ghost" id="toShop">🛍️ متجر روق</button></div>
 
+    <div class="field"><span class="label">✨ زينة بروفايلك</span>
+      <span class="hint">ستايل الاسم (يطلع في بروفايلك وفي الغرف)</span>
+      <div class="nss">${[["", "كلاسيك"], ...Object.entries(NSTYLES).map(([k, n]) => [k, n.name])].map(([k, n]) => { const open = !k || nsOpen(k, prof(me.uid)), sel = nsOf(prof(me.uid)) === k, ns = NSTYLES[k];
+        return `<button class="nsb ${sel ? "sel" : ""}" data-ns="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><b class="${k ? "ns ns-" + k : ""}" dir="ltr">${esc(me.username)}</b><span class="hint">${open ? (sel ? "مختار ✓" : n) : ns.shop ? "👑 VIP" : "🔒 مستوى " + ar(ns.lvl)}</span></button>`; }).join("")}</div>
+      <span class="hint">ثيم البروفايل (خلفية متحركة يشوفها كل من يفتح بروفايلك)</span>
+      <div class="ths">${[["", null], ...Object.entries(DECO)].map(([k, d]) => { const open = !k || owns(prof(me.uid), "th_" + k), sel = themeOf(prof(me.uid)) === k;
+        return `<button class="thb ${sel ? "sel" : ""}" data-th="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><span class="thb-pv">${k ? themeBg(k, 200, 120, false) : ""}</span><b>${k ? d.name : "بدون"}</b><span class="hint">${open ? (sel ? "مختار ✓" : k ? "✨ " + d.fxName : "متاح") : "🛍️ من المتجر"}</span></button>`; }).join("")}</div>
+      <span class="hint">لوحة الاسم (تطلع خلف اسمك في قائمة اللاعبين)</span>
+      <div class="nps">${[["", null], ...Object.entries(DECO)].map(([k, d]) => { const open = !k || owns(prof(me.uid), "np_" + k), sel = plateOf(prof(me.uid)) === k;
+        return `<button class="npb li ${k ? "np" : ""} ${sel ? "sel" : ""}" data-np="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}">${k ? `<span class="np-art">${d.art(360, 60)}</span>` : ""}${avF(prof(me.uid), 32)}<span class="nm${nsC(prof(me.uid))}" dir="ltr">@${esc(me.username)}</span><span class="tag">${open ? (sel ? "✓" : k ? d.name : "بدون") : "🛍️"}</span></button>`; }).join("")}</div>
+      <span class="hint">لعبتي المفضلة (تطلع في بروفايلك مع عدد جولاتك)</span>
+      <div class="favs">${[["", "ولا وحدة"], ...Object.entries(GAMES)].map(([k, n]) => { const sel = favOf(prof(me.uid)) === k, c = CATALOG.find(x => x.id === k);
+        return `<button class="favb ${sel ? "sel" : ""}" data-fav="${k}" aria-pressed="${sel}">${c ? `<span class="favb-ic">${ICONS[c.icon]}</span>` : ""}<b>${n}</b></button>`; }).join("")}</div>
+    </div>
+
     <div class="field"><span class="label">يوزرك</span>
       <div class="li"><span class="nm" dir="ltr">@${esc(me.username)}</span><button class="btn small ghost" id="copy">انسخ</button>${isOwner() ? "" : `<button class="btn small ghost" id="rename">غيّر</button>`}</div>
       <p class="hint">أرسله لأصحابك عشان يضيفونك.</p></div>
@@ -3273,6 +3312,14 @@ VIEWS.profile = () => {
   };
   onAll("[data-lt]", b => setLook("t", b.dataset.lt, TABLES));
   onAll("[data-lb]", b => setLook("b", b.dataset.lb, BACKS));
+  const setDeco = async (kind, k) => { const look = { ...myLook(), [kind]: k }; me.look = look; render(false);
+    try { await updateDoc(doc(db, "users", me.uid), { look }); } catch (e) { console.error(e); } };
+  onAll("[data-ns]", b => { const k = b.dataset.ns;
+    if (k && !nsOpen(k, prof(me.uid))) return NSTYLES[k].shop ? (toast("هذا للـ VIP 👑"), go("shop")) : toast(`يفتح لك في المستوى ${ar(NSTYLES[k].lvl)} ⭐`);
+    setDeco("ns", k); });
+  onAll("[data-th]", b => { const k = b.dataset.th; if (k && !owns(prof(me.uid), "th_" + k)) { toast("هذا من متجر روق 🛍️"); return go("shop"); } setDeco("th", k); });
+  onAll("[data-np]", b => { const k = b.dataset.np; if (k && !owns(prof(me.uid), "np_" + k)) { toast("هذا من متجر روق 🛍️"); return go("shop"); } setDeco("np", k); });
+  onAll("[data-fav]", b => setDeco("fav", b.dataset.fav));
   onAll("[data-lf]", async b => {
     const k = b.dataset.lf;
     if (k && !owns(prof(me.uid), k)) { toast("هذا من متجر روق 🛍️"); go("shop"); return; }
@@ -3510,7 +3557,7 @@ const ROOM_VIEWS = {
         <div class="row inv-row"><a class="btn small wa" id="waInv" href="${esc(waLink())}" target="_blank" rel="noopener">${ICONS.wa} ادعُ بالواتساب</a>
         <button class="btn small ghost" id="copyLink">انسخ الرابط</button></div></div>
       <div class="field"><span class="label">اللاعبين (${ar(n)} من ١٢)</span><div class="list">${ps.map(u => `
-        <div class="li"><button class="li-who" data-pf="${esc(u)}">${prof(u) ? avF(prof(u), 36) : avatar(pname(u), "", 36)}<span class="nm" dir="ltr">${at(pname(u))}</span>${room.players[u]?.g ? `<span class="tag">ضيف 👤</span>` : prof(u) ? lvlTag(prof(u)) + vipTag(prof(u)) : ""}</button>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}${host && u !== me.uid ? `<button class="btn small ghost kick" data-kick="${esc(u)}" aria-label="اطرد ${esc(pname(u))}">اطرد</button>` : ""}</div>`).join("")}</div></div>
+        <div class="li ${plateOf(prof(u)) ? "np" : ""}">${plateOf(prof(u)) ? `<span class="np-art" aria-hidden="true">${DECO[plateOf(prof(u))].art(360, 60)}</span>` : ""}<button class="li-who" data-pf="${esc(u)}">${prof(u) ? avF(prof(u), 36) : avatar(pname(u), "", 36)}<span class="nm${nsC(prof(u))}" dir="ltr">${at(pname(u))}</span>${room.players[u]?.g ? `<span class="tag">ضيف 👤</span>` : prof(u) ? lvlTag(prof(u)) + vipTag(prof(u)) : ""}</button>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}${host && u !== me.uid ? `<button class="btn small ghost kick" data-kick="${esc(u)}" aria-label="اطرد ${esc(pname(u))}">اطرد</button>` : ""}</div>`).join("")}</div></div>
       ${host ? `
         <div class="field"><span class="label">نوع الغرفة</span><div class="chips">
           <button class="chip" data-pub="0" aria-pressed="${!room.public}">خاصة 🔒</button>
