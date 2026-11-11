@@ -925,6 +925,29 @@ background:linear-gradient(120deg,#5c0a1e,#9e1838 45%,#5c0a1e);border:2px solid 
 .playc-t b{font-size:17px}.playc-t>span{font-size:13.5px;color:var(--muted)}
 .playc-m{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;font-size:13px;color:var(--muted)}
 .playc-m i{font-style:normal;font-weight:800;color:var(--mint);font-variant-numeric:tabular-nums}
+
+/* منصة الفايزين */
+.podium{position:relative;display:grid;grid-template-columns:1fr 1.15fr 1fr;align-items:end;gap:8px;margin:6px 0 14px;padding-top:26px;direction:ltr;overflow:hidden}
+.pod{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;position:relative}
+.pod b{font-size:14px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pod-pts{font-size:13px;font-weight:800;color:var(--saffron)}
+.pod-bar{display:grid;place-items:start center;width:100%;border-radius:14px 14px 4px 4px;font-style:normal;padding-top:8px;font-family:Lalezar,Tahoma,sans-serif;font-size:30px;color:rgba(0,0,0,.45)}
+.p1 .pod-bar{height:96px;background:linear-gradient(#ffe08a,#f2b134 60%,#b8862b)}
+.p2 .pod-bar{height:70px;background:linear-gradient(#f4f4f8,#c9c9d6 60%,#8e8ea3)}
+.p3 .pod-bar{height:52px;background:linear-gradient(#ffc999,#d9884a 60%,#9a5520)}
+.pod-crown{position:absolute;top:-26px;font-size:26px;animation:podCrown 2.4s ease-in-out infinite}
+.p1 .pod-av .av{box-shadow:0 0 0 3px #f2b134,0 0 18px rgba(242,177,52,.6)}
+@keyframes podCrown{0%,100%{transform:translateY(0) rotate(-8deg)}50%{transform:translateY(-4px) rotate(8deg)}}
+.podium.anim .pod-bar{animation:podUp .7s cubic-bezier(.2,1.3,.4,1) both}
+.podium.anim .p2 .pod-bar{animation-delay:.25s}.podium.anim .p3 .pod-bar{animation-delay:.45s}
+.podium.anim .pod>:not(.pod-bar){animation:podIn .5s ease-out both}.podium.anim .p1>:not(.pod-bar){animation-delay:.9s}.podium.anim .p2>:not(.pod-bar){animation-delay:.55s}.podium.anim .p3>:not(.pod-bar){animation-delay:.7s}
+@keyframes podUp{from{transform:scaleY(0);transform-origin:bottom}to{transform:scaleY(1);transform-origin:bottom}}
+@keyframes podIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.pod-conf{position:absolute;inset:0;pointer-events:none}
+.pod-conf i{position:absolute;top:-10px;left:var(--x);width:7px;height:12px;background:var(--c);border-radius:2px;animation:podConf 2.2s ease-in var(--d) both}
+@keyframes podConf{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(260px) rotate(540deg);opacity:0}}
+.wrapbtn{background:linear-gradient(135deg,#8f7bea,#ef6f6c);color:#fff;border:none}
+@media (prefers-reduced-motion:reduce){.pod-conf{display:none}}
 @media (prefers-reduced-motion:reduce){.fx{display:none}.ns{animation:none}}
 </style>
 </head>
@@ -939,6 +962,6 @@ background:linear-gradient(120deg,#5c0a1e,#9e1838 45%,#5c0a1e);border:2px solid 
   <main id="view"><div class="spinner" aria-label="جاري التحميل"></div></main>
 </div>
 <noscript><section style="padding:24px"><h1>روق: ألعاب الجلسات مع أصحابك</h1><p>ألعاب الجلسات مع الشلة من جوالك: ارسم وخمّن، الدخيل، أونو، مين قالها، صح ولا خطأ، ومين أكثر واحد. أونلاين أو بجوال واحد، ومجانية.</p><p>شغّل الجافاسكربت عشان تلعب.</p></section></noscript>
-<script type="module" src="./app.js?v=71"></script>
+<script type="module" src="./app.js?v=72"></script>
 </body>
 </html>

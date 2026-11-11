@@ -634,6 +634,7 @@ async function claimUsername(name) {
 /* ================= live data ================= */
 function startGlobal() {
   setTimeout(claimStreak, 1500);
+  setTimeout(wrapCheck, 4000);
   if (pushState() === "granted") setTimeout(() => pushSaveToken(true), 3000);
   const ping = () => { if (document.visibilityState === "visible") { ui.playAt = 0; if (roomCode && room?.game) { const pd = playData(); ui.playKey = [roomCode, pd.g, pd.n, pd.s].join(":"); ui.playAt = Date.now(); updateDoc(doc(db, "users", me.uid), { lastSeen: serverTimestamp(), playing: pd }).catch(() => {}); } else updateDoc(doc(db, "users", me.uid), { lastSeen: serverTimestamp() }).catch(() => {}); } };
   ping();
@@ -643,7 +644,7 @@ function startGlobal() {
   sub("me", onSnapshot(doc(db, "users", me.uid), snap => {
     if (!snap.exists() || !me?.uid) return;
     const d = snap.data(), was = JSON.stringify([me.owned, me.vipUntil]);
-    Object.assign(me, { owned: d.owned || [], vipUntil: d.vipUntil || 0, warns: d.warns || 0, mutedUntil: d.mutedUntil || 0, refs: d.refs || 0, xp: Math.max(me.xp || 0, d.xp || 0), frame: d.frame || "", look: d.look || me.look, banner: d.banner || "" });
+    Object.assign(me, { owned: d.owned || [], vipUntil: d.vipUntil || 0, warns: d.warns || 0, mutedUntil: d.mutedUntil || 0, refs: d.refs || 0, xp: Math.max(me.xp || 0, d.xp || 0), frame: d.frame || "", look: d.look || me.look, banner: d.banner || "", mon: d.mon || me.mon || null, monPrev: d.monPrev || me.monPrev || null });
     if (JSON.stringify([me.owned, me.vipUntil]) !== was) refresh();
   }));
 
@@ -1190,8 +1191,8 @@ async function openSummary(d) {
   if (!d) return toast("العبوا جولة أول 😄");
   document.getElementById("shareSheet")?.remove();
   const el = document.createElement("div");
-  el.id = "shareSheet"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "ملخص الجلسة");
-  el.innerHTML = `<div class="sheet share-sheet"><b class="pf-name">ملخص الجلسة 📊</b>
+  el.id = "shareSheet"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", d.sheetTitle || "ملخص الجلسة");
+  el.innerHTML = `<div class="sheet share-sheet"><b class="pf-name">${d.sheetTitle || "ملخص الجلسة 📊"}</b>
     <div class="share-prev" id="shPrev"><div class="spinner" aria-label="نجهز الصورة"></div></div>
     <button class="btn" id="shGo" disabled>شارك الصورة 📤</button>
     <button class="btn ghost" id="shLink">📎 انسخ رابط روق</button>
@@ -1216,6 +1217,37 @@ async function openSummary(d) {
     else go.remove();
   } catch (e) { console.error(e); el.querySelector("#shHint").textContent = "ما قدرنا نسوي الصورة"; }
 }
+/* ================= ملخص روق الشهري (مثل Spotify Wrapped) ================= */
+const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+const monKey = () => dayKey(Date.now()).slice(0, 7);
+const monName = k => MONTHS[+String(k).slice(5, 7) - 1] || "";
+function monUpdate(game, won) {
+  const mk = monKey(), cur = me.mon?.m === mk ? me.mon : null, out = {};
+  if (me.mon?.m && me.mon.m !== mk && me.mon.r) out.monPrev = me.mon;
+  const m = cur ? JSON.parse(JSON.stringify(cur)) : { m: mk, r: 0, w: 0, g: {}, p: {}, d: [] };
+  m.r++; if (won) m.w++; m.g[game] = (m.g[game] || 0) + 1;
+  const day = +dayKey(Date.now()).slice(8); if (!m.d.includes(day)) m.d.push(day);
+  (room?.roundPlayers || []).forEach(u => { if (u === me.uid || room.players?.[u]?.g) return; const o = m.p[u] || { c: 0, n: pname(u) }; o.c++; o.n = String(pname(u) || o.n).slice(0, 21); m.p[u] = o; });
+  const ks = Object.keys(m.p); if (ks.length > 25) ks.sort((a, b) => m.p[a].c - m.p[b].c).slice(0, ks.length - 25).forEach(k => delete m.p[k]);
+  out.mon = m; return out;
+}
+const WTITLE = { imp: ["المحقق 🕵️", "الدخيل الغامض 🎭"], most: ["نجم الشلة ⭐", "نجم الشلة ⭐"], kal: ["ملك الكلمات 🔤", "ملك الكلمات 🔤"], draw: ["فنان روق 🎨", "رسّام الشلة 🖍️"], uno: ["ملك الأونو 🃏", "صاحب الحظ 🃏"], hhnj: ["سريع البديهة ⚡", "سريع البديهة ⚡"], who: ["قارئ الأفكار 🔮", "قارئ الأفكار 🔮"], tf: ["كاشف الكذب 🤥", "ملك الكذب 🤥"] };
+function wrapData(m, mine = true) {
+  if (!m?.r) return null;
+  const games = Object.entries(m.g || {}).sort((a, b) => b[1] - a[1]), top = games[0], rate = m.w / m.r, days = (m.d || []).length;
+  const pals = Object.values(m.p || {}).sort((a, b) => b.c - a.c);
+  let title = top ? (WTITLE[top[0]] || ["لاعب روق 🎮"])[rate >= .45 ? 0 : 1] : "لاعب روق 🎮";
+  if (m.r >= 30 && rate >= .6) title = "الأسطورة 👑"; else if (days >= 18) title = "مدمن روق 🔥";
+  return { sheetTitle: `ملخص روق • ${monName(m.m)} 📊`, game: `ملخص روق • ${monName(m.m)}`, head: title, names: [me.username], quote: "",
+    sub: [`🎮 لعبت ${ar(m.r)} جولة · 🏆 فزت ${ar(m.w)}`, top ? `❤️ لعبتك: ${GAMES[top[0]] || "روق"} (${ar(top[1])} جولة)` : "", pals[0] ? `👯 أكثر واحد لعبت معه: @${pals[0].n} (${ar(pals[0].c)} جولة)` : "", `📅 لعبت ${ar(days)} ${days > 2 && days < 11 ? "أيام" : "يوم"} هالشهر`].filter(Boolean).join("\n"),
+    board: pals.slice(1, 4).map(x => ({ n: x.n, p: x.c })), boardTitle: "ربعك هالشهر" };
+}
+function openWrap(prev) { const d = wrapData(prev ? me.monPrev : (me.mon?.m === monKey() ? me.mon : null)); if (!d) return toast("العب كم جولة هالشهر وبيطلع ملخصك 😄"); openSummary(d); }
+function wrapCheck(tries = 0) { const p = me?.monPrev; if (!p?.r || p.m === monKey() || store.get("wrapSeen", "") === p.m) return;
+  if (document.querySelector(".sheet-bg")) { if (tries < 10) setTimeout(() => wrapCheck(tries + 1), 4000); return; }
+  store.set("wrapSeen", p.m);
+  setTimeout(() => { const el = sheet(`<div class="ref-gift"><span class="rg-ic" aria-hidden="true">📊</span><b class="pf-name">ملخصك لشهر ${monName(p.m)} جاهز 🎉</b><p class="hint">شوف وش لقبك، وكم لعبت، ومين أكثر واحد لعبت معه. وشاركه في السناب 👻</p><button class="btn" id="wrapGo">شوف ملخصي</button><button class="btn ghost" data-close>بعدين</button></div>`);
+    el.querySelector("#wrapGo").addEventListener("click", () => { el.remove(); openWrap(true); }); }, 300); }
 async function awardXp() {
   if (!me?.uid || me.guest || !room || !roomCode) return;
   const myScore = room.scores?.[me.uid] || 0;
@@ -1234,9 +1266,10 @@ async function awardXp() {
   if (won) { s.wins = (s.wins || 0) + 1; s["w_" + game] = (s["w_" + game] || 0) + 1; }
   const h = new Date().getHours(); if (h >= 2 && h < 5) s.night = (s.night || 0) + 1;
   const before = achGot(me.stats, me.xp, me.username).map(x => x.id), oldL = myLvl();
+  const mu = monUpdate(game, won);
   try {
-    await updateDoc(doc(db, "users", me.uid), { xp: (me.xp || 0) + add, xpAt: serverTimestamp(), stats: s });
-    me.xp = (me.xp || 0) + add; me.stats = s;
+    await updateDoc(doc(db, "users", me.uid), { xp: (me.xp || 0) + add, xpAt: serverTimestamp(), stats: s, ...mu });
+    me.xp = (me.xp || 0) + add; me.stats = s; Object.assign(me, mu);
     if (s.games <= 3) setTimeout(refCheck, 4000);
     const fresh = achGot(s, me.xp, me.username).filter(x => !before.includes(x.id));
     setTimeout(() => {
@@ -1786,7 +1819,7 @@ async function makeShareImage(d) {
   // النقاط
   const board = (d.board || []).filter(b => b.p > 0);
   if (board.length && y < H - 560) {
-    g.font = `600 38px ${BODY}`; g.fillStyle = "#b8adcf"; g.fillText("النقاط", W / 2, y); y += 30;
+    g.font = `600 38px ${BODY}`; g.fillStyle = "#b8adcf"; g.fillText(d.boardTitle || "النقاط", W / 2, y); y += 30;
     board.slice(0, Math.max(1, Math.floor((H - 470 - y) / 92))).forEach((b, i) => {
       g.fillStyle = i === 0 ? "rgba(242,177,52,.16)" : "rgba(255,255,255,.05)"; rr(g, CX, y, CW, 78, 26); g.fill();
       g.textAlign = "right"; g.fillStyle = "#f2b134"; g.font = `52px ${DISP}`; g.fillText(ar(i + 1), CX + CW - 34, y + 57);
@@ -3408,6 +3441,7 @@ VIEWS.profile = () => {
       <div class="looks">${[["", "بدون"], ...Object.entries(FRAMES)].map(([k, n]) => { const open = !k || owns(prof(me.uid), k), sel = (frameOf(prof(me.uid)) || "") === k;
         return `<button class="look frm ${sel ? "sel" : ""} ${k ? "excl" : ""}" data-lf="${k}" ${open ? "" : "aria-disabled=\"true\""} aria-pressed="${sel}"><span class="look-pv">${k ? `<span class="fr ${k}" style="--fs:4px">${avatar(me.username, me.photo, 56)}</span>` : avatar(me.username, me.photo, 56)}</span><b>${n}</b><span class="hint">${open ? (sel ? "مختار ✓" : "متاح") : "🛍️ من المتجر"}</span></button>`; }).join("")}</div>
       <button class="btn ghost" id="toShop">🛍️ متجر روق</button></div>
+    <div class="field"><button class="btn wrapbtn" id="wrapBtn">📊 ملخصي لشهر ${monName(monKey())}</button>${me.monPrev?.r ? `<button class="btn ghost" id="wrapPrev">ملخص شهر ${monName(me.monPrev.m)}</button>` : ""}</div>
 
     <div class="field"><span class="label">✨ زينة بروفايلك</span>
       <span class="hint">ستايل الاسم (يطلع في بروفايلك وفي الغرف)</span>
@@ -3456,6 +3490,8 @@ VIEWS.profile = () => {
     try { await updateDoc(doc(db, "users", me.uid), { frame: k }); } catch (e) { console.error(e); }
   });
   on("toShop", "click", () => go("shop"));
+  on("wrapBtn", "click", () => openWrap(false));
+  on("wrapPrev", "click", () => openWrap(true));
   on("switchAcc", "click", openSwitcher);
   on("pushOn", "click", enablePush);
   on("pushRe", "click", async () => { toast(await pushSaveToken() ? "تمام، الإشعارات شغالة 🔔" : "ما زبط، جرّب مرة ثانية"); });
@@ -3598,10 +3634,17 @@ VIEWS.friends = () => {
 };
 
 /* ---------- room views ---------- */
+// منصة الفايزين (مثل Kahoot)
+function podium(rows) {
+  const k = roomCode + ":" + room.round + ":" + room.phase, anim = ui.podKey !== k; ui.podKey = k;
+  const spot = (r, place) => r ? `<div class="pod p${place}">${place === 1 ? `<span class="pod-crown" aria-hidden="true">👑</span>` : ""}<span class="pod-av">${prof(r.u) ? avF(prof(r.u), place === 1 ? 64 : 52) : avatar(pname(r.u), "", place === 1 ? 64 : 52)}</span>
+    <b dir="ltr">${esc(pname(r.u))}</b><span class="pod-pts">${ar(r.pts)}</span><i class="pod-bar"><span>${ar(place)}</span></i></div>` : `<div class="pod p${place} empty"></div>`;
+  return `<div class="podium ${anim ? "anim" : ""}" aria-label="منصة الفايزين">${spot(rows[1], 2)}${spot(rows[0], 1)}${spot(rows[2], 3)}${anim ? `<span class="pod-conf" aria-hidden="true">${Array.from({ length: 18 }, (_, i) => `<i style="--x:${(i * 37) % 100}%;--d:${(i % 6) * .12}s;--c:${["#f2b134", "#ef6f6c", "#74d6b8", "#8f7bea"][i % 4]}"></i>`).join("")}</span>` : ""}</div>`;
+}
 function scoreBoard(ids) {
   const rows = ids.map(u => ({ u, pts: room.scores?.[u] || 0 })).sort((a, b) => b.pts - a.pts);
   const top = rows[0]?.pts || 0;
-  return `<div class="board">${rows.map((r, k) => `<div class="r ${r.pts > 0 && r.pts === top ? "top" : ""}">
+  return `${END_PHASES[room.phase] && rows.length >= 2 && top > 0 ? podium(rows) : ""}<div class="board">${rows.map((r, k) => `<div class="r ${r.pts > 0 && r.pts === top ? "top" : ""}">
     <span class="rank">${ar(k + 1)}</span><span class="nm" dir="ltr">${at(pname(r.u))}</span><span class="pts">${ar(r.pts)}</span></div>`).join("")}</div>`;
 }
 function tallyList(tally, ids) {
@@ -4765,7 +4808,7 @@ if (configured) {
     try {
       const s = await getDoc(doc(db, "users", user.uid));
       if (!s.exists()) { me = { uid: user.uid }; go("username"); return; }
-      me = { uid: user.uid, username: s.data().username, photo: s.data().photo || "", bio: s.data().bio || "", xp: s.data().xp || 0, stats: s.data().stats || {}, look: s.data().look || null, owned: s.data().owned || [], vipUntil: s.data().vipUntil || 0, frame: s.data().frame || "", banner: s.data().banner || "", streak: s.data().streak || 0, streakAt: s.data().streakAt || null, renamedAt: s.data().usernameChangedAt || null, warns: s.data().warns || 0, mutedUntil: s.data().mutedUntil || 0, refs: s.data().refs || 0 };
+      me = { uid: user.uid, username: s.data().username, photo: s.data().photo || "", bio: s.data().bio || "", xp: s.data().xp || 0, stats: s.data().stats || {}, look: s.data().look || null, owned: s.data().owned || [], vipUntil: s.data().vipUntil || 0, frame: s.data().frame || "", banner: s.data().banner || "", streak: s.data().streak || 0, streakAt: s.data().streakAt || null, renamedAt: s.data().usernameChangedAt || null, warns: s.data().warns || 0, mutedUntil: s.data().mutedUntil || 0, refs: s.data().refs || 0, mon: s.data().mon || null, monPrev: s.data().monPrev || null };
       startGlobal();
       const b = await getDoc(doc(db, "bans", user.uid)).catch(() => null);
       if (b?.exists()) { banned = true; go("banned"); return; }
