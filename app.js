@@ -189,7 +189,9 @@ const pairId = (a, b) => [a, b].sort().join("_");
 
 /* ================= navigation & rendering ================= */
 const REFRESH = new Set(["home", "friends", "room", "profile", "admin", "inbox", "shop"]);
+const GUEST_NO = new Set(["home", "profile", "friends", "shop", "inbox", "dm", "pub", "admin", "rename", "welcome"]);
 function go(name) {
+  if (me?.guest && GUEST_NO.has(name)) name = roomCode ? "room" : "auth";
   stopLocalTimers();
   if (screen === "dm" && name !== "dm") { off("dm"); ui.dmWith = null; }
   if (name !== "pub") { off("pub"); pubRooms = null; }
@@ -225,14 +227,14 @@ const BACK = {
   local: () => me?.username ? "home" : (configured ? "auth" : "setup"),
   "l-players": "local", "l-imp": "local", "l-pass": "local", "l-play": "local",
   "l-most": "local", "l-five": "local", "l-scores": "local",
-  "l-kal": "local", "l-kq": "l-kal", "l-draw": "local", "l-tf": "local", "l-who": "local"
+  gjoin: "auth", "l-kal": "local", "l-kq": "l-kal", "l-draw": "local", "l-tf": "local", "l-who": "local"
 };
 function renderHeader() {
   let h = "";
   if (roomCode && screen !== "room") h += `<button class="pill hot" id="hRoom">الغرفة ${esc(roomCode)}</button>`;
   const back = BACK[screen];
   if (back) h += `<button class="pill" id="hBack">رجوع</button>`;
-  if (me?.username && !back && screen !== "room" && screen !== "welcome") {
+  if (me?.username && !me.guest && !back && screen !== "room" && screen !== "welcome") {
     if (isOwner()) h += `<button class="pill hot" id="hAdmin" aria-label="لوحة المالك">👑</button>`;
     h += `<button class="pill add" id="hFriends"><span aria-hidden="true">+</span> أضف صديق${reqIn.length ? `<span class="badge">${ar(reqIn.length)}</span>` : ""}</button>`;
     h += `<button class="pill shop ${isOwner() ? "mini" : ""}" id="hShop" aria-label="متجر روق"><span class="ps-ic" aria-hidden="true">${ICONS.shop}</span><span class="ps-t">المتجر</span></button>`;
@@ -399,6 +401,58 @@ function openInvite() {
     <p class="hint center">${ui.refCount ? `دعيت ${ar(ui.refCount)} ${ui.refCount > 1 ? "أصحاب" : "صاحب"} لين الحين 🔥` : "كل واحد يسجّل منك = أسبوع VIP لك."} (لين ${ar(REF_MAX)} أسبوع)</p></div>`);
   el.querySelector("#refCopy").addEventListener("click", () => copyText(refMsg(), "انسخ الرابط"));
   el.querySelector("#refWa").addEventListener("click", () => window.open("https://wa.me/?text=" + encodeURIComponent(refMsg()), "_blank"));
+}
+
+/* ================= الدخول ضيف من رابط الغرفة ================= */
+const GUEST_BAD = new Set([OWNER, OFFICIAL, "jalsa", "admin", "owner", "support", "official", "روق", "الادارة", "الإدارة"]);
+async function guestJoin(name, code) {
+  name = cleanMsg(name).replace(/\s+/g, " ").slice(0, 14);
+  code = String(code || "").trim().toUpperCase();
+  if ([...name].length < 2) return toast("اكتب اسمك (حرفين على الأقل)");
+  if (GUEST_BAD.has(name.toLowerCase().replace(/^@/, "")) || name.startsWith("@")) return toast("اختر اسم ثاني");
+  if (botBad(name)) return toast("اختر اسم مناسب 🙏");
+  if (!/^[A-Z0-9]{5}$/.test(code)) return toast("كود الغرفة ٥ خانات");
+  try {
+    if (!auth.currentUser) await signInAnonymously(auth);
+    if (!auth.currentUser?.isAnonymous) return;
+    store.set("gname", name);
+    me = { uid: auth.currentUser.uid, username: name, guest: true, photo: "", stats: {}, xp: 0, owned: [] };
+    termsAccept(); pendingJoin = null; history.replaceState(null, "", location.pathname);
+    await joinRoom(code);
+    if (!roomCode) { me = null; go("gjoin"); }
+  } catch (e) { console.error(e); toast("ما قدرنا ندخلك، جرّب مرة ثانية"); }
+}
+function guestPromo() {
+  if (!me?.guest) return;
+  if (document.querySelector(".sheet-bg")) return setTimeout(guestPromo, 1000);
+  const el = sheet(`<div class="ref-gift"><span class="rg-ic" aria-hidden="true">🎉</span><b class="pf-name">عجبتك روق؟</b>
+    <p class="pf-bio">سوّ حساب ببلاش عشان:<br>⭐ تنحفظ نقاطك ومستواك<br>👥 تضيف ربعك وتعزمهم بضغطة<br>🎮 تسوي غرف وتلعب كل الألعاب</p>
+    <button class="btn google" id="gpG"><span class="g-logo" aria-hidden="true">${GOOGLE_G}</span>كمّل بحساب قوقل</button>
+    <button class="btn ghost" id="gpE">سجّل بالإيميل</button><button class="link" data-close>بعدين</button></div>`);
+  el.querySelector("#gpG").addEventListener("click", () => { el.remove(); me = null; login(); });
+  el.querySelector("#gpE").addEventListener("click", () => { el.remove(); me = null; ui.emailMode = "signup"; go("email"); });
+}
+function viewGjoin() {
+  const code = ui.gCode || pendingJoin || "";
+  V.innerHTML = `<section>
+    <div class="hero"><div class="hero-icons" aria-hidden="true"><span class="hi hi1">${ICONS.imp}</span><span class="hi hi2">${ICONS.draw}</span><span class="hi hi3">${ICONS.kal}</span></div>
+      <h2>${code ? "ربعك ينتظرونك 🎉" : "ادخل غرفة ربعك"}</h2>
+      <p class="lead">اكتب اسمك وادخل على طول، بدون حساب وبدون تحميل.</p></div>
+    <form class="wform gj" id="gjF" autocomplete="off">
+      <label class="label" for="gjName">اسمك</label>
+      <input class="txt" id="gjName" maxlength="14" dir="auto" placeholder="مثلًا: أبو فهد" value="${esc(store.get("gname", ""))}">
+      <label class="label" for="gjCode">كود الغرفة</label>
+      <input class="txt gj-code" id="gjCode" dir="ltr" maxlength="5" autocapitalize="characters" placeholder="K7M2P" value="${esc(code)}">
+      <button class="btn">ادخل الغرفة 🚪</button>
+    </form>
+    <div class="foot"><p class="hint center legal-hint">بدخولك توافق على ${LEGAL_LINKS}، وتأكد إن عمرك ١٨ أو أكثر.</p>
+      <div class="or"><span>أو</span></div>
+      <button class="btn ghost" id="gjAcc">عندي حساب، سجّل دخول</button></div></section>`;
+  const nm = document.getElementById("gjName"), cd = document.getElementById("gjCode");
+  cd.addEventListener("input", () => { ui.gCode = cd.value.toUpperCase(); });
+  setTimeout(() => (nm.value ? cd.value ? null : cd : nm)?.focus(), 60);
+  on("gjF", "submit", e => { e.preventDefault(); const b = e.currentTarget.querySelector("button"); b.disabled = true; guestJoin(nm.value, cd.value).finally(() => { if (document.body.contains(b)) b.disabled = false; }); });
+  on("gjAcc", "click", () => go("auth"));
 }
 
 /* ================= شروط الاستخدام ================= */
@@ -647,7 +701,7 @@ async function joinRoom(raw) {
       if (r.kicked?.[me.uid]) return toast("المضيف طردك من هالغرفة 🚫");
       if (r.phase !== "lobby") return toast("اللعبة بدأت، انتظروا الجولة الجاية");
       if (Object.keys(r.players).length >= 12) return toast("الغرفة مليانة");
-      await updateDoc(doc(db, "rooms", code), { [`players.${me.uid}`]: { name: me.username, at: Date.now() } });
+      await updateDoc(doc(db, "rooms", code), { [`players.${me.uid}`]: { name: me.username, at: Date.now(), ...(me.guest ? { g: true } : {}) } });
     }
     enterRoom(code);
   } catch (e) { console.error(e); toast("ما قدرنا ندخل الغرفة"); }
@@ -686,6 +740,7 @@ async function leaveRoom(silent) {
   const code = roomCode, host = isHost();
   const sum = !silent && ui.sess?.room === code && ui.sess.rounds.size >= 2 ? sessionData() : null;
   if (sum) setTimeout(() => openSummary(sum), 350);
+  if (me?.guest && !silent) setTimeout(guestPromo, 900);
   exitRoomLocal(silent ? null : "طلعت من الغرفة");
   try {
     if (host) await deleteDoc(doc(db, "rooms", code));
@@ -1000,7 +1055,30 @@ function trackSession() {
   Object.keys(room.players || {}).forEach(u => { s.names[u] = pname(u); });
   Object.entries(room.scores || {}).forEach(([u, p]) => { s.scores[u] = p; });
   const g = END_PHASES[room.phase];
-  if (g) { const k = room.round + ":" + room.phase; if (!s.rounds.has(k)) { s.rounds.add(k); s.games[g] = (s.games[g] || 0) + 1; } }
+  if (g) { const k = room.round + ":" + room.phase; if (!s.rounds.has(k)) { s.rounds.add(k); s.games[g] = (s.games[g] || 0) + 1; sessHighlight(s); } }
+}
+// لحظات الجلسة: أطرف شي صار، عشان تطلع في صورة الستوري
+function sessHighlight(s) {
+  const r = room.result || {}, nm = u => "@" + pname(u), ph = room.phase;
+  s.hl = s.hl || [];
+  let h = null;
+  if (ph === "result" && r.imps?.length) h = r.caught ? { w: 2, t: `🕵️ انكشف الدخيل ${r.imps.map(nm).join(" و ")}` } : { w: 3, t: `😈 ${r.imps.map(nm).join(" و ")} كان الدخيل ونجا منكم` };
+  else if (ph === "tres" && room.teller) { const n = r.wrong?.length || 0; if (n >= 2) h = { w: 3, t: `🤥 ${nm(room.teller)} ضحك على ${ar(n)} منكم` }; }
+  else if (ph === "dres" && r.word) {
+    const got = Object.keys(r.got || {}).sort((a, b) => r.got[a] - r.got[b]);
+    h = got.length ? { w: 1, t: `🎨 ${nm(got[0])} عرف رسمة «${r.word}» قبل الكل` } : { w: 3, t: `🎨 محد عرف رسمة ${nm(room.drawer)}: «${r.word}» 😂` };
+    try { // نحفظ الرسمة اللي محد عرفها (أو آخر رسمة)
+      if (DRAWS.strokes?.length && (!got.length || !s.drawing)) {
+        const cv = document.createElement("canvas");
+        paintCanvas(cv, DRAWS.strokes, 640);
+        const img = new Image(); img.src = cv.toDataURL("image/png"); s.drawing = img; s.drawWord = r.word;
+      }
+    } catch (e) {}
+  }
+  else if (ph === "unoend" && room.uno?.winner) h = { w: 2, t: `🃏 ${nm(room.uno.winner)} قهركم بالأونو` };
+  else if (ph === "mresult" && room.prompt) { const top = topOf(r.tally || {}, roundPlayers()); if (top.length === 1) h = { w: 2, t: `👀 ${nm(top[0])} أكثر واحد ${room.prompt}` }; }
+  else if (ph === "kend" && r.win) h = { w: 1, t: `🔤 فاز الفريق ${kTeamName(r.win)} في كمّل الكلمة` };
+  if (h) s.hl.push({ ...h, i: s.hl.length });
 }
 const GAME_OF = { imp: "imp", hhnj: "hhnj", uno: "uno", most: "most", who: "who", tf: "tf", draw: "draw" };
 function sessionData(s = ui.sess) {
@@ -1016,7 +1094,8 @@ function sessionData(s = ui.sess) {
     head: top.length ? "ملك الجلسة 👑" : "جلسة حلوة 🔥",
     names: top.map(r => r.n),
     sub: [`الجولات: ${ar(s.rounds.size)} · المدة: ${dur}`, games.slice(0, 3).join(" · "), low ? `واللي يبيله تدريب: @${low.n} 😅` : ""].filter(Boolean).join("\n"),
-    quote: "", img: null,
+    quote: "", img: s.drawing || null, imgSize: 300, imgAfter: true, imgCap: s.drawing ? `🎨 رسمة الجلسة: «${s.drawWord}»` : "",
+    hl: (s.hl || []).slice().sort((a, b) => b.w - a.w || b.i - a.i).slice(0, 3).map(x => x.t),
     board: rows.slice(0, 6).map(r => ({ n: r.n, p: r.p }))
   };
 }
@@ -1043,13 +1122,13 @@ async function openSummary(d) {
     const file = new File([blob], "rawq.jpg", { type: "image/jpeg" });
     const can = !!navigator.canShare?.({ files: [file] });
     const go = el.querySelector("#shGo"), hint = el.querySelector("#shHint");
-    hint.textContent = can ? "نزّلها ستوري بالسناب أو الانستا، وخلّهم يشوفون مين الملك 👑" : "اضغط مطوّل على الصورة واحفظها، ونزّلها ستوري.";
-    if (can) { go.disabled = false; go.addEventListener("click", async () => { try { await navigator.share({ files: [file], text: `جلستنا في روق 🔥 ${appLink()}` }); } catch (e) { if (e?.name !== "AbortError") toast("احفظ الصورة وشاركها"); } }); }
+    hint.textContent = can ? "اضغط شارك واختر سناب شات 👻 ونزّلها ستوري، وخلّهم يشوفون مين الملك 👑" : "اضغط مطوّل على الصورة واحفظها، ونزّلها ستوري.";
+    if (can) { go.disabled = false; go.addEventListener("click", async () => { try { await navigator.share({ files: [file], text: `جلستنا في روق 🔥 العبوا معنا: ${me?.username && !me.guest ? refLink() : appLink()}` }); } catch (e) { if (e?.name !== "AbortError") toast("احفظ الصورة وشاركها"); } }); }
     else go.remove();
   } catch (e) { console.error(e); el.querySelector("#shHint").textContent = "ما قدرنا نسوي الصورة"; }
 }
 async function awardXp() {
-  if (!me?.uid || !room || !roomCode) return;
+  if (!me?.uid || me.guest || !room || !roomCode) return;
   const myScore = room.scores?.[me.uid] || 0;
   if (!ui.xpBase || ui.xpBase.room !== roomCode) ui.xpBase = { room: roomCode, score: myScore, done: new Set() };
   const game = END_PHASES[room.phase];
@@ -1262,9 +1341,9 @@ function decStrokes(s) {
     return { c: DCOLORS[c] ? c : 0, w: DSIZES[w] ? w : 1, p: p.length % 2 ? p.slice(0, -1) : p };
   }).filter(k => k.p.length >= 2);
 }
-function paintCanvas(cv = document.getElementById("dCanvas"), strokes = DRAWS.strokes) {
+function paintCanvas(cv = document.getElementById("dCanvas"), strokes = DRAWS.strokes, size) {
   if (!cv) return;
-  const W = Math.max(1, Math.round(cv.clientWidth * (window.devicePixelRatio || 1)));
+  const W = size || Math.max(1, Math.round(cv.clientWidth * (window.devicePixelRatio || 1)));
   if (cv.width !== W || cv.height !== W) { cv.width = W; cv.height = W; }
   const g = cv.getContext("2d"), k = W / 1000;
   g.fillStyle = "#fffaf0"; g.fillRect(0, 0, W, W);
@@ -1520,7 +1599,7 @@ function kFeed(k) {
 
 /* ================= شارك النتيجة (صورة) ================= */
 const appLink = () => location.origin + location.pathname.replace(/index\.html$/, "");
-const waLink = () => "https://wa.me/?text=" + encodeURIComponent(`تعال العب معنا ${GAMES[room?.game] || ""} في روق 🎉\nادخل من هنا: ${appLink()}?r=${roomCode}\nأو اكتب كود الغرفة: ${roomCode}`);
+const waLink = () => "https://wa.me/?text=" + encodeURIComponent(`تعال العب معنا ${GAMES[room?.game] || ""} في روق 🎉\nادخل من هنا واكتب اسمك بس، بدون حساب: ${appLink()}?r=${roomCode}\nأو اكتب كود الغرفة: ${roomCode}`);
 function topOf(map, ids) {
   const max = Math.max(0, ...ids.map(u => map[u] || 0));
   return max > 0 ? ids.filter(u => (map[u] || 0) === max) : [];
@@ -1590,19 +1669,26 @@ async function makeShareImage(d) {
   g.fillStyle = "#f7f0e3"; g.fillText(d.game, W / 2, 364);
   // البطاقة: نقيس أول وبعدين نرسم
   const CW = 920, CX = (W - CW) / 2, inner = CW - 110;
-  const items = [];
+  const items = [], IS = d.imgSize || 640;
+  const imgItems = () => d.img ? [{ img: d.img, s: IS, h: IS + 26, tag: "img" }, ...(d.imgCap ? [{ t: d.imgCap, font: `600 38px ${BODY}`, col: "#b8adcf", h: 56, tag: "img" }] : [])] : [];
   if (d.head) { g.font = `66px ${DISP}`; wrapLines(g, d.head, inner).forEach(t => items.push({ t, font: `66px ${DISP}`, col: "#f7f0e3", h: 86 })); items.push({ gap: 14 }); }
   if (d.quote) { g.font = `600 50px ${BODY}`; wrapLines(g, "«" + d.quote + "»", inner).slice(0, 5).forEach(t => items.push({ t, font: `600 50px ${BODY}`, col: "#f2b134", h: 74 })); items.push({ gap: 18 }); }
-  if (d.img) items.push({ img: d.img, h: 640 + 26 });
-  d.names.slice(0, 3).forEach(n => { const s = "@" + n; let fs = 100; g.font = `${fs}px ${DISP}`; while (g.measureText(s).width > inner && fs > 50) { fs -= 6; g.font = `${fs}px ${DISP}`; } items.push({ t: s, font: `${fs}px ${DISP}`, col: "#74d6b8", h: fs + 20, ltr: true }); });
-  if (d.sub) { items.push({ gap: 8 }); g.font = `500 42px ${BODY}`; String(d.sub).split("\n").flatMap(l => wrapLines(g, l, inner)).forEach(t => items.push({ t, font: `500 42px ${BODY}`, col: "#b8adcf", h: 60 })); }
+  if (!d.imgAfter) items.push(...imgItems());
+  d.names.slice(0, 3).forEach(n => { const s = "@" + n; let fs = d.hl?.length ? 76 : 100; g.font = `${fs}px ${DISP}`; while (g.measureText(s).width > inner && fs > 50) { fs -= 6; g.font = `${fs}px ${DISP}`; } items.push({ t: s, font: `${fs}px ${DISP}`, col: "#74d6b8", h: fs + 20, ltr: true }); });
+  if (d.hl?.length) { items.push({ gap: 18 }); items.push({ t: "لحظات الجلسة 🔥", font: `52px ${DISP}`, col: "#f2b134", h: 72 });
+    g.font = `600 40px ${BODY}`; d.hl.forEach((l, k) => wrapLines(g, l, inner).slice(0, 2).forEach(t => items.push({ t, font: `600 40px ${BODY}`, col: "#f7f0e3", h: 60, tag: k >= 2 ? "hl3" : "" }))); items.push({ gap: 10 }); }
+  if (d.imgAfter) { const im = imgItems(); if (im.length) { items.push({ gap: 6 }); items.push(...im); } }
+  if (d.sub) { items.push({ gap: 8 }); g.font = `500 42px ${BODY}`; String(d.sub).split("\n").flatMap(l => wrapLines(g, l, inner)).forEach(t => items.push({ t, font: `500 42px ${BODY}`, col: "#b8adcf", h: 60, tag: "sub" })); }
+  // لو طالت البطاقة نشيل الأقل أهمية عشان ما تغطي الرابط
+  const total = () => items.reduce((s, it) => s + (it.gap || it.h), 0) + 120, MAXC = H - 330 - 450 - 30;
+  for (const tag of ["sub", "img", "hl3"]) { if (total() <= MAXC) break; for (let i = items.length - 1; i >= 0; i--) if (items[i].tag === tag) items.splice(i, 1); }
   const ch = items.reduce((s, it) => s + (it.gap || it.h), 0) + 120, CY = 450;
   g.fillStyle = "#2a2146"; rr(g, CX, CY, CW, ch, 56); g.fill();
   g.strokeStyle = "#3d3263"; g.lineWidth = 4; g.stroke();
   let y = CY + 60;
   items.forEach(it => {
     if (it.gap) { y += it.gap; return; }
-    if (it.img) { const s = 640, x = (W - s) / 2; g.save(); rr(g, x, y, s, s, 30); g.clip(); g.drawImage(it.img, x, y, s, s); g.restore(); y += it.h; return; }
+    if (it.img) { const s = it.s || 640, x = (W - s) / 2; g.save(); rr(g, x, y, s, s, 30); g.clip(); g.drawImage(it.img, x, y, s, s); g.restore(); y += it.h; return; }
     g.font = it.font; g.fillStyle = it.col; g.direction = it.ltr ? "ltr" : "rtl";
     g.fillText(it.t, W / 2, y + it.h * .78); y += it.h;
   });
@@ -1659,7 +1745,7 @@ async function openShare() {
     if (can) {
       go.disabled = false;
       go.addEventListener("click", async () => {
-        try { await navigator.share({ files: [file], text: `العبوا معنا روق 🎉 ${appLink()}` }); }
+        try { await navigator.share({ files: [file], text: `العبوا معنا روق 🎉 ${me?.username && !me.guest ? refLink() : appLink()}` }); }
         catch (e) { if (e?.name !== "AbortError") toast("ما قدرنا نفتح المشاركة، احفظ الصورة"); }
       });
     } else go.remove();
@@ -2224,14 +2310,16 @@ VIEWS.auth = () => {
       <button class="btn google" id="login"><span class="g-logo" aria-hidden="true">${GOOGLE_G}</span>كمّل بحساب قوقل</button>
       <button class="btn ghost" id="byEmail">تسجيل الدخول</button>
       <div class="or"><span>أو</span></div>
-      <button class="btn ghost" id="local">العب بدون حساب</button>
-      <p class="hint center">بدون حساب تلعبون بجوال واحد. للعب أونلاين وإضافة الأصحاب تحتاج حساب.</p>
+      <button class="btn ghost" id="local">العب بجوال واحد</button>
+      <button class="btn ghost" id="gjGo">عندك كود غرفة؟ ادخل بدون حساب</button>
+      <p class="hint center">بدون حساب تقدر تدخل غرف ربعك أو تلعبون بجوال واحد. عشان تسوي غرف وتضيف أصحاب تحتاج حساب.</p>
       <p class="hint center legal-hint">بدخولك توافق على ${LEGAL_LINKS}، وتأكد إن عمرك ١٨ أو أكثر.</p>
     </div></section>`;
   on("login", "click", login);
   on("loginApple", "click", loginApple);
   on("byEmail", "click", () => { ui.emailMode = "login"; go("email"); });
   on("local", "click", () => go("local"));
+  on("gjGo", "click", () => go("gjoin"));
 };
 
 const GOOGLE_G = `<svg viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>`;
@@ -2580,6 +2668,7 @@ function botSheet(title, body) {
   el.querySelector("#botOk").focus({ preventScroll: true });
 }
 async function botWarn(text) {
+  if (me?.guest) { botSheet("رسالتك ما انرسلت ⚠️", "ممنوع القذف والكلام البذيء في روق."); return; }
   const warns = (me.warns || 0) + 1;
   const upd = { warns };
   if (warns >= 3) upd.mutedUntil = Math.max(me.mutedUntil || 0, Date.now()) + 24 * 3600 * 1000;
@@ -3006,7 +3095,9 @@ function gameSheet(id) {
 }
 
 function showProfile(uid) {
-  if (uid === me?.uid) { go("profile"); return; }
+  if (uid === me?.uid) { if (!me.guest) go("profile"); return; }
+  if (me?.guest) { toast("سجّل حساب عشان تشوف البروفايلات وتضيف ربعك"); return; }
+  if (room?.players?.[uid]?.g) { toast("هذا ضيف، دخل بدون حساب 👤"); return; }
   const p = prof(uid); if (!p) { toast("لحظة…"); return; }
   document.getElementById("pfModal")?.remove();
   const el = document.createElement("div");
@@ -3361,7 +3452,7 @@ const ROOM_VIEWS = {
         <div class="row inv-row"><a class="btn small wa" id="waInv" href="${esc(waLink())}" target="_blank" rel="noopener">${ICONS.wa} ادعُ بالواتساب</a>
         <button class="btn small ghost" id="copyLink">انسخ الرابط</button></div></div>
       <div class="field"><span class="label">اللاعبين (${ar(n)} من ١٢)</span><div class="list">${ps.map(u => `
-        <div class="li"><button class="li-who" data-pf="${esc(u)}">${prof(u) ? avF(prof(u), 36) : avatar(pname(u), "", 36)}<span class="nm" dir="ltr">${at(pname(u))}</span>${prof(u) ? lvlTag(prof(u)) + vipTag(prof(u)) : ""}</button>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}${host && u !== me.uid ? `<button class="btn small ghost kick" data-kick="${esc(u)}" aria-label="اطرد ${esc(pname(u))}">اطرد</button>` : ""}</div>`).join("")}</div></div>
+        <div class="li"><button class="li-who" data-pf="${esc(u)}">${prof(u) ? avF(prof(u), 36) : avatar(pname(u), "", 36)}<span class="nm" dir="ltr">${at(pname(u))}</span>${room.players[u]?.g ? `<span class="tag">ضيف 👤</span>` : prof(u) ? lvlTag(prof(u)) + vipTag(prof(u)) : ""}</button>${u === room.host ? `<span class="tag">المضيف</span>` : ""}${u === me.uid ? `<span class="tag">أنت</span>` : ""}${host && u !== me.uid ? `<button class="btn small ghost kick" data-kick="${esc(u)}" aria-label="اطرد ${esc(pname(u))}">اطرد</button>` : ""}</div>`).join("")}</div></div>
       ${host ? `
         <div class="field"><span class="label">نوع الغرفة</span><div class="chips">
           <button class="chip" data-pub="0" aria-pressed="${!room.public}">خاصة 🔒</button>
@@ -3818,6 +3909,7 @@ const lmaxImps = () => L.count >= 7 ? 2 : 1;
 function laddScore(i, n) { L.scores["p" + i] = (L.scores["p" + i] || 0) + n; store.set("scores", L.scores); }
 function stopLocalTimers() { clearInterval(L.timer); L.timer = null; if (L.raf) cancelAnimationFrame(L.raf); L.raf = null; }
 
+VIEWS.gjoin = viewGjoin;
 VIEWS.local = () => {
   V.innerHTML = `<section>
     <div><h2>بجوال واحد</h2><p class="lead">مرّروا الجوال بينكم وخلوا السوالف تبدأ.</p></div>
@@ -4313,18 +4405,21 @@ if (configured) {
   onSnapshot(doc(db, "config", "banner"), s => {
     promo = s.exists() ? s.data() : null; renderBanner(); if (screen === "admin") render(false);
   }, err);
-  const GUEST_OK = new Set(["auth", "email", "forgot", "local", "setup", "l-players", "l-imp", "l-pass", "l-play", "l-most", "l-five", "l-scores", "l-hhnj", "l-kal", "l-kq", "l-draw", "l-tf", "l-who"]);
+  const GUEST_OK = new Set(["auth", "email", "forgot", "local", "setup", "l-players", "l-imp", "l-pass", "l-play", "l-most", "l-five", "l-scores", "l-hhnj", "l-kal", "l-kq", "l-draw", "l-tf", "l-who", "gjoin"]);
   onAuthStateChanged(auth, async user => {
+    if (user?.isAnonymous && me?.guest && me.uid === user.uid) return; // ضيف داخل غرفة، لا نقطع عليه
     stopGlobal(); stopGuest();
     if (!user) {
       me = null;
-      if (!GUEST_OK.has(screen)) go("auth");
+      if (pendingJoin) go("gjoin");
+      else if (!GUEST_OK.has(screen)) go("auth");
       signInAnonymously(auth).catch(() => {});
       return;
     }
     if (user.isAnonymous) {
       me = null; startGuest(user.uid);
-      if (!GUEST_OK.has(screen)) go("auth"); else renderHeader();
+      if (pendingJoin) go("gjoin");
+      else if (!GUEST_OK.has(screen)) go("auth"); else renderHeader();
       return;
     }
     try {
