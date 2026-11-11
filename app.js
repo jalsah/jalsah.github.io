@@ -122,10 +122,10 @@ const INVITE_MS = 15 * 60 * 1000;
 const GAMES = { kal: "كمّل الكلمة", draw: "ارسم وخمّن", who: "مين قالها؟", tf: "صح ولا خطأ", uno: "أونو", imp: "الدخيل", most: "مين أكثر واحد", hhnj: "إنسان حيوان نبات جماد" };
 // كل ألعاب روق: وين تنلعب (أونلاين، بجوال واحد)
 const CATALOG = [
-  { id: "kal", icon: "kal", title: "كمّل الكلمة", desc: "فريقين أحمر وأزرق. كلمة ناقصة حروف، وكل دور واحد يحط حرف أو يخمّن الكلمة كاملة قبل يخلص وقته.", online: true, local: null, min: 2, hot: true },
-  { id: "draw", icon: "draw", title: "ارسم وخمّن", desc: "واحد يرسم كلمة سرية، والباقين يخمّنونها بأسرع وقت. كل جولة يرسم واحد.", online: true, local: null, min: 2, hot: true },
-  { id: "who", icon: "who", title: "مين قالها؟", desc: "سؤال، وكل واحد يكتب جوابه بالسر. بعدها تطلع الأجوبة وتخمّنون مين كاتب كل جواب.", online: true, local: null, min: 3, hot: true },
-  { id: "tf", icon: "tf", title: "صح ولا خطأ", desc: "كل جولة واحد يكتب شي عن نفسه، والباقين يخمّنون: صح ولا كذب؟ تنفع حتى لو أنتم اثنين.", online: true, local: null, min: 2, hot: true },
+  { id: "kal", icon: "kal", title: "كمّل الكلمة", desc: "فريقين أحمر وأزرق. كلمة ناقصة حروف، وكل دور واحد يحط حرف أو يخمّن الكلمة كاملة قبل يخلص وقته.", online: true, local: "l-kal", min: 2, hot: true },
+  { id: "draw", icon: "draw", title: "ارسم وخمّن", desc: "واحد يرسم كلمة سرية، والباقين يخمّنونها بأسرع وقت. كل جولة يرسم واحد.", online: true, local: "l-draw", min: 2, hot: true },
+  { id: "who", icon: "who", title: "مين قالها؟", desc: "سؤال، وكل واحد يكتب جوابه بالسر. بعدها تطلع الأجوبة وتخمّنون مين كاتب كل جواب.", online: true, local: "l-who", min: 3, hot: true },
+  { id: "tf", icon: "tf", title: "صح ولا خطأ", desc: "كل جولة واحد يكتب شي عن نفسه، والباقين يخمّنون: صح ولا كذب؟ تنفع حتى لو أنتم اثنين.", online: true, local: "l-tf", min: 2, hot: true },
   { id: "uno", icon: "uno", title: "أونو روق", desc: "الأونو اللي تعرفه، بأوراق وطاولة روق. من ٢ إلى ٨ لاعبين، كل واحد من جواله.", online: true, local: null, min: 2 },
   { id: "imp", icon: "imp", title: "الدخيل", desc: "الكل يعرف الكلمة إلا واحد. اكشفوه قبل ما يكشف الكلمة.", online: true, local: "l-imp", min: 3 },
   { id: "most", icon: "most", title: "مين أكثر واحد؟", desc: "سؤال، وكل واحد يصوّت على واحد من الشلة.", online: true, local: "l-most", min: 2 },
@@ -220,7 +220,8 @@ const BACK = {
   email: "auth", forgot: () => (ui.emailMode = "login", "email"),
   local: () => me?.username ? "home" : (configured ? "auth" : "setup"),
   "l-players": "local", "l-imp": "local", "l-pass": "local", "l-play": "local",
-  "l-most": "local", "l-five": "local", "l-scores": "local"
+  "l-most": "local", "l-five": "local", "l-scores": "local",
+  "l-kal": "local", "l-kq": "l-kal", "l-draw": "local", "l-tf": "local", "l-who": "local"
 };
 function renderHeader() {
   let h = "";
@@ -3593,6 +3594,10 @@ VIEWS.local = () => {
       ${L.names.slice(0, L.count).some(n => (n || "").trim()) ? "" : `<p class="hint">اكتبوا أسماءكم عشان تطلع في اللعب والنقاط.</p>`}
     </div>
     <div class="modes">
+      <button class="mode" id="m5"><span class="glyph">${ICONS.kal}</span><b>كمّل الكلمة</b><span>فريقين أحمر وأزرق، وكل دور حرف أو الكلمة كاملة قبل يخلص الوقت.</span></button>
+      <button class="mode" id="m6"><span class="glyph">${ICONS.draw}</span><b>ارسم وخمّن</b><span>واحد يرسم كلمة سرية، والباقين يخمّنون بصوت عالي.</span></button>
+      <button class="mode" id="m7"><span class="glyph">${ICONS.tf}</span><b>صح ولا خطأ</b><span>قول شي عن نفسك، والباقين يأشرون: صادق ولا يكذب؟</span></button>
+      <button class="mode" id="m8"><span class="glyph">${ICONS.who}</span><b>مين قالها؟</b><span>كل واحد يكتب جوابه بالسر ويمرر الجوال، وبعدين خمّنوا مين كاتبه.</span></button>
       <button class="mode" id="m1"><span class="glyph">${ICONS.imp}</span><b>الدخيل</b><span>الكل يعرف الكلمة إلا واحد. اكشفوه قبل ما يكشف الكلمة.</span></button>
       <button class="mode" id="m2"><span class="glyph">${ICONS.most}</span><b>مين أكثر واحد؟</b><span>سؤال على الشاشة، وعلى العد الكل يأشر على واحد.</span></button>
       <button class="mode" id="m3"><span class="glyph">${ICONS.five}</span><b>خمسة بعشر</b><span>اذكر خمسة أشياء من الفئة خلال عشر ثواني.</span></button>
@@ -3604,6 +3609,10 @@ VIEWS.local = () => {
   on("m2", "click", () => { L.mostPrompt = null; go("l-most"); });
   on("m3", "click", () => { L.fivePrompt = null; go("l-five"); });
   on("m4", "click", () => { L.letter = null; go("l-hhnj"); });
+  on("m5", "click", () => go("l-kal"));
+  on("m6", "click", () => go("l-draw"));
+  on("m7", "click", () => go("l-tf"));
+  on("m8", "click", () => go("l-who"));
   on("ls", "click", () => go("l-scores"));
 };
 
@@ -3622,7 +3631,7 @@ VIEWS["l-players"] = () => {
 VIEWS["l-scores"] = () => {
   const rows = Array.from({ length: L.count }, (_, i) => ({ i, pts: L.scores["p" + i] || 0 })).sort((a, b) => b.pts - a.pts);
   const top = rows[0]?.pts || 0;
-  V.innerHTML = `<section><h2>النقاط</h2><p class="lead">تنحسب من الدخيل وخمسة بعشر.</p>
+  V.innerHTML = `<section><h2>النقاط</h2><p class="lead">تنحسب من ألعاب الجوال الواحد.</p>
     <div class="board">${rows.map((r, k) => `<div class="r ${r.pts > 0 && r.pts === top ? "top" : ""}"><span class="rank">${ar(k + 1)}</span><span class="nm">${esc(lname(r.i))}</span><span class="pts">${ar(r.pts)}</span></div>`).join("")}</div>
     <div class="foot"><button class="btn ghost" id="reset">صفّر النقاط</button></div></section>`;
   on("reset", "click", e => { if (!confirmTap(e.currentTarget)) return; L.scores = {}; store.set("scores", {}); toast("تصفّرت النقاط"); render(true); });
@@ -3761,6 +3770,287 @@ VIEWS["l-hhnj"] = () => {
   });
 };
 
+/* ---------- مؤقت مشترك للألعاب المحلية ---------- */
+function lCountdown(deadline, total, onEnd, barId = "lBar", secId = "lSec") {
+  stopLocalTimers();
+  const step = () => {
+    const ms = deadline - Date.now(), bar = document.getElementById(barId), sec = document.getElementById(secId);
+    if (!bar) { stopLocalTimers(); return; }
+    bar.style.transform = `scaleX(${Math.max(0, Math.min(1, ms / total))})`;
+    if (sec) { const s = Math.max(0, Math.ceil(ms / 1000)); sec.textContent = ar(s); sec.classList.toggle("low", s <= 5); }
+    if (ms <= 0) { stopLocalTimers(); onEnd(); }
+  };
+  L.timer = setInterval(step, 200); step();
+}
+const lPickName = (ids, attr) => `<div class="chips">${ids.map(i => `<button class="chip" data-${attr}="${i}">${esc(lname(i))}</button>`).join("")}</div>`;
+
+/* ---------- كمّل الكلمة (بجوال واحد) ---------- */
+L.kTeams = store.get("kTeams", []);
+L.kSet = store.get("kSet", { n: 10, secs: 15 });
+const lkTeam = i => L.kTeams[i] === "r" || L.kTeams[i] === "b" ? L.kTeams[i] : (i % 2 ? "b" : "r");
+const lkMem = t => Array.from({ length: L.count }, (_, i) => i).filter(i => lkTeam(i) === t);
+VIEWS["l-kal"] = () => {
+  const team = t => `<div class="kteam ${t}"><b>الفريق ${kTeamName(t)}</b><div class="chips">${lkMem(t).map(i => `<button class="chip" data-kt="${i}">${esc(lname(i))} ⇄</button>`).join("") || `<span class="hint">فاضي</span>`}</div></div>`;
+  V.innerHTML = `<section><h2>كمّل الكلمة</h2><p class="lead">كلمة ناقصة حروف. كل دور واحد من فريق يحط حرف أو يقول الكلمة كاملة قبل يخلص وقته، ويمرر الجوال للفريق الثاني.</p>
+    <div class="field"><span class="label">الفرق (اضغط على الاسم عشان تنقله)</span><div class="kteams">${team("r")}${team("b")}</div></div>
+    <div class="field"><span class="label">كم كلمة؟</span><div class="chips">${[10, 15, 20].map(n => `<button class="chip" data-kn="${n}" aria-pressed="${L.kSet.n === n}">${ar(n)}</button>`).join("")}</div></div>
+    <div class="field"><span class="label">ثواني كل دور</span><div class="chips">${[10, 15, 20, 30].map(n => `<button class="chip" data-ks="${n}" aria-pressed="${L.kSet.secs === n}">${ar(n)}</button>`).join("")}</div></div>
+    <div class="foot"><button class="btn" id="go">ابدأ</button><button class="btn ghost" id="roster">✏️ عدّل اللاعبين</button></div></section>`;
+  onAll("[data-kt]", b => { const i = +b.dataset.kt; for (let k = 0; k < L.count; k++) L.kTeams[k] = lkTeam(k); L.kTeams[i] = lkTeam(i) === "r" ? "b" : "r"; store.set("kTeams", L.kTeams); render(true); });
+  onAll("[data-kn]", b => { L.kSet.n = +b.dataset.kn; store.set("kSet", L.kSet); render(true); });
+  onAll("[data-ks]", b => { L.kSet.secs = +b.dataset.ks; store.set("kSet", L.kSet); render(true); });
+  on("roster", "click", () => go("l-players"));
+  on("go", "click", () => {
+    if (!lkMem("r").length || !lkMem("b").length) return toast("لازم يكون في كل فريق لاعب واحد على الأقل");
+    L.kg = { n: L.kSet.n, secs: L.kSet.secs, idx: 0, pts: { r: 0, b: 0 }, won: { r: 0, b: 0 }, ti: { r: -1, b: -1 }, deck: L.kg?.deck || [] };
+    lkWord(); go("l-kq");
+  });
+};
+function lkWord() {
+  const g = L.kg;
+  if (!g.deck.length) g.deck = shuffle([...new Set(KALIMA)]);
+  const word = g.deck.pop(), Ls = [...word];
+  const hideN = Math.max(2, Math.min(Ls.length - 1, Math.round(Ls.length * 0.6)));
+  const hide = new Set(shuffle(Ls.map((_, i) => i)).slice(0, hideN));
+  g.word = word; g.mask = Ls.map((c, i) => hide.has(i) ? "" : c);
+  g.idx++; g.feed = []; g.stage = "q"; g.last = null;
+  const t = g.idx % 2 ? "r" : "b"; lkTurn(t);
+}
+function lkTurn(t) {
+  const g = L.kg, mem = lkMem(t);
+  g.team = t; g.ti[t] = (g.ti[t] + 1) % Math.max(1, mem.length); g.turn = mem[g.ti[t]] ?? 0;
+  g.deadline = Date.now() + g.secs * 1000; g.ready = false;
+}
+function lkMove(text, timeout) {
+  const g = L.kg; if (!g || g.stage !== "q") return;
+  const Ls = [...g.word], t = cleanMsg(text || "").slice(0, 20), team = g.team;
+  const entry = { i: g.turn, team };
+  if (timeout) entry.to = 1;
+  else if ([...kn(t)].length === 1) {
+    const l = kn(t); let got = 0;
+    Ls.forEach((c, i) => { if (!g.mask[i] && kn(c) === l) { g.mask[i] = c; got++; } });
+    entry.l = t; entry.ok = got > 0; g.pts[team] += got;
+  } else {
+    const w = kn(g.word), x = kn(t);
+    const ok = x === w || "ال" + x === w || x === "ال" + w;
+    entry.w = t; entry.ok = ok;
+    if (ok) { g.pts[team] += g.mask.filter(c => !c).length + 3; g.mask = Ls; entry.full = 1; }
+  }
+  g.feed = [...g.feed, entry].slice(-6);
+  if (g.mask.every(Boolean)) {
+    if (!entry.full) g.pts[team] += 3;
+    g.won[team]++; g.stage = "res"; g.last = { team, i: g.turn };
+  } else lkTurn(team === "r" ? "b" : "r");
+  render(true);
+}
+const lkScore = g => `<div class="kscore"><div class="kt r ${g.team === "r" && g.stage === "q" ? "now" : ""}"><span>الأحمر</span><b>${ar(g.pts.r)}</b></div>
+  <span class="kvs">${ar(g.idx)} / ${ar(g.n)}</span><div class="kt b ${g.team === "b" && g.stage === "q" ? "now" : ""}"><span>الأزرق</span><b>${ar(g.pts.b)}</b></div></div>`;
+const lkFeed = g => g.feed.slice().reverse().map(f => `<div class="kf ${f.team}"><b>${esc(lname(f.i))}</b> ${f.to ? "خلص وقته ⏰" : f.l ? `حط <span class="kl">${esc(f.l)}</span> ${f.ok ? "✅" : "❌"}` : `قال «${esc(f.w)}» ${f.ok ? "✅" : "❌"}`}</div>`).join("");
+VIEWS["l-kq"] = () => {
+  const g = L.kg; if (!g) return go("l-kal");
+  stopLocalTimers();
+  if (g.stage === "end") {
+    const win = g.pts.r === g.pts.b ? "" : g.pts.r > g.pts.b ? "r" : "b";
+    if (win && !g.scored) { lkMem(win).forEach(i => laddScore(i, 1)); g.scored = true; }
+    const team = t => `<div class="kteam ${t}"><b>الفريق ${kTeamName(t)}</b><span class="kbig">${ar(g.pts[t])}</span><span class="hint">${ar(g.won[t])} كلمات</span>
+      <div class="kmem">${lkMem(t).map(i => `<span>${esc(lname(i))}</span>`).join("")}</div></div>`;
+    V.innerHTML = `<section><div class="card pop ${win}" style="min-height:120px"><span class="eyebrow">النتيجة</span><span class="big">${win ? `فاز ${kTeamName(win)} 🏆` : "تعادل 🤝"}</span></div>
+      <div class="kteams">${team("r")}${team("b")}</div>
+      <div class="foot"><button class="btn" id="again">جولة جديدة</button><button class="btn ghost" id="back">رجوع</button></div></section>`;
+    on("again", "click", () => go("l-kal")); on("back", "click", () => go("local"));
+    return;
+  }
+  if (g.stage === "res") {
+    V.innerHTML = `<section>${lkScore(g)}
+      <div class="card prompt pop ${g.last.team}"><span class="eyebrow">الكلمة كانت</span>${kSlots([...g.word], true)}
+        <span class="hint">كمّلها ${esc(lname(g.last.i))} من الفريق ${kTeamName(g.last.team)} 🎉</span></div>
+      <div class="kfeed">${lkFeed(g)}</div>
+      <div class="foot"><button class="btn" id="nx">${g.idx >= g.n ? "شوف النتيجة 🏆" : "الكلمة الجاية"}</button></div></section>`;
+    on("nx", "click", () => { if (g.idx >= g.n) g.stage = "end"; else lkWord(); render(true); });
+    return;
+  }
+  if (!g.ready) {
+    V.innerHTML = `<section>${lkScore(g)}${kSlots(g.mask)}
+      <div class="card tap ${g.team}" id="rd" role="button" tabindex="0"><span class="eyebrow">الجوال عند · الفريق ${kTeamName(g.team)}</span><span class="big">${esc(lname(g.turn))}</span><span class="hint">اضغط إذا جاهز، والوقت يبدأ (${ar(g.secs)} ثانية)</span></div>
+      <div class="kfeed">${lkFeed(g)}</div>
+      <div class="foot"><button class="btn ghost" id="quit">إنهاء اللعبة</button></div></section>`;
+    const start = () => { g.ready = true; g.deadline = Date.now() + g.secs * 1000; render(true); };
+    on("rd", "click", start); on("rd", "keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); start(); } });
+    on("quit", "click", e => { if (confirmTap(e.currentTarget, "تنهيها؟")) { g.stage = "end"; render(true); } });
+    return;
+  }
+  V.innerHTML = `<section class="kal">${lkScore(g)}${kSlots(g.mask)}
+    <div class="kturn ${g.team}"><span>دور ${esc(lname(g.turn))} · الفريق ${kTeamName(g.team)}</span><span class="dleft" id="lSec"></span></div>
+    <div class="timer"><i id="lBar"></i></div>
+    <form class="kform" id="kF"><input class="txt" id="kIn" maxlength="20" dir="rtl" autocomplete="off" placeholder="حرف واحد، أو الكلمة كاملة" aria-label="حرفك أو الكلمة"><button class="btn">أرسل</button></form>
+    <p class="hint center">حرف صح = نقطة لكل مكان يطلع فيه. الكلمة كاملة صح = نقاط الحروف الباقية + ٣.</p>
+    <div class="kfeed" aria-live="polite">${lkFeed(g)}</div></section>`;
+  const inp = document.getElementById("kIn"); setTimeout(() => inp?.focus(), 50);
+  on("kF", "submit", e => { e.preventDefault(); const v = inp.value; if (!v.trim()) return; stopLocalTimers(); lkMove(v); });
+  lCountdown(g.deadline, g.secs * 1000, () => lkMove("", true));
+};
+
+/* ---------- ارسم وخمّن (بجوال واحد) ---------- */
+const LDRAW_SECS = 80;
+function lDrawNew(next) {
+  const d = L.dr || (L.dr = { turn: -1, deck: [] });
+  if (!d.deck.length) d.deck = shuffle([...new Set(DRAW)]);
+  if (next !== false) d.turn = (d.turn + 1) % L.count;
+  d.word = d.deck.pop(); d.stage = "pass"; d.strokes = []; d.got = null;
+}
+function lBindPad(cv, strokes) {
+  let cur = null, raf = 0;
+  const pt = e => { const r = cv.getBoundingClientRect(); return [Math.round(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * 1000), Math.round(Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)) * 1000)]; };
+  const repaint = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; paintCanvas(cv, strokes); }); };
+  cv.addEventListener("pointerdown", e => { e.preventDefault(); cv.setPointerCapture?.(e.pointerId); cur = { c: DRAWS.c, w: DRAWS.w, p: pt(e) }; strokes.push(cur); repaint(); });
+  cv.addEventListener("pointermove", e => { if (!cur) return; e.preventDefault(); const [x, y] = pt(e), p = cur.p; if (Math.abs(x - p[p.length - 2]) + Math.abs(y - p[p.length - 1]) < 6) return; p.push(x, y); repaint(); });
+  const end = () => cur = null;
+  cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end); cv.addEventListener("pointerleave", end);
+}
+VIEWS["l-draw"] = () => {
+  if (!L.dr || L.dr.turn >= L.count) { L.dr = null; lDrawNew(); }
+  const d = L.dr, drawer = d.turn;
+  stopLocalTimers();
+  if (d.stage === "pass") {
+    V.innerHTML = `<section><div><h2>ارسم وخمّن</h2><p class="lead">الرسام يشوف الكلمة بالسر ويرسمها، والباقين يخمّنون بصوت عالي.</p></div>
+      <div class="card tap" id="pc" role="button" tabindex="0"><span class="eyebrow">الرسام</span><span class="big">${esc(lname(drawer))}</span><span class="hint">خذ الجوال وتأكد محد يشوف، واضغط عشان تشوف الكلمة</span></div>
+      <div class="foot"><button class="btn ghost" id="skip">خل غيره يرسم</button></div></section>`;
+    const show = () => { d.stage = "peek"; render(true); };
+    on("pc", "click", show); on("pc", "keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); show(); } });
+    on("skip", "click", () => { lDrawNew(); render(true); });
+    return;
+  }
+  if (d.stage === "peek") {
+    V.innerHTML = `<section><div class="card word pop"><span class="eyebrow">ارسم</span><span class="big">${esc(d.word)}</span><span class="hint">بدون كتابة حروف أو أرقام 😉</span></div>
+      <div class="foot"><button class="btn" id="go">حفظتها، ابدأ الرسم (${ar(LDRAW_SECS)} ثانية)</button><button class="btn ghost" id="nw">كلمة ثانية</button></div></section>`;
+    on("go", "click", () => { d.stage = "draw"; d.deadline = Date.now() + LDRAW_SECS * 1000; render(true); });
+    on("nw", "click", () => { lDrawNew(false); d.stage = "peek"; render(true); });
+    return;
+  }
+  if (d.stage === "draw") {
+    V.innerHTML = `<section class="drawv">
+      <div class="dtop"><div class="dword"><span class="hint">يرسم ${esc(lname(drawer))} · خمّنوا بصوت عالي!</span></div><span class="dleft" id="lSec"></span></div>
+      <div class="timer"><i id="lBar"></i></div>
+      <div class="dpad mine"><canvas id="lCanvas" aria-label="لوحة الرسم"></canvas></div>
+      <div class="dtools">
+        <div class="dcols">${DCOLORS.map((c, i) => `<button class="dcol" data-dc="${i}" style="--c:${c}" aria-label="لون" aria-pressed="${DRAWS.c === i}"></button>`).join("")}</div>
+        <div class="drow">${DSIZES.map((s, i) => `<button class="dsz" data-ds="${i}" aria-label="حجم ${i + 1}" aria-pressed="${DRAWS.w === i}"><i style="width:${6 + i * 7}px;height:${6 + i * 7}px"></i></button>`).join("")}
+          <button class="btn small ghost" id="dUndo">↩︎ تراجع</button><button class="btn small ghost" id="dClear">مسح</button></div></div>
+      <div class="foot"><button class="btn good" id="got">أحد عرفها! 🎉</button><button class="btn ghost" id="pk">👁 اضغط مطوّل تشوف الكلمة</button></div></section>`;
+    const cv = document.getElementById("lCanvas");
+    paintCanvas(cv, d.strokes); lBindPad(cv, d.strokes);
+    onAll("[data-dc]", b => { DRAWS.c = Number(b.dataset.dc); V.querySelectorAll("[data-dc]").forEach(x => x.setAttribute("aria-pressed", x === b)); });
+    onAll("[data-ds]", b => { DRAWS.w = Number(b.dataset.ds); V.querySelectorAll("[data-ds]").forEach(x => x.setAttribute("aria-pressed", x === b)); });
+    on("dUndo", "click", () => { d.strokes.pop(); paintCanvas(cv, d.strokes); });
+    on("dClear", "click", e => { if (!confirmTap(e.currentTarget, "أكيد؟")) return; d.strokes.length = 0; paintCanvas(cv, d.strokes); });
+    const pk = document.getElementById("pk"), lbl = pk.textContent;
+    pk.addEventListener("pointerdown", e => { e.preventDefault(); pk.textContent = d.word; });
+    ["pointerup", "pointerleave", "pointercancel"].forEach(ev => pk.addEventListener(ev, () => pk.textContent = lbl));
+    pk.addEventListener("contextmenu", e => e.preventDefault());
+    on("got", "click", () => { stopLocalTimers(); d.stage = "who"; render(true); });
+    lCountdown(d.deadline, LDRAW_SECS * 1000, () => { d.stage = "res"; render(true); });
+    return;
+  }
+  if (d.stage === "who") {
+    const others = Array.from({ length: L.count }, (_, i) => i).filter(i => i !== drawer);
+    V.innerHTML = `<section><div class="card word pop"><span class="eyebrow">الكلمة</span><span class="big">${esc(d.word)}</span></div>
+      <div class="field"><span class="label">مين عرفها أول؟ (+٢ له و+١ للرسام)</span>${lPickName(others, "gw")}</div>
+      <div class="foot"><button class="btn ghost" id="bk">لا، نكمل رسم</button></div></section>`;
+    onAll("[data-gw]", b => { d.got = +b.dataset.gw; laddScore(d.got, 2); laddScore(drawer, 1); d.stage = "res"; render(true); });
+    on("bk", "click", () => { d.stage = "draw"; render(true); });
+    return;
+  }
+  V.innerHTML = `<section><div class="card prompt pop" style="min-height:110px"><span class="eyebrow">الكلمة كانت</span><span class="big">${esc(d.word)}</span>
+      <span class="hint">${d.got != null ? `عرفها ${esc(lname(d.got))} 🎉` : "خلص الوقت ومحد عرفها 😅"}</span></div>
+    <div class="dpad"><canvas id="lCanvas" aria-label="الرسمة"></canvas></div>
+    <div class="foot"><button class="btn" id="nx">اللي بعده يرسم: ${esc(lname((drawer + 1) % L.count))}</button><button class="btn ghost" id="ls">النقاط</button></div></section>`;
+  paintCanvas(document.getElementById("lCanvas"), d.strokes);
+  on("nx", "click", () => { lDrawNew(); render(true); });
+  on("ls", "click", () => go("l-scores"));
+};
+
+/* ---------- صح ولا خطأ (بجوال واحد) ---------- */
+VIEWS["l-tf"] = () => {
+  if (!L.tf || L.tf.turn >= L.count) L.tf = { turn: 0, stage: "say" };
+  const t = L.tf, teller = t.turn, others = Array.from({ length: L.count }, (_, i) => i).filter(i => i !== teller);
+  stopLocalTimers();
+  const next = () => { L.tf = { turn: (teller + 1) % L.count, stage: "say" }; render(true); };
+  if (t.stage === "say") {
+    V.innerHTML = `<section><div><h2>صح ولا خطأ</h2><p class="lead">واحد يقول شي عن نفسه، والباقين يخمّنون: صادق ولا يكذب؟</p></div>
+      <div class="card prompt pop tf-card"><span class="eyebrow">الدور على</span><span class="big">${esc(lname(teller))} 🎤</span><span class="hint">قول شي عن نفسك بصوت عالي، صح أو كذب. وحاول لا تفضح نفسك بوجهك 😏</span></div>
+      <div class="foot"><button class="btn" id="cv">قالها، صوّتوا!</button><button class="btn ghost" id="sk">تخطّى دوره</button></div></section>`;
+    on("sk", "click", next);
+    on("cv", "click", e => {
+      const btn = e.currentTarget, card = V.querySelector(".tf-card"); btn.disabled = true;
+      let n = 3; card.innerHTML = `<span class="eyebrow">على العد الكل يأشر</span><span class="count">${ar(n)}</span><span class="hint">👍 صح · 👎 كذب</span>`;
+      L.timer = setInterval(() => { n--; const c = card.querySelector(".count"); if (!c) return stopLocalTimers();
+        if (n > 0) c.textContent = ar(n); else { stopLocalTimers(); t.stage = "rev"; render(true); } }, 800);
+    });
+    return;
+  }
+  if (t.stage === "rev") {
+    V.innerHTML = `<section><div class="card prompt pop tf-card"><span class="eyebrow">أشّرتوا؟ 👍👎</span><span class="big">${esc(lname(teller))}</span><span class="hint">الحين اعترف، كان كلامك:</span></div>
+      <div class="tf-btns"><button class="tfb t" id="tt">صح ✅</button><button class="tfb f" id="ff">كذب ❌</button></div></section>`;
+    on("tt", "click", () => { t.truth = true; t.stage = "score"; t.right = []; render(true); });
+    on("ff", "click", () => { t.truth = false; t.stage = "score"; t.right = []; render(true); });
+    return;
+  }
+  V.innerHTML = `<section><div class="card ${t.truth ? "safe" : "imposter"} pop tf-card"><span class="eyebrow">${esc(lname(teller))} كان</span><span class="big">${t.truth ? "صادق ✅" : "يكذب ❌"}</span></div>
+    <div class="field"><span class="label">مين عرفها؟ (+١ لكل واحد، واللي انخدع يعطي ${esc(lname(teller))} نقطة)</span>
+      <div class="chips">${others.map(i => `<button class="chip" data-rt="${i}" aria-pressed="${t.right.includes(i)}">${esc(lname(i))}</button>`).join("")}</div></div>
+    <div class="foot"><button class="btn" id="nx">احسب، واللي بعده</button></div></section>`;
+  onAll("[data-rt]", b => { const i = +b.dataset.rt; t.right = t.right.includes(i) ? t.right.filter(x => x !== i) : [...t.right, i]; b.setAttribute("aria-pressed", t.right.includes(i)); });
+  on("nx", "click", () => {
+    t.right.forEach(i => laddScore(i, 1));
+    const fooled = others.length - t.right.length; if (fooled) laddScore(teller, fooled);
+    toast(fooled ? `+${ar(fooled)} لـ${lname(teller)}` : "كلكم عرفتوها 👏"); next();
+  });
+};
+
+/* ---------- مين قالها؟ (بجوال واحد) ---------- */
+function lWhoNew() {
+  L.whoDeck = L.whoDeck?.length ? L.whoDeck : shuffle([...WHO]);
+  L.wh = { q: L.whoDeck.pop(), i: 0, shown: false, ans: [], stage: "write", k: 0, open: false };
+}
+VIEWS["l-who"] = () => {
+  if (L.count < 3) { V.innerHTML = `<section><h2>مين قالها؟</h2><p class="lead">تحتاجون ٣ لاعبين على الأقل.</p><div class="foot"><button class="btn" id="roster">✏️ عدّل اللاعبين</button></div></section>`; on("roster", "click", () => go("l-players")); return; }
+  if (!L.wh || L.wh.i > L.count) lWhoNew();
+  const w = L.wh;
+  if (w.stage === "write") {
+    const q = `<div class="card prompt"><span class="eyebrow">السؤال</span><span class="mid">${esc(w.q)}</span></div>`;
+    if (!w.shown) {
+      V.innerHTML = `<section>${w.i === 0 ? `<div><h2>مين قالها؟</h2><p class="lead">كل واحد يكتب جوابه بالسر ويمرر الجوال. بعدها تطلع الأجوبة وتخمّنون مين كاتبها.</p></div>` : ""}
+        <div class="dots" aria-hidden="true">${Array.from({ length: L.count }, (_, k) => `<i class="${k < w.i ? "on" : ""}"></i>`).join("")}</div>
+        <div class="card tap" id="pc" role="button" tabindex="0"><span class="eyebrow">الجوال عند</span><span class="big">${esc(lname(w.i))}</span><span class="hint">تأكد محد يشوف، واضغط عشان تكتب جوابك</span></div>
+        <div class="foot">${w.i === 0 ? `<button class="btn ghost" id="nq">سؤال ثاني</button>` : ""}</div></section>`;
+      const show = () => { w.shown = true; render(true); };
+      on("pc", "click", show); on("pc", "keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); show(); } });
+      on("nq", "click", () => { lWhoNew(); render(true); });
+      return;
+    }
+    V.innerHTML = `<section>${q}
+      <form class="wform" id="wF" autocomplete="off"><textarea class="txt" id="wIn" rows="3" maxlength="120" dir="auto" placeholder="اكتب جوابك…"></textarea>
+      <button class="btn">${w.i === L.count - 1 ? "خبّيته، اكشفوا الأجوبة" : "خبّيته، مرّر الجوال"}</button></form></section>`;
+    const inp = document.getElementById("wIn"); setTimeout(() => inp?.focus(), 50);
+    on("wF", "submit", e => {
+      e.preventDefault(); const v = cleanMsg(inp.value).slice(0, 120); if (!v) return toast("اكتب جوابك أول");
+      w.ans.push({ p: w.i, t: v }); w.i++; w.shown = false;
+      if (w.i >= L.count) { w.stage = "guess"; w.ans = shuffle(w.ans); w.k = 0; w.open = false; }
+      render(true);
+    });
+    return;
+  }
+  if (w.stage === "guess") {
+    const a = w.ans[w.k], last = w.k === w.ans.length - 1;
+    V.innerHTML = `<section><div class="card prompt"><span class="eyebrow">السؤال</span><span class="mid">${esc(w.q)}</span></div>
+      <div class="card ${w.open ? "safe" : ""} pop"><span class="eyebrow">جواب ${ar(w.k + 1)} من ${ar(w.ans.length)}</span><span class="mid">«${esc(a.t)}»</span>
+        <span class="hint">${w.open ? `كاتبه: <b>${esc(lname(a.p))}</b>` : "خمّنوا بصوت عالي: مين كاتبه؟ 🤔"}</span></div>
+      <div class="foot">${w.open ? `<button class="btn" id="nx">${last ? "خلصنا، سؤال جديد" : "الجواب الجاي"}</button>` : `<button class="btn danger" id="op">اكشف مين كاتبه</button>`}</div></section>`;
+    on("op", "click", () => { w.open = true; render(true); });
+    on("nx", "click", () => { if (last) lWhoNew(); else { w.k++; w.open = false; } render(true); });
+  }
+};
+
 // ابقِ الشاشة شغالة أثناء اللعب لو الجهاز يسمح
 let wakeLock = null;
 document.addEventListener("click", async () => {
@@ -3789,7 +4079,7 @@ if (configured) {
   onSnapshot(doc(db, "config", "banner"), s => {
     promo = s.exists() ? s.data() : null; renderBanner(); if (screen === "admin") render(false);
   }, err);
-  const GUEST_OK = new Set(["auth", "email", "forgot", "local", "setup", "l-players", "l-imp", "l-pass", "l-play", "l-most", "l-five", "l-scores", "l-hhnj"]);
+  const GUEST_OK = new Set(["auth", "email", "forgot", "local", "setup", "l-players", "l-imp", "l-pass", "l-play", "l-most", "l-five", "l-scores", "l-hhnj", "l-kal", "l-kq", "l-draw", "l-tf", "l-who"]);
   onAuthStateChanged(auth, async user => {
     stopGlobal(); stopGuest();
     if (!user) {
