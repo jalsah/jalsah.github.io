@@ -3,7 +3,7 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
   onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword,
   sendPasswordResetEmail, signInAnonymously, deleteUser, reauthenticateWithPopup,
-  reauthenticateWithCredential, EmailAuthProvider, updateCurrentUser
+  reauthenticateWithCredential, EmailAuthProvider, updateCurrentUser, OAuthProvider
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot,
@@ -320,6 +320,35 @@ async function login() {
   }
 }
 
+// تسجيل الدخول بحساب أبل: يشتغل بعد ما نفعّله في Apple Developer و Firebase
+const APPLE_ON = false;
+const appleProvider = () => { const p = new OAuthProvider("apple.com"); p.addScope("email"); p.setCustomParameters({ locale: "ar" }); return p; };
+async function loginApple() {
+  const provider = appleProvider();
+  try { await signInWithPopup(auth, provider); }
+  catch (e) {
+    if (["auth/popup-blocked", "auth/operation-not-supported-in-this-environment", "auth/web-storage-unsupported"].includes(e.code)) await signInWithRedirect(auth, provider);
+    else if (!["auth/popup-closed-by-user", "auth/cancelled-popup-request"].includes(e.code)) toast("ما زبط تسجيل الدخول بأبل، جرّب مرة ثانية");
+  }
+}
+const APPLE_LOGO = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.37 12.6c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.47.83-.72 0-1.82-.81-2.99-.79-1.54.02-2.96.9-3.75 2.27-1.6 2.78-.41 6.89 1.15 9.14.76 1.1 1.67 2.34 2.86 2.3 1.15-.05 1.58-.74 2.97-.74 1.38 0 1.78.74 2.99.72 1.24-.02 2.02-1.12 2.77-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.4-.92-2.42-3.66zM14.1 5.86c.63-.77 1.06-1.83.94-2.89-.91.04-2.01.61-2.66 1.37-.58.67-1.1 1.76-.96 2.79 1.01.08 2.05-.51 2.68-1.27z"/></svg>`;
+
+/* ================= شروط الاستخدام ================= */
+const TERMS_V = 1;
+const termsOk = () => !!me?.uid && store.get("terms:" + me.uid, 0) >= TERMS_V;
+const termsAccept = () => { if (me?.uid) store.set("terms:" + me.uid, TERMS_V); };
+const LEGAL_LINKS = `<a class="ilink" href="terms.html" target="_blank" rel="noopener">شروط الاستخدام</a> و<a class="ilink" href="privacy.html" target="_blank" rel="noopener">سياسة الخصوصية</a>`;
+function termsSheet() {
+  if (!me?.username || termsOk() || document.getElementById("termsSheet")) return;
+  const el = document.createElement("div");
+  el.id = "termsSheet"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true");
+  el.innerHTML = `<div class="sheet bot-sheet"><span class="bot-av" aria-hidden="true">📜</span><b class="pf-name">شروط الاستخدام</b>
+    <p class="pf-bio">عشان تكمل في روق، لازم توافق على ${LEGAL_LINKS}.<br>باختصار: عمرك ١٨ أو أكثر، وممنوع السب والإساءة والتنمّر، ومن يخالف يُحظر.</p>
+    <button class="btn" id="termsOk">أوافق ✅</button></div>`;
+  document.body.appendChild(el);
+  el.querySelector("#termsOk").addEventListener("click", () => { termsAccept(); el.remove(); });
+}
+
 /* ================= تبديل الحسابات ================= */
 const accounts = () => { const a = store.get("accounts", []); return Array.isArray(a) ? a : []; };
 // كل حساب له جلسة دخول محفوظة لحاله، عشان التبديل يصير بدون كلمة سر
@@ -332,8 +361,9 @@ function rememberAccount() {
   const u = auth.currentUser; if (!u || !me?.username) return;
   updateCurrentUser(accAuth(u.uid), u).catch(e => console.error(e));
   const google = u.providerData.some(p => p.providerId === "google.com");
+  const apple = u.providerData.some(p => p.providerId === "apple.com");
   const list = accounts().filter(a => a.uid !== u.uid);
-  list.unshift({ uid: u.uid, username: me.username, email: u.email || "", google, photo: me.photo || "" });
+  list.unshift({ uid: u.uid, username: me.username, email: u.email || "", google, apple, photo: me.photo || "" });
   store.set("accounts", list.slice(0, 6));
 }
 function openSwitcher() {
@@ -382,6 +412,8 @@ function openSwitcher() {
     if (a.google) {
       const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt: "select_account", ...(a.email ? { login_hint: a.email } : {}) });
       doSwitch(() => signInWithPopup(auth, p));
+    } else if (a.apple) {
+      doSwitch(() => signInWithPopup(auth, appleProvider()));
     } else {
       const f = el.querySelector(`[data-swf="${CSS.escape(a.uid)}"]`);
       el.querySelectorAll("[data-swf]").forEach(x => x.hidden = x !== f);
@@ -398,6 +430,7 @@ function openSwitcher() {
 
 function afterLogin() {
   rememberAccount();
+  setTimeout(termsSheet, 400);
   if (pendingJoin) {
     const c = pendingJoin; pendingJoin = null;
     history.replaceState(null, "", location.pathname);
@@ -2117,13 +2150,16 @@ VIEWS.auth = () => {
       <ul class="perks"><li>الدخيل</li><li>مين أكثر واحد</li><li>خمسة بعشر</li></ul>
     </div>
     <div class="foot">
+      ${APPLE_ON ? `<button class="btn apple" id="loginApple"><span class="a-logo" aria-hidden="true">${APPLE_LOGO}</span>كمّل بحساب أبل</button>` : ""}
       <button class="btn google" id="login"><span class="g-logo" aria-hidden="true">${GOOGLE_G}</span>كمّل بحساب قوقل</button>
       <button class="btn ghost" id="byEmail">تسجيل الدخول</button>
       <div class="or"><span>أو</span></div>
       <button class="btn ghost" id="local">العب بدون حساب</button>
       <p class="hint center">بدون حساب تلعبون بجوال واحد. للعب أونلاين وإضافة الأصحاب تحتاج حساب.</p>
+      <p class="hint center legal-hint">بدخولك توافق على ${LEGAL_LINKS}، وتأكد إن عمرك ١٨ أو أكثر.</p>
     </div></section>`;
   on("login", "click", login);
+  on("loginApple", "click", loginApple);
   on("byEmail", "click", () => { ui.emailMode = "login"; go("email"); });
   on("local", "click", () => go("local"));
 };
@@ -2195,7 +2231,7 @@ VIEWS.email = () => {
     </form>
     <p class="switch">${signup ? "عندك حساب؟" : "ما عندك حساب؟"} <button type="button" class="link" id="switchMode">${signup ? "تسجيل الدخول" : "إنشاء حساب"}</button></p>
     <div class="foot"><button class="btn ghost" id="gInstead"><span class="g-logo" aria-hidden="true">${GOOGLE_G}</span>أو كمّل بقوقل</button>
-      <p class="hint center">بتسجيلك توافق على <a class="link" href="privacy.html" target="_blank" rel="noopener">سياسة الخصوصية</a></p></div>
+      <p class="hint center">بتسجيلك توافق على ${LEGAL_LINKS}</p></div>
   </section>`;
   const msg = document.getElementById("emMsg");
   bindEyes();
@@ -2382,6 +2418,7 @@ VIEWS.username = () => {
     <div class="field"><label class="label" for="uname">اليوزر</label>
       <div class="uinput"><span>@</span><input id="uname" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="20"></div>
       <p class="hint" id="unameMsg">${UNAME_HINT}</p></div>
+    <label class="agree"><input type="checkbox" id="agree"><span>قرأت وأوافق على ${LEGAL_LINKS}، وعمري ١٨ أو أكثر.</span></label>
     <div class="foot"><button class="btn" id="claim" disabled>اعتمد اليوزر</button>
     <button class="btn ghost" id="logout">تسجيل خروج</button></div></section>`;
   const inp = document.getElementById("uname"), msg = document.getElementById("unameMsg"), btn = document.getElementById("claim");
@@ -2389,7 +2426,7 @@ VIEWS.username = () => {
     const v = inp.value.replace(/\s+/g, "");
     if (v !== inp.value) inp.value = v;
     const ok = USER_RE.test(v) && HAS_UPPER.test(v) && (!RESERVED.has(v.toLowerCase()) || v.toLowerCase() === OFFICIAL);
-    btn.disabled = !ok;
+    btn.disabled = !ok || !document.getElementById("agree").checked;
     if (!v) { msg.className = "hint"; msg.textContent = UNAME_HINT; }
     else if (/[^A-Za-z0-9_-]/.test(v)) { msg.className = "hint msg-bad"; msg.textContent = "مسموح بس: حروف إنجليزية وأرقام و _ و -"; }
     else if (v.length < 3) { msg.className = "hint msg-bad"; msg.textContent = "اليوزر لازم يكون ٣ خانات أو أكثر"; }
@@ -2398,14 +2435,15 @@ VIEWS.username = () => {
     else if (RESERVED.has(v.toLowerCase())) { msg.className = "hint msg-bad"; msg.textContent = "هذا اليوزر محجوز، جرّب غيره"; }
     else { msg.className = "hint msg-ok"; msg.textContent = "@" + v + " شكله حلو"; }
   };
-  inp.addEventListener("input", check); check();
+  inp.addEventListener("input", check); on("agree", "change", check); check();
   btn.addEventListener("click", async () => {
     const name = inp.value;
     if (!USER_RE.test(name) || !HAS_UPPER.test(name) || (RESERVED.has(name.toLowerCase()) && name.toLowerCase() !== OFFICIAL)) return;
+    if (!document.getElementById("agree").checked) return toast("لازم توافق على الشروط أول");
     btn.disabled = true; btn.textContent = "لحظة…";
     try {
       await claimUsername(name);
-      me.username = name;
+      me.username = name; termsAccept();
       startGlobal(); rememberAccount(); ui.slide = 0; go("welcome");
     } catch (e) {
       btn.disabled = false; btn.textContent = "اعتمد اليوزر";
@@ -3000,7 +3038,7 @@ VIEWS.profile = () => {
       <p class="hint">أرسله لأصحابك عشان يضيفونك.</p></div>
 
     <div class="foot"><button class="btn ghost" id="tour">شرح اللعبة</button><button class="btn ghost" id="switchAcc">🔄 بدّل الحساب</button><button class="btn ghost" id="out">تسجيل خروج</button>
-      <div class="row legal"><a class="link" href="privacy.html" target="_blank" rel="noopener">سياسة الخصوصية</a>${isOwner() ? "" : `<button class="link danger-link" id="delAcc">احذف حسابي</button>`}</div></div></section>`;
+      <div class="row legal"><a class="link" href="terms.html" target="_blank" rel="noopener">شروط الاستخدام</a><a class="link" href="privacy.html" target="_blank" rel="noopener">سياسة الخصوصية</a>${isOwner() ? "" : `<button class="link danger-link" id="delAcc">احذف حسابي</button>`}</div></div></section>`;
   on("tour", "click", () => { ui.slide = 0; go("welcome"); });
   on("delAcc", "click", openDeleteAccount);
   const setLook = async (kind, k, list) => {
@@ -3058,6 +3096,7 @@ function openDeleteAccount() {
   const user = auth.currentUser; if (!user || !me?.username) return;
   const viaGoogle = user.providerData.some(p => p.providerId === "google.com");
   const viaPass = user.providerData.some(p => p.providerId === "password");
+  const viaApple = !viaGoogle && user.providerData.some(p => p.providerId === "apple.com");
   document.getElementById("delSheet")?.remove();
   const el = document.createElement("div");
   el.id = "delSheet"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "احذف حسابي");
@@ -3077,6 +3116,7 @@ function openDeleteAccount() {
     go2.disabled = true; go2.textContent = "لحظة…"; msg.className = "hint";
     try {
       if (viaGoogle) await reauthenticateWithPopup(user, new GoogleAuthProvider());
+      else if (viaApple) await reauthenticateWithPopup(user, appleProvider());
       else if (viaPass) {
         const pw = el.querySelector("#delPw").value;
         if (!pw) throw { code: "need-pw" };
