@@ -870,6 +870,27 @@ background:linear-gradient(120deg,#5c0a1e,#9e1838 45%,#5c0a1e);border:2px solid 
 .bc-av{position:absolute;left:50%;top:60%;width:30%;aspect-ratio:1;transform:translateX(-50%);border-radius:50%;border:2px dashed rgba(255,255,255,.75);background:rgba(0,0,0,.35);pointer-events:none}
 .bc-zoom{display:flex;align-items:center;gap:10px;width:100%;font-size:14px}.bc-zoom input{flex:1;accent-color:var(--saffron)}
 .bcrop .row{width:100%;gap:8px}.bcrop .row .btn{flex:1}
+
+/* بروفايل بنفس ترتيب ديسكورد: بنر ٦٨٠×٢٤٠، والصورة دائرية على اليسار */
+.pcard-cover,.pcard-cover.ban,.pcard-cover.thc{height:auto;aspect-ratio:17/6}
+.pcard-av{justify-content:flex-end;padding:0 18px;margin-top:-50px}
+.pcard.thm .pcard-av,.pcard .pcard-av{margin-top:-50px}
+.pcard-av .av{box-shadow:0 0 0 6px var(--surface),0 8px 20px rgba(0,0,0,.35)}
+.pcard-body{align-items:stretch;text-align:start;padding-top:8px}
+.pcard-body>.pf-name,.pcard-body>.chip-st,.pcard-body>.row.tags,.pcard-body>.ach-mini{align-self:flex-end}
+.pcard-body .pf-name{font-size:23px}
+.pcard-body>.row.tags{justify-content:flex-start}
+.pcard-bio{max-width:none;text-align:start}
+.pf-head.pfx{align-items:stretch;text-align:start}
+.pf-ban{height:auto;aspect-ratio:17/6}
+.pf-ban span{transform:none}
+.pf-head.pfx .pf-av{align-self:flex-end;margin-top:-50px;margin-left:4px}
+.pf-head.pfx .pf-av .av{box-shadow:0 0 0 6px var(--surface)}
+.pf-head.pfx>.pf-name{align-self:flex-end;margin-left:6px;font-size:23px}
+.pf-head.pfx>.lvlbox{max-width:none}
+.pf-head.pfx>.pf-acts{justify-content:flex-end}
+.bc-frame{aspect-ratio:17/6}
+.bc-av{left:4.3%;top:63%;width:25%;transform:none}
 @media (prefers-reduced-motion:reduce){.fx{display:none}.ns{animation:none}}
 </style>
 </head>
@@ -884,6 +905,6 @@ background:linear-gradient(120deg,#5c0a1e,#9e1838 45%,#5c0a1e);border:2px solid 
   <main id="view"><div class="spinner" aria-label="جاري التحميل"></div></main>
 </div>
 <noscript><section style="padding:24px"><h1>روق: ألعاب الجلسات مع أصحابك</h1><p>ألعاب الجلسات مع الشلة من جوالك: ارسم وخمّن، الدخيل، أونو، مين قالها، صح ولا خطأ، ومين أكثر واحد. أونلاين أو بجوال واحد، ومجانية.</p><p>شغّل الجافاسكربت عشان تلعب.</p></section></noscript>
-<script type="module" src="./app.js?v=67"></script>
+<script type="module" src="./app.js?v=68"></script>
 </body>
 </html>

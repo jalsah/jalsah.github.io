@@ -3198,7 +3198,7 @@ function showProfile(uid) {
   const th = themeOf(p), ban = bannerOf(p);
   el.innerHTML = `<div class="pcard${thC(th)}">
     ${ban ? `<div class="pcard-cover ban" aria-hidden="true"><img src="${ban}" alt=""></div>` : th ? `<div class="pcard-cover thc" aria-hidden="true"></div>` : `<div class="pcard-cover" style="--c:${col}" aria-hidden="true"><span class="pc-sadu"></span></div>`}
-    <div class="pcard-av">${avF(p, 104)}</div>
+    <div class="pcard-av">${avF(p, 92)}</div>
     <div class="pcard-body">
       <b class="pf-name${nsC(p)}" dir="ltr">${at(p.username)}</b>
       ${f ? `<span class="chip-st ${isOnline(f) ? "on" : ""}">${isOnline(f) ? "أونلاين الحين" : "مو أونلاين"}</span>` : ""}
@@ -3267,7 +3267,7 @@ async function openBannerCrop(file) {
   el.querySelector("#bcSave").addEventListener("click", async e => {
     const btn = e.currentTarget; btn.disabled = true; btn.textContent = "نرفع البنر…";
     try {
-      const CW = 600, CH = 240, k = CW / W, sc = base() * z, c = document.createElement("canvas"); c.width = CW; c.height = CH;
+      const CW = 680, CH = 240, k = CW / W, sc = base() * z, c = document.createElement("canvas"); c.width = CW; c.height = CH;
       c.getContext("2d").drawImage(img, ox * k, oy * k, iw * sc * k, ih * sc * k);
       let q = .8, out = c.toDataURL("image/jpeg", q);
       while (out.length > 60000 && q > .3) { q -= .08; out = c.toDataURL("image/jpeg", q); }
@@ -3297,7 +3297,7 @@ VIEWS.profile = () => {
     <div class="pf-head pfx${thC(themeOf(prof(me.uid)))}">${fxOf(themeOf(prof(me.uid)))}
       <div class="pf-ban ${bannerOf(me) ? "on" : ""}">${bannerOf(me) ? `<img src="${bannerOf(me)}" alt="">` : `<span>🖼️ حط بنر لبروفايلك</span>`}
         <label class="pf-ban-btn" for="bannerIn">${bannerOf(me) ? "غيّر البنر" : "أضف بنر"}</label><input type="file" id="bannerIn" accept="image/*" hidden></div>
-      <div class="pf-av">${avF(prof(me.uid), 112)}
+      <div class="pf-av">${avF(prof(me.uid), 96)}
         <label class="pf-cam" for="photoIn" aria-label="غيّر الصورة">📷</label>
         <input type="file" id="photoIn" accept="image/*" hidden>
       </div>
