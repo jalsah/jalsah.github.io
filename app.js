@@ -226,12 +226,20 @@ async function bumpStreaks() {
   }
 }
 /* ---- يلعب الحين: أصحابك يشوفون وش تلعب ويدخلون معك ---- */
+const playData = () => { if (ui.playRoom !== roomCode) { ui.playRoom = roomCode; ui.playT0 = Date.now(); }
+  return { g: String(room.game).slice(0, 8), c: roomCode, at: serverTimestamp(), n: Object.keys(room.players || {}).length, s: room.phase === "lobby" ? "w" : "p", t0: ui.playT0 }; };
 function setPlaying() {
   if (!me?.uid || me.guest || !roomCode || !room?.game) return;
-  const k = roomCode + ":" + room.game; if (ui.playKey === k && Date.now() - (ui.playAt || 0) < 150000) return;
+  const pd = playData(), k = [roomCode, pd.g, pd.n, pd.s].join(":"); if (ui.playKey === k && Date.now() - (ui.playAt || 0) < 150000) return;
   ui.playKey = k; ui.playAt = Date.now();
-  updateDoc(doc(db, "users", me.uid), { playing: { g: String(room.game).slice(0, 8), c: roomCode, at: serverTimestamp() } }).catch(() => {});
+  updateDoc(doc(db, "users", me.uid), { playing: pd }).catch(() => {});
 }
+// كرت «يلعب الحين» مثل ديسكورد
+const since = t0 => { const s = Math.max(0, Math.floor((Date.now() - t0) / 1000)), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60, z = v => String(v).padStart(2, "0"); return h ? `${h}:${z(m)}:${z(x)}` : `${z(m)}:${z(x)}`; };
+function playCard(f) { const p = playingOf(f); if (!p) return ""; const c = CATALOG.find(x => x.id === p.g);
+  return `<div class="playc"><span class="playc-h">يلعب الحين</span><div class="playc-r"><span class="playc-ic">${ICONS[c?.icon || p.g] || "🎮"}</span>
+    <div class="playc-t"><b>${GAMES[p.g]}</b><span>${p.s === "p" ? "في نص اللعبة 🔥" : "ينتظرون يبدأ المضيف"}</span>
+    <span class="playc-m">${p.n ? `<span>👥 في غرفة (${ar(p.n)} من ١٢)</span>` : ""}${p.t0 ? `<i dir="ltr" data-since="${p.t0}">🎮 ${since(p.t0)}</i>` : ""}</span></div></div></div>`; }
 function clearPlaying() { if (!me?.uid || me.guest || !ui.playKey) return; ui.playKey = null; updateDoc(doc(db, "users", me.uid), { playing: deleteField() }).catch(() => {}); }
 const playingOf = f => { const p = f?.playing, t = p?.at?.toMillis?.() || 0; return p?.c && GAMES[p.g] && isOnline(f) && Date.now() - t < ONLINE_MS ? p : null; };
 
@@ -627,7 +635,7 @@ async function claimUsername(name) {
 function startGlobal() {
   setTimeout(claimStreak, 1500);
   if (pushState() === "granted") setTimeout(() => pushSaveToken(true), 3000);
-  const ping = () => { if (document.visibilityState === "visible") { ui.playAt = 0; updateDoc(doc(db, "users", me.uid), roomCode && room?.game ? { lastSeen: serverTimestamp(), playing: { g: String(room.game).slice(0, 8), c: roomCode, at: serverTimestamp() } } : { lastSeen: serverTimestamp() }).catch(() => {}); if (roomCode) { ui.playKey = roomCode + ":" + room?.game; ui.playAt = Date.now(); } } };
+  const ping = () => { if (document.visibilityState === "visible") { ui.playAt = 0; if (roomCode && room?.game) { const pd = playData(); ui.playKey = [roomCode, pd.g, pd.n, pd.s].join(":"); ui.playAt = Date.now(); updateDoc(doc(db, "users", me.uid), { lastSeen: serverTimestamp(), playing: pd }).catch(() => {}); } else updateDoc(doc(db, "users", me.uid), { lastSeen: serverTimestamp() }).catch(() => {}); } };
   ping();
   presenceTimer = setInterval(ping, 180000);
   document.addEventListener("visibilitychange", onVisible);
@@ -3248,7 +3256,8 @@ function showProfile(uid) {
   const col = avColor(p.username);
   let acts = "";
   if (f) {
-    acts += `<button class="btn" id="pfMsg">💬 رسالة</button>`;
+    if (playingOf(f) && playingOf(f).c !== roomCode) acts += playingOf(f).s === "p" ? `<button class="btn ghost" disabled>⏳ يلعبون الحين، تقدر تدخل بعد الجولة</button>` : `<button class="btn good" id="pfJoin">🎮 ادخل معه</button>`;
+    acts += `<button class="btn${playingOf(f) && playingOf(f).c !== roomCode ? " ghost" : ""}" id="pfMsg">💬 رسالة</button>`;
     if (roomCode && !room?.players?.[uid]) acts += `<button class="btn ghost" id="pfInv">اعزمه لغرفتك</button>`;
   } else if (got) acts += `<button class="btn good" id="pfAcc">اقبل طلب الصداقة</button>`;
   else if (sent) acts += `<button class="btn ghost" disabled>انرسل طلب الصداقة ✓</button>`;
@@ -3264,6 +3273,7 @@ function showProfile(uid) {
       ${f ? `<span class="chip-st ${isOnline(f) ? "on" : ""}">${isOnline(f) ? "أونلاين الحين" : "مو أونلاين"}</span>` : ""}
       <div class="row tags">${lvlTag(p)}${vipTag(p)}${streakOf(uid)?.n >= 1 ? `<span class="tag stk">🔥 ${ar(streakOf(uid).n)} ${streakOf(uid).n > 2 && streakOf(uid).n < 11 ? "أيام" : "يوم"} ستريك${streakOf(uid).risk ? " ⏳" : ""}</span>` : ""}</div>
       ${p.bio ? `<p class="pcard-bio">${esc(p.bio)}</p>` : ""}
+      ${f ? playCard(f) : ""}
       ${favCard(p)}
       ${(() => { const g = achGot(p.stats, p.xp, p.username); if (!g.length) return ""; const top = [...g].sort((q, r) => TIER_RANK[r.tier] - TIER_RANK[q.tier]).slice(0, 3);
         return `<div class="ach-mini" aria-label="الإنجازات">${top.map(x => medal(x)).join("")}<span class="ach-n">${ar(g.length)} ${g.length > 2 && g.length < 11 ? "إنجازات" : "إنجاز"}</span></div>`; })()}
@@ -3277,6 +3287,8 @@ function showProfile(uid) {
   el.querySelector("#pfClose").addEventListener("click", close);
   el.querySelector("#pfInv")?.addEventListener("click", () => { sendInvite(uid); close(); });
   el.querySelector("#pfMsg")?.addEventListener("click", () => { close(); openDm(uid); });
+  el.querySelector("#pfJoin")?.addEventListener("click", () => { close(); joinRoom(playingOf(f).c); });
+  const tick = setInterval(() => { if (!el.isConnected) return clearInterval(tick); el.querySelectorAll("[data-since]").forEach(x => x.textContent = "🎮 " + since(+x.dataset.since)); }, 1000);
   el.querySelector("#pfAcc")?.addEventListener("click", () => { acceptRequest(uid); close(); });
   el.querySelector("#pfAdd")?.addEventListener("click", () => { sendRequest(p.username); close(); });
   el.querySelector("#pfKick")?.addEventListener("click", e => { if (!confirmTap(e.currentTarget, "متأكد؟ ما يقدر يرجع للغرفة")) return; kickPlayer(uid); close(); });
