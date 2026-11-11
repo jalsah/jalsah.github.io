@@ -316,7 +316,7 @@ function renderBanner() {
   renderAnnounce();
   const pimg = promo && typeof promo.img === "string" && promo.img.startsWith("data:image/jpeg;base64,") ? promo.img : "";
   const plink = promo && /^https:\/\//.test(promo.link || "") ? promo.link : "";
-  const promoHtml = pimg && screen === "home"
+  const promoHtml = false && pimg
     ? (plink ? `<a class="promo" href="${esc(plink)}" target="_blank" rel="noopener"><img src="${esc(pimg)}" alt="${esc(promo.alt || "إعلان روق")}"></a>`
              : `<div class="promo"><img src="${esc(pimg)}" alt="${esc(promo.alt || "إعلان روق")}"></div>`) : "";
   BANNER.innerHTML = promoHtml + list.map(i => `
@@ -3247,46 +3247,60 @@ async function doInstall() {
   el.querySelector("#instCopy")?.addEventListener("click", () => copyText(appLink(), "انسخ الرابط، الصقه في Safari"));
 }
 
+// بنر الإعلان (من لوحة الإدارة): آخر شي تحت في الرئيسية
+function promoBlock() {
+  const pimg = promo && typeof promo.img === "string" && promo.img.startsWith("data:image/jpeg;base64,") ? promo.img : "";
+  if (!pimg) return ""; const plink = promo && /^https:\/\//.test(promo.link || "") ? promo.link : "";
+  return plink ? `<a class="promo" href="${esc(plink)}" target="_blank" rel="noopener"><img src="${esc(pimg)}" alt="${esc(promo.alt || "إعلان روق")}"></a>` : `<div class="promo"><img src="${esc(pimg)}" alt="${esc(promo.alt || "إعلان روق")}"></div>`;
+}
+const NEW_GAMES = ["who", "tf"]; // «جديد» على لعبتين بس
+const gMax = id => id === "uno" ? 8 : 12;
+// لعبة اليوم: تتغير كل يوم
+const featGame = () => { const on = CATALOG.filter(g => g.online); return on[Math.floor(Date.parse(dayKey(Date.now())) / 864e5) % on.length]; };
 VIEWS.home = () => {
   const onl = [...friends.entries()].filter(([, f]) => isOnline(f));
-  V.innerHTML = `<section>
-    <div class="hello">
-      <button class="hello-av" id="hProf" aria-label="بروفايلي">${avF(prof(me.uid), 56)}</button>
-      <div class="hello-t"><span class="hint">هلا والله</span><b dir="ltr">${at(me.username)}</b></div>${streakNow() ? `<span class="sk-chip" title="سلسلة الأيام">🔥 ${ar(streakNow())}</span>` : ""}
+  const L = myLvl(), a0 = lvlXp(L), a1 = lvlXp(L + 1), pc = STAFF(me.username) ? 100 : Math.round(((me.xp || 0) - a0) / Math.max(1, a1 - a0) * 100);
+  const tab = ui.gTab || "all", feat = featGame();
+  const list = CATALOG.filter(g => tab === "all" ? true : tab === "on" ? g.online : tab === "lo" ? !!g.local : NEW_GAMES.includes(g.id));
+  const showFeat = tab === "all" || (tab === "on" && feat.online) || (tab === "lo" && feat.local) || (tab === "new" && NEW_GAMES.includes(feat.id));
+  const rest = list.filter(g => !(showFeat && g.id === feat.id)), rem = rest.length % 3;
+  const n = dailyNo(), st = dState(n);
+  V.innerHTML = `<section class="home2">
+    <div class="hcard">
+      <div class="hc-row">
+        <button class="hc-av" id="hProf" aria-label="بروفايلي" style="--p:${pc}%">${avF(prof(me.uid), 58)}</button>
+        <div class="hc-t"><span class="hint">هلا والله</span><b dir="ltr">${at(me.username)}</b>
+          <div class="hc-chips"><span class="hc-chip">${STAFF(me.username) ? "👑" : "⭐"} المستوى ${ar(L)}</span>${streakNow() ? `<span class="hc-chip fire" title="سلسلة الأيام">🔥 ${ar(streakNow())}</span>` : ""}</div></div>
+      </div>
+      <div class="hc-btns"><button class="hc-go" id="create">🎮 ${roomCode ? "ارجع لغرفتك" : "ابدأ جلسة"}</button><button class="hc-code" id="joinBtn" aria-expanded="${!!ui.showJoin}">ادخل بكود</button></div>
+      <form class="joinrow" id="joinF" ${ui.showJoin ? "" : "hidden"}>
+        <input id="code" dir="ltr" placeholder="K7M2P" autocomplete="off" autocapitalize="characters" aria-label="كود الغرفة">
+        <button class="btn small">دخول</button>
+      </form>
     </div>
 
     ${showInstallCard() ? `<div class="inst"><img src="icon-180.png" alt="" width="52" height="52">
       <div class="inst-t"><b>ثبّت روق على شاشتك</b><span class="hint">تفتح بضغطة مثل التطبيق، وبدون متصفح</span></div>
       <button class="btn small" id="instGo">ثبّت</button><button class="inst-x" id="instHide" aria-label="إخفاء">×</button></div>` : ""}
-
     ${!showInstallCard() && showPushCard() ? `<div class="inst push"><span class="push-ic" aria-hidden="true">🔔</span>
       <div class="inst-t"><b>فعّل الإشعارات</b><span class="hint">عشان توصلك العزايم والرسائل حتى لو روق مقفل</span></div>
       <button class="btn small" id="pushGo">فعّل</button><button class="inst-x" id="pushHide" aria-label="إخفاء">×</button></div>` : ""}
 
-    <h2>وش نلعب الليلة؟</h2>
-    <div class="big2">
-      <button class="bigbtn create" id="create"><span class="bb-ic">${ICONS.create}</span><b>${roomCode ? "ارجع لغرفتك" : "غرفة جديدة"}</b><span>واعزم أصحابك</span></button>
-      <button class="bigbtn join" id="joinBtn"><span class="bb-ic">${ICONS.join}</span><b>ادخل بكود</b><span>عندك كود غرفة؟</span></button>
+    <div class="h-sec"><b>أونلاين الحين</b>${onl.length ? `<span class="hint">${ar(onl.length)}</span>` : ""}</div>
+    ${onl.length ? `<div class="onl">${onl.map(([u, f]) => { const pl = playingOf(f); return `<button class="onl-i ${pl ? "pl" : ""}" ${pl && pl.c !== roomCode ? `data-jn="${esc(pl.c)}"` : `data-pf="${esc(u)}"`}>${avatar(f.username, f.photo, 52)}<i class="dot on"></i>${streakOf(u)?.n >= 2 ? `<i class="onl-stk">🔥${ar(streakOf(u).n)}</i>` : ""}<span dir="ltr">${esc(f.username)}</span>${pl ? `<em>🎮 ${GAMES[pl.g]}</em><em class="go">ادخل معه</em>` : ""}</button>`; }).join("")}</div>`
+      : `<div class="h-empty"><span aria-hidden="true">😴</span><div><b>ربعك نايمين</b><span class="hint">صحّهم واعزمهم يلعبون معك</span></div><button class="btn small" id="wakeBtn">اعزمهم</button></div>`}
+
+    <div class="h-tri">
+      <button class="h-tile daily ${st.done ? "done" : ""}" id="dailyBtn"><span class="ht-ic" aria-hidden="true">📅</span><b>كلمة اليوم #${ar(n)}</b><span>${st.done ? (st.won ? "حليتها ✅" : "بكرة غيرها") : "خمّن قبل ربعك 🧠"}</span></button>
+      <button class="h-tile pub" id="pubBtn"><span class="ht-ic" aria-hidden="true">🌍</span><b>غرف عامة</b><span>العب مع ناس جدد</span></button>
+      <button class="h-tile inv" id="invBtn"><span class="ht-ic" aria-hidden="true">🎁</span><b>جيب ربعك</b><span>VIP أسبوع 👑</span></button>
     </div>
-    <button class="pubbtn" id="pubBtn"><span class="pb-ic">${ICONS.pub}</span><span class="pb-t"><b>غرف عامة</b><span>ادخل والعب مع ناس جدد</span></span><span class="pb-go">←</span></button>
-    <form class="joinrow" id="joinF" ${ui.showJoin ? "" : "hidden"}>
-      <input id="code" dir="ltr" placeholder="K7M2P" autocomplete="off" autocapitalize="characters" aria-label="كود الغرفة">
-      <button class="btn small">دخول</button>
-    </form>
-    ${(() => { const n = dailyNo(), st = dState(n); return `<button class="dcard ${st.done ? "done" : ""}" id="dailyBtn"><span class="dc-ic" aria-hidden="true">📅</span><span class="pb-t"><b>كلمة اليوم #${ar(n)}</b><span>${st.done ? (st.won ? `حليتها بـ ${ar(st.g.length)} محاولات ✅ شارك نتيجتك` : "ما لحقت عليها 😢 بكرة كلمة جديدة") : "خمّن الكلمة قبل ربعك 🧠"}</span></span><span class="pb-go">←</span></button>`; })()}
-    <button class="shopbtn invbtn" id="invBtn"><span class="sb-ic" aria-hidden="true">🎁</span><span class="pb-t"><b>جيب ربعك</b><span>كل واحد يسجّل منك = VIP أسبوع لكم 👑</span></span><span class="pb-go">←</span></button>
 
-    ${onl.length ? `<div class="field"><span class="label">أونلاين الحين (${ar(onl.length)})</span>
-      <div class="onl">${onl.map(([u, f]) => { const pl = playingOf(f); return `<button class="onl-i ${pl ? "pl" : ""}" ${pl && pl.c !== roomCode ? `data-jn="${esc(pl.c)}"` : `data-pf="${esc(u)}"`}>${avatar(f.username, f.photo, 48)}<i class="dot on"></i>${streakOf(u)?.n >= 2 ? `<i class="onl-stk">🔥${ar(streakOf(u).n)}</i>` : ""}<span dir="ltr">${esc(f.username)}</span>${pl ? `<em>🎮 ${GAMES[pl.g]}</em><em class="go">ادخل معه</em>` : ""}</button>`; }).join("")}</div></div>` : ""}
-
-    <div class="field"><div class="row-h"><span class="label">الألعاب</span><span class="hint">اضغط أي لعبة</span></div>
-      <div class="games">${CATALOG.map(g => `<button class="gcard ${g.hot ? "hot" : ""}" data-game-card="${g.id}">${g.hot ? `<span class="gc-new">جديد 🔥</span>` : ""}
-        <span class="gc-ic">${ICONS[g.icon]}</span>
-        <b>${g.title}</b>
-        <span class="gc-tags">${g.online ? `<i class="t-on">أونلاين</i>` : ""}${g.local ? `<i class="t-lo">بجوال واحد</i>` : ""}</span>
-      </button>`).join("")}</div></div>
-
-    <button class="mode wide" id="local"><span class="glyph">${ICONS.local}</span><b>بجوال واحد</b><span>كل الألعاب على جوال واحد يتمرر بينكم.</span></button>
+    <div class="h-sec games-h"><b>الألعاب</b><div class="h-tabs" role="tablist">${[["all", "الكل"], ["on", "أونلاين"], ["lo", "بجوال واحد"], ["new", "جديد 🔥"]].map(([k, t]) => `<button class="h-tab ${tab === k ? "on" : ""}" data-gtab="${k}" role="tab" aria-selected="${tab === k}">${t}</button>`).join("")}</div></div>
+    ${showFeat ? `<button class="h-feat" data-game-card="${feat.id}"><span class="hf-ic">${ICONS[feat.icon]}</span><span class="hf-t"><span class="hf-tag">🔥 لعبة اليوم</span><b>${feat.title}</b><span>${esc(feat.desc.split(/[.،]/)[0])}</span><span class="hint">👥 ${ar(feat.min)}-${ar(gMax(feat.id))}</span></span></button>` : ""}
+    <div class="h-grid">${rest.map((g, i) => `<button class="h-g ${rem && i >= rest.length - rem ? (rem === 2 ? "half" : "full") : ""}" data-game-card="${g.id}">${NEW_GAMES.includes(g.id) ? `<span class="hg-new">جديد</span>` : ""}<span class="hg-ic">${ICONS[g.icon]}</span><span class="hg-t"><b>${g.title}</b><span class="hint">👥 ${ar(g.min)}-${ar(gMax(g.id))}${!g.online ? " · 📱" : ""}</span></span></button>`).join("")}</div>
+    ${tab === "lo" || tab === "all" ? `<button class="h-local" id="local"><span class="hl-ic">${ICONS.local}</span><span><b>بجوال واحد</b><span class="hint">كل الألعاب على جوال واحد يتمرر بينكم</span></span><span class="pb-go">←</span></button>` : ""}
+    ${promoBlock()}
   </section>`;
   on("hProf", "click", () => go("profile"));
   on("instGo", "click", doInstall);
@@ -3294,11 +3308,13 @@ VIEWS.home = () => {
   on("pushHide", "click", () => { store.set("pushHide", Date.now()); render(false); });
   on("pubBtn", "click", () => go("pub"));
   on("invBtn", "click", openInvite);
+  on("wakeBtn", "click", openInvite);
   on("dailyBtn", "click", () => go("daily"));
   on("instHide", "click", () => { store.set("instHide", Date.now()); render(false); });
   on("create", "click", () => roomCode ? go("room") : createRoom());
   onAll("[data-game-card]", b => gameSheet(b.dataset.gameCard));
-  on("joinBtn", "click", () => { ui.showJoin = true; const f = document.getElementById("joinF"); f.hidden = false; document.getElementById("code").focus(); });
+  onAll("[data-gtab]", b => { ui.gTab = b.dataset.gtab; render(false); });
+  on("joinBtn", "click", () => { ui.showJoin = !ui.showJoin; const f = document.getElementById("joinF"); f.hidden = !ui.showJoin; if (ui.showJoin) document.getElementById("code").focus(); });
   codeInput(document.getElementById("code"));
   on("joinF", "submit", e => { e.preventDefault(); joinRoom(document.getElementById("code").value); });
   onAll("[data-pf]", b => showProfile(b.dataset.pf));
@@ -4846,7 +4862,7 @@ if (configured) {
   getRedirectResult(auth).catch(() => {});
   onSnapshot(doc(db, "config", "shop"), s => { shopCfg = s.exists() ? s.data() : null; if (screen === "shop" || screen === "admin") render(false); }, () => {});
   onSnapshot(doc(db, "config", "banner"), s => {
-    promo = s.exists() ? s.data() : null; renderBanner(); if (screen === "admin") render(false);
+    promo = s.exists() ? s.data() : null; renderBanner(); if (screen === "home") render(false); if (screen === "admin") render(false);
   }, err);
   const GUEST_OK = new Set(["auth", "email", "forgot", "local", "setup", "l-players", "l-imp", "l-pass", "l-play", "l-most", "l-five", "l-scores", "l-hhnj", "l-kal", "l-kq", "l-draw", "l-tf", "l-who", "gjoin", "daily"]);
   onAuthStateChanged(auth, async user => {

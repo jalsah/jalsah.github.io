@@ -950,6 +950,50 @@ background:linear-gradient(120deg,#5c0a1e,#9e1838 45%,#5c0a1e);border:2px solid 
 @media (prefers-reduced-motion:reduce){.pod-conf{display:none}}
 .dvrow{justify-content:center;gap:8px;margin-top:8px}
 video.share-img{background:#000}
+
+/* ===== الرئيسية الجديدة ===== */
+.home2{gap:0}
+.home2>*+*{margin-top:14px}
+.hcard{border-radius:26px;padding:16px;background:radial-gradient(circle at 85% 0,rgba(242,177,52,.22),transparent 55%),linear-gradient(160deg,#3a2a6a,#241a40);border:1px solid #4a3a7a;box-shadow:0 14px 34px rgba(0,0,0,.35)}
+.hc-row{display:flex;gap:12px;align-items:center}
+.hc-av{flex:none;padding:4px;border-radius:50%;border:none;cursor:pointer;background:conic-gradient(var(--saffron) 0 var(--p),rgba(255,255,255,.12) 0)}
+.hc-av>.av,.hc-av>.fr{box-shadow:0 0 0 3px #2c2050}
+.hc-t{display:flex;flex-direction:column;min-width:0}.hc-t b{font-size:21px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hc-chips{display:flex;gap:6px;margin-top:4px;flex-wrap:wrap}
+.hc-chip{font-size:12.5px;font-weight:700;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.15);border-radius:99px;padding:3px 10px;white-space:nowrap}
+.hc-chip.fire{background:linear-gradient(90deg,#ff7a1a,#f2b134);color:#1c1530;border:none}
+.hc-btns{display:flex;gap:8px;margin-top:14px}
+.hc-go{flex:1;border:none;border-radius:16px;padding:15px;font:inherit;font-weight:800;font-size:18px;color:#1c1530;background:linear-gradient(90deg,#f2b134,#ffd36a);box-shadow:0 8px 20px rgba(242,177,52,.3);cursor:pointer}
+.hc-code{border-radius:16px;padding:0 16px;font:inherit;font-weight:700;font-size:15px;color:var(--ink);background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);cursor:pointer}
+.hcard .joinrow{margin-top:10px}
+.h-sec{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:20px!important}.h-sec b{font-size:18px}
+.home2 .onl{margin-top:8px!important}
+.h-empty{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px dashed var(--line);border-radius:18px;padding:12px 14px;margin-top:8px!important}
+.h-empty>span{font-size:30px}.h-empty>div{flex:1;display:flex;flex-direction:column}
+.h-tri{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.h-tile{display:flex;flex-direction:column;align-items:flex-start;gap:1px;border-radius:20px;padding:12px 10px;font:inherit;color:var(--ink);text-align:start;cursor:pointer;min-width:0}
+.h-tile b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}.h-tile span:not(.ht-ic){font-size:11.5px;color:#d9cfee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.ht-ic{font-size:24px;line-height:1.2}
+.h-tile.daily{background:linear-gradient(150deg,#1f6a4a,#14402e);border:1px solid #2e8a62}.h-tile.daily.done{opacity:.85}
+.h-tile.pub{background:linear-gradient(150deg,#1f3a6a,#16264a);border:1px solid #2e5a9a}
+.h-tile.inv{background:linear-gradient(150deg,#7a2a4a,#4a1430);border:1px solid #a03a62}
+.games-h{flex-wrap:wrap}
+.h-tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+.h-tab{flex:none;font:inherit;font-size:12.5px;font-weight:700;border-radius:99px;padding:4px 11px;background:var(--surface);border:1px solid var(--line);color:var(--ink);cursor:pointer}
+.h-tab.on{background:var(--saffron);border-color:var(--saffron);color:#1c1530}
+.h-feat{width:100%;display:flex;align-items:center;gap:14px;border-radius:24px;padding:14px;font:inherit;color:var(--ink);text-align:start;cursor:pointer;background:radial-gradient(circle at 0 100%,rgba(239,111,108,.35),transparent 60%),linear-gradient(150deg,#4a1f3a,#2a1530);border:1px solid #7a3a5a;margin-top:10px!important}
+.hf-ic{width:92px;height:92px;flex:none;border-radius:22px;overflow:hidden;box-shadow:0 10px 24px rgba(0,0,0,.4)}.hf-ic svg,.hg-ic svg,.hl-ic svg{width:100%;height:100%;display:block;position:static}
+.hf-t{display:flex;flex-direction:column;gap:2px;min-width:0}.hf-t b{font-family:Lalezar,Tahoma,sans-serif;font-size:30px;font-weight:400;line-height:1.1}.hf-t>span:not(.hf-tag){font-size:13px;color:#d9cfee}
+.hf-tag{align-self:flex-start;font-size:11px;font-weight:800;background:#ef6f6c;color:#fff;border-radius:99px;padding:1px 9px}
+.h-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:8px!important}
+.h-g{grid-column:span 2;position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;border-radius:20px;padding:12px 6px;font:inherit;color:var(--ink);cursor:pointer;background:linear-gradient(170deg,#33275a,#241a40);border:1px solid var(--line);min-width:0}
+.h-g.half{grid-column:span 3;flex-direction:row;text-align:start;gap:10px;padding:10px}.h-g.full{grid-column:span 6;flex-direction:row;text-align:start;gap:12px;padding:10px}
+.hg-ic{width:62px;height:62px;flex:none;border-radius:17px;overflow:hidden}.h-g.half .hg-ic,.h-g.full .hg-ic{width:54px;height:54px}
+.hg-t{display:flex;flex-direction:column;min-width:0}.hg-t b{font-size:13.5px;line-height:1.3}.hg-t .hint{font-size:11.5px}
+.hg-new{position:absolute;top:7px;right:7px;font-size:10px;font-weight:800;background:#ef6f6c;color:#fff;border-radius:99px;padding:0 7px;z-index:1}
+.h-local{width:100%;display:flex;align-items:center;gap:12px;border-radius:20px;padding:10px 12px;font:inherit;color:var(--ink);text-align:start;cursor:pointer;background:var(--surface);border:1px solid var(--line)}
+.h-local>span:nth-child(2){flex:1;display:flex;flex-direction:column}.hl-ic{width:48px;height:48px;border-radius:14px;overflow:hidden;flex:none}
+.home2 .promo{margin:20px 0 0}
 @media (prefers-reduced-motion:reduce){.fx{display:none}.ns{animation:none}}
 </style>
 </head>
@@ -964,6 +1008,6 @@ video.share-img{background:#000}
   <main id="view"><div class="spinner" aria-label="جاري التحميل"></div></main>
 </div>
 <noscript><section style="padding:24px"><h1>روق: ألعاب الجلسات مع أصحابك</h1><p>ألعاب الجلسات مع الشلة من جوالك: ارسم وخمّن، الدخيل، أونو، مين قالها، صح ولا خطأ، ومين أكثر واحد. أونلاين أو بجوال واحد، ومجانية.</p><p>شغّل الجافاسكربت عشان تلعب.</p></section></noscript>
-<script type="module" src="./app.js?v=73"></script>
+<script type="module" src="./app.js?v=74"></script>
 </body>
 </html>
