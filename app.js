@@ -13,7 +13,7 @@ import {
 import { getMessaging, getToken, isSupported as pushSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import { firebaseConfig, authUrl } from "./firebase-config.js?v=27";
 import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW, KALIMA } from "./content.js?v=28";
-import { ICONS } from "./icons.js?v=28";
+import { ICONS } from "./icons.js?v=29";
 import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, tableSVG, TABLES, BACKS, seatSpots, isWild, cColor, cVal } from "./uno.js?v=33";
 
 /* ================= helpers ================= */
@@ -235,6 +235,7 @@ function renderHeader() {
   if (me?.username && !back && screen !== "room" && screen !== "welcome") {
     if (isOwner()) h += `<button class="pill hot" id="hAdmin" aria-label="لوحة المالك">👑</button>`;
     h += `<button class="pill add" id="hFriends"><span aria-hidden="true">+</span> أضف صديق${reqIn.length ? `<span class="badge">${ar(reqIn.length)}</span>` : ""}</button>`;
+    h += `<button class="pill shop ${isOwner() ? "mini" : ""}" id="hShop" aria-label="متجر روق"><span class="ps-ic" aria-hidden="true">${ICONS.shop}</span><span class="ps-t">المتجر</span></button>`;
     const un = unreadCount();
     h += `<button class="pill icon" id="hChat" aria-label="الرسائل">💬${un ? `<span class="badge">${ar(un)}</span>` : ""}</button>`;
     h += `<button class="me-btn" id="hMe" aria-label="بروفايلي">${avatar(me.username, me.photo, 38)}</button>`;
@@ -243,6 +244,7 @@ function renderHeader() {
   HDR.querySelector("#hRoom")?.addEventListener("click", () => go("room"));
   HDR.querySelector("#hBack")?.addEventListener("click", () => go(typeof back === "function" ? back() : back));
   HDR.querySelector("#hFriends")?.addEventListener("click", () => go("friends"));
+  HDR.querySelector("#hShop")?.addEventListener("click", () => go("shop"));
   HDR.querySelector("#hMe")?.addEventListener("click", () => go("profile"));
   HDR.querySelector("#hAdmin")?.addEventListener("click", () => go("admin"));
   HDR.querySelector("#hChat")?.addEventListener("click", () => go("inbox"));
@@ -2961,14 +2963,12 @@ VIEWS.home = () => {
       </button>`).join("")}</div></div>
 
     <button class="mode wide" id="local"><span class="glyph">${ICONS.local}</span><b>بجوال واحد</b><span>كل الألعاب على جوال واحد يتمرر بينكم.</span></button>
-    <button class="shopmini" id="shopBtn"><span aria-hidden="true">✨</span><span class="sm-t"><b>تميّز بشكلك</b><span>طاولات وإطارات وأوراق حصرية</span></span><span class="pb-go">←</span></button>
   </section>`;
   on("hProf", "click", () => go("profile"));
   on("instGo", "click", doInstall);
   on("pushGo", "click", enablePush);
   on("pushHide", "click", () => { store.set("pushHide", Date.now()); render(false); });
   on("pubBtn", "click", () => go("pub"));
-  on("shopBtn", "click", () => go("shop"));
   on("invBtn", "click", openInvite);
   on("instHide", "click", () => { store.set("instHide", Date.now()); render(false); });
   on("create", "click", () => roomCode ? go("room") : createRoom());

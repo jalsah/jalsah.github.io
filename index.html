@@ -731,6 +731,14 @@ background:linear-gradient(120deg,#5c0a1e,#9e1838 45%,#5c0a1e);border:2px solid 
 .gp-ok{position:absolute;top:6px;inset-inline-end:6px;width:20px;height:20px;border-radius:50%;background:var(--saffron);color:var(--bg);font-style:normal;font-size:12px;font-weight:800;display:grid;place-items:center}
 .shopmini{display:flex;align-items:center;gap:12px;width:100%;text-align:start;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:12px 16px;color:var(--ink);font:inherit;cursor:pointer}
 .shopmini>span:first-child{font-size:24px}.shopmini .sm-t{flex:1;display:flex;flex-direction:column}.shopmini b{font-size:15px}.shopmini .sm-t span{color:var(--muted);font-size:13px}.shopmini .pb-go{color:var(--muted)}
+.pill.shop{display:inline-flex;align-items:center;gap:5px;overflow:hidden;color:#fff8e6;font-weight:800;border:1.5px solid #f2c14e;background:linear-gradient(135deg,#b0204a,#e07a2c);box-shadow:0 3px 12px color-mix(in srgb,#b0204a 45%,transparent);padding:3px 11px 3px 4px}
+.pill.shop .ps-ic{width:26px;height:26px;flex:none;display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}.pill.shop .ps-ic svg{width:100%;height:100%;display:block}
+.pill.shop::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.45) 48%,transparent 66%);transform:translateX(-120%);animation:psh 3.6s ease-in-out infinite}
+@keyframes psh{0%,55%{transform:translateX(-120%)}85%,100%{transform:translateX(120%)}}
+@media (prefers-reduced-motion:reduce){.pill.shop::after{animation:none}}
+@media (max-width:380px){.pill.shop .ps-t{display:none}.hdr .pill.shop{padding:3px 4px}}
+.hdr{gap:5px}.hdr .pill{font-size:13.5px;padding:6px 10px}.hdr .pill.icon{padding:5px 9px}.hdr .pill.shop{padding:3px 11px 3px 4px}
+.pill.shop.mini .ps-t{display:none}.hdr .pill.shop.mini{padding:3px 4px}
 </style>
 </head>
 <body>
@@ -744,6 +752,6 @@ background:linear-gradient(120deg,#5c0a1e,#9e1838 45%,#5c0a1e);border:2px solid 
   <main id="view"><div class="spinner" aria-label="جاري التحميل"></div></main>
 </div>
 <noscript><section style="padding:24px"><h1>روق: ألعاب الجلسات مع أصحابك</h1><p>ألعاب الجلسات مع الشلة من جوالك: ارسم وخمّن، الدخيل، أونو، مين قالها، صح ولا خطأ، ومين أكثر واحد. أونلاين أو بجوال واحد، ومجانية.</p><p>شغّل الجافاسكربت عشان تلعب.</p></section></noscript>
-<script type="module" src="./app.js?v=51"></script>
+<script type="module" src="./app.js?v=53"></script>
 </body>
 </html>

@@ -4,6 +4,17 @@ const shine = `<path d="M6 18 Q6 6 18 6 H46 Q30 10 6 30Z" fill="#fff" opacity=".
 const wrap = s => `<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">${s}</svg>`;
 
 export const ICONS = {
+  // المتجر: دكّان بمظلة سدو
+  shop: wrap(bg("gShop", "#3b2a6e", "#1c1530") + shine + `
+    <defs><pattern id="pShopSadu" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#ef6f6c"/><path d="M0 8 L4 0 L8 8Z" fill="#f2b134"/></pattern>
+    <linearGradient id="gShopWall" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff3d9"/><stop offset="1" stop-color="#f1d9a8"/></linearGradient></defs>
+    <rect x="14" y="30" width="36" height="22" rx="2.5" fill="url(#gShopWall)"/>
+    <path d="M10 18 H54 L51 31 H13Z" fill="url(#pShopSadu)" stroke="#8a2d3a" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M13 31 q3.7 5 7.4 0 q3.7 5 7.4 0 q3.7 5 7.4 0 q3.7 5 7.4 0 q3.7 5 7.4 0Z" fill="#ef6f6c" stroke="#8a2d3a" stroke-width="1.4" stroke-linejoin="round"/>
+    <rect x="25" y="38" width="14" height="14" rx="2" fill="#6d3bd4"/><circle cx="35.5" cy="45" r="1.3" fill="#ffe08a"/>
+    <rect x="16.5" y="38" width="6" height="7" rx="1.2" fill="#74d6b8"/><rect x="41.5" y="38" width="6" height="7" rx="1.2" fill="#74d6b8"/>
+    <path d="M52 6.5 L53.3 9.7 L56.5 11 L53.3 12.3 L52 15.5 L50.7 12.3 L47.5 11 L50.7 9.7Z" fill="#ffe08a"/>
+    <path d="M11 8 L11.8 10.2 L14 11 L11.8 11.8 L11 14 L10.2 11.8 L8 11 L10.2 10.2Z" fill="#fff"/>`),
   // كمّل الكلمة: مربعات حروف أحمر وأزرق
   kal: wrap(bg("gKal", "#ff8a8a", "#5b6cff") + shine + `
     <rect x="7" y="22" width="15" height="19" rx="4" fill="#fff8ec"/><rect x="24.5" y="22" width="15" height="19" rx="4" fill="#fff8ec" opacity=".45"/><rect x="42" y="22" width="15" height="19" rx="4" fill="#fff8ec"/>
