@@ -4,7 +4,13 @@ const shine = `<path d="M6 18 Q6 6 18 6 H46 Q30 10 6 30Z" fill="#fff" opacity=".
 const wrap = s => `<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">${s}</svg>`;
 
 export const ICONS = {
-  // أونو جلسة: أوراق مروحة
+  // كمّل الكلمة: مربعات حروف أحمر وأزرق
+  kal: wrap(bg("gKal", "#ff8a8a", "#5b6cff") + shine + `
+    <rect x="7" y="22" width="15" height="19" rx="4" fill="#fff8ec"/><rect x="24.5" y="22" width="15" height="19" rx="4" fill="#fff8ec" opacity=".45"/><rect x="42" y="22" width="15" height="19" rx="4" fill="#fff8ec"/>
+    <text x="14.5" y="37" text-anchor="middle" font-family="Lalezar,Tahoma,sans-serif" font-size="14" fill="#d9475b">ف</text>
+    <text x="49.5" y="37" text-anchor="middle" font-family="Lalezar,Tahoma,sans-serif" font-size="14" fill="#3a5bd5">ن</text>
+    <rect x="9" y="45" width="20" height="5" rx="2.5" fill="#d9475b"/><rect x="35" y="45" width="20" height="5" rx="2.5" fill="#3a5bd5"/>`),
+  // أونو روق: أوراق مروحة
   uno: wrap(bg("gUno", "#ff9b6b", "#d9475b") + shine + `
     <g transform="rotate(-22 32 50)"><rect x="18" y="16" width="20" height="30" rx="4" fill="#fff8ec"/><rect x="20" y="18" width="16" height="26" rx="3" fill="#8f7bea"/></g>
     <g transform="rotate(0 32 50)"><rect x="22" y="13" width="20" height="30" rx="4" fill="#fff8ec"/><rect x="24" y="15" width="16" height="26" rx="3" fill="#3fbf9a"/></g>

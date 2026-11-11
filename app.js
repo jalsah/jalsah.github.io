@@ -12,8 +12,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getMessaging, getToken, isSupported as pushSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import { firebaseConfig, authUrl } from "./firebase-config.js?v=27";
-import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW } from "./content.js?v=27";
-import { ICONS } from "./icons.js?v=27";
+import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW, KALIMA } from "./content.js?v=28";
+import { ICONS } from "./icons.js?v=28";
 import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, tableSVG, TABLES, BACKS, seatSpots, isWild, cColor, cVal } from "./uno.js?v=33";
 
 /* ================= helpers ================= */
@@ -119,9 +119,10 @@ function avatar(name, photo, size = 40, label) {
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const ONLINE_MS = 150000;
 const INVITE_MS = 15 * 60 * 1000;
-const GAMES = { draw: "ارسم وخمّن", who: "مين قالها؟", tf: "صح ولا خطأ", uno: "أونو", imp: "الدخيل", most: "مين أكثر واحد", hhnj: "إنسان حيوان نبات جماد" };
+const GAMES = { kal: "كمّل الكلمة", draw: "ارسم وخمّن", who: "مين قالها؟", tf: "صح ولا خطأ", uno: "أونو", imp: "الدخيل", most: "مين أكثر واحد", hhnj: "إنسان حيوان نبات جماد" };
 // كل ألعاب روق: وين تنلعب (أونلاين، بجوال واحد)
 const CATALOG = [
+  { id: "kal", icon: "kal", title: "كمّل الكلمة", desc: "فريقين أحمر وأزرق. كلمة ناقصة حروف، وكل دور واحد يحط حرف أو يخمّن الكلمة كاملة قبل يخلص وقته.", online: true, local: null, min: 2, hot: true },
   { id: "draw", icon: "draw", title: "ارسم وخمّن", desc: "واحد يرسم كلمة سرية، والباقين يخمّنونها بأسرع وقت. كل جولة يرسم واحد.", online: true, local: null, min: 2, hot: true },
   { id: "who", icon: "who", title: "مين قالها؟", desc: "سؤال، وكل واحد يكتب جوابه بالسر. بعدها تطلع الأجوبة وتخمّنون مين كاتب كل جواب.", online: true, local: null, min: 3, hot: true },
   { id: "tf", icon: "tf", title: "صح ولا خطأ", desc: "كل جولة واحد يكتب شي عن نفسه، والباقين يخمّنون: صح ولا كذب؟ تنفع حتى لو أنتم اثنين.", online: true, local: null, min: 2, hot: true },
@@ -887,7 +888,7 @@ function unoTimerStart() {
   }, 500);
 }
 // نقاط الخبرة: كل ما تخلص جولة لعبت فيها
-const END_PHASES = { result: "imp", hres: "hhnj", unoend: "uno", mresult: "most", wres: "who", tres: "tf", dres: "draw" };
+const END_PHASES = { kend: "kal", result: "imp", hres: "hhnj", unoend: "uno", mresult: "most", wres: "who", tres: "tf", dres: "draw" };
 /* ================= ملخص الجلسة ================= */
 function trackSession() {
   if (!room || !roomCode) return;
@@ -1296,6 +1297,123 @@ function drawTick() {
   if (isHost() && ms < -1200) drawEnd();
 }
 
+/* ================= كمّل الكلمة (فريقين) ================= */
+const KAL = { deck: [], word: null, wIdx: -1, seen: {}, busy: false, tick: null, adv: 0 };
+const kn = s => String(s || "").replace(/[\u064B-\u0652\u0640]/g, "").replace(/[أإآٱ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه").replace(/ؤ/g, "و").replace(/ئ/g, "ي").replace(/\s+/g, "").trim();
+const kTeamName = t => t === "r" ? "الأحمر" : "الأزرق";
+function kTeamsNow(base = room.kTeams || {}) {
+  const ps = order(), teams = {};
+  let r = 0, b = 0;
+  ps.forEach(u => { if (base[u] === "r" || base[u] === "b") { teams[u] = base[u]; base[u] === "r" ? r++ : b++; } });
+  ps.forEach(u => { if (!teams[u]) { teams[u] = r <= b ? "r" : "b"; teams[u] === "r" ? r++ : b++; } });
+  return teams;
+}
+const kMembers = (teams, t) => order().filter(u => teams[u] === t);
+async function startKal() {
+  const teams = kTeamsNow();
+  if (!kMembers(teams, "r").length || !kMembers(teams, "b").length) return toast("لازم يكون في كل فريق لاعب واحد على الأقل");
+  const n = [10, 15, 20].includes(room.kWords) ? room.kWords : 10, secs = [10, 15, 20, 30].includes(room.kSecs) ? room.kSecs : 15;
+  const names = {}; order().forEach(u => names[u] = pname(u));
+  await kalWord({ n, secs, idx: 0, pts: { r: 0, b: 0 }, won: { r: 0, b: 0 }, ti: { r: -1, b: -1 }, teams, names });
+}
+async function kalWord(base) {
+  if (!KAL.deck.length) KAL.deck = shuffle([...new Set(KALIMA)]);
+  const word = KAL.deck.pop(), L = [...word];
+  const hideN = Math.max(2, Math.min(L.length - 1, Math.round(L.length * 0.6)));
+  const hide = new Set(shuffle(L.map((_, i) => i)).slice(0, hideN));
+  const mask = L.map((c, i) => hide.has(i) ? "" : c);
+  const idx = base.idx + 1, team = idx % 2 ? "r" : "b";
+  const ti = { ...base.ti }; const mem = kMembers(base.teams, team);
+  ti[team] = (ti[team] + 1) % mem.length;
+  const round = (room.round || 0) + 1;
+  KAL.word = word; KAL.wIdx = idx; KAL.seen = {};
+  const k = { ...base, idx, len: L.length, mask, team, ti, turn: mem[ti[team]], deadline: Date.now() + base.secs * 1000, feed: [] };
+  const b = writeBatch(db);
+  b.set(doc(db, "rooms", roomCode, "hidden", "kal"), { idx, word });
+  b.update(roomRef(), { game: "kal", phase: "kq", round, k, roundPlayers: order(), names: base.names, result: null });
+  try { await b.commit(); } catch (e) { console.error(e); toast("ما قدرنا نبدأ"); }
+}
+async function kalWordGet() {
+  if (KAL.word && KAL.wIdx === room.k?.idx) return KAL.word;
+  const h = await getDoc(doc(db, "rooms", roomCode, "hidden", "kal")).catch(() => null);
+  if (h?.exists() && h.data().idx === room.k?.idx) { KAL.word = h.data().word; KAL.wIdx = h.data().idx; return KAL.word; }
+  return null;
+}
+function kalNextTurn(k) {
+  const team = k.team === "r" ? "b" : "r", mem = kMembers(k.teams, team);
+  const ti = { ...k.ti }; ti[team] = (ti[team] + 1) % Math.max(1, mem.length);
+  return { ...k, team, ti, turn: mem[ti[team]] || k.turn, deadline: Date.now() + k.secs * 1000 };
+}
+function watchKalMoves() {
+  sub("kmoves", onSnapshot(collection(db, "rooms", roomCode, "kmoves"), q => {
+    q.forEach(d => { const m = d.data(); if (m.round === room?.round && d.id === room?.k?.turn && (KAL.seen[d.id] || 0) < m.seq) { KAL.seen[d.id] = m.seq; kalProcess(d.id, m.t); } });
+  }, err));
+}
+async function kalProcess(u, text, timeout) {
+  if (!isHost() || room?.phase !== "kq" || KAL.busy) return;
+  KAL.busy = true;
+  try {
+    const word = await kalWordGet(); if (!word) return;
+    let k = { ...room.k, mask: [...room.k.mask], pts: { ...room.k.pts }, feed: [...(room.k.feed || [])] };
+    const L = [...word], t = cleanMsg(text || "").slice(0, 20), team = k.team;
+    let entry = { u, team };
+    if (timeout) entry.to = 1;
+    else if ([...kn(t)].length === 1) {
+      const l = kn(t); let got = 0;
+      L.forEach((c, i) => { if (!k.mask[i] && kn(c) === l) { k.mask[i] = c; got++; } });
+      entry.l = t; entry.ok = got > 0; k.pts[team] += got;
+    } else {
+      const w = kn(word), g = kn(t);
+      const ok = g === w || "ال" + g === w || g === "ال" + w;
+      entry.w = t; entry.ok = ok;
+      if (ok) { const left = k.mask.filter(x => !x).length; k.pts[team] += left + 3; k.mask = L; entry.full = 1; }
+    }
+    k.feed = [...k.feed, entry].slice(-6);
+    if (k.mask.every(Boolean)) {
+      if (!entry.full) k.pts[team] += 3;
+      k.won = { ...k.won, [team]: (k.won[team] || 0) + 1 };
+      await updateDoc(roomRef(), { phase: "kres", k, result: { word, team, u } });
+    } else {
+      k = kalNextTurn(k);
+      await updateDoc(roomRef(), { k, round: (room.round || 0) + 1 });
+    }
+  } catch (e) { console.error(e); }
+  finally { KAL.busy = false; }
+}
+async function kalNext() {
+  if (!isHost() || room?.phase !== "kres") return;
+  const k = room.k;
+  if (k.idx >= k.n) {
+    const win = k.pts.r === k.pts.b ? "" : k.pts.r > k.pts.b ? "r" : "b";
+    const scores = { ...(room.scores || {}) };
+    if (win) kMembers(k.teams, win).forEach(u => scores[u] = (scores[u] || 0) + 1);
+    return setRoom({ phase: "kend", result: { win }, scores });
+  }
+  await kalWord(k);
+}
+async function sendKal(text) {
+  const t = cleanMsg(text).slice(0, 20); if (!t) return;
+  if (botBad(t)) { await botWarn(t); return; }
+  ui.kSeq = Math.max(Date.now(), (ui.kSeq || 0) + 1);
+  try { await setDoc(doc(db, "rooms", roomCode, "kmoves", me.uid), { round: room.round, t, seq: ui.kSeq }); }
+  catch (e) { console.error(e); toast("ما انرسل، جرّب مرة ثانية"); }
+}
+function kalTick() {
+  if (screen !== "room" || room?.phase !== "kq") { clearInterval(KAL.tick); KAL.tick = null; return; }
+  const k = room.k, ms = k.deadline - Date.now(), left = Math.max(0, Math.ceil(ms / 1000));
+  const bar = document.getElementById("kBar"), lt = document.getElementById("kLeft");
+  if (bar) bar.style.transform = `scaleX(${Math.max(0, Math.min(1, ms / (k.secs * 1000)))})`;
+  if (lt) { lt.textContent = ar(left); lt.classList.toggle("low", left <= 5); }
+  if (isHost() && ms < -900 && KAL.adv !== room.round) { KAL.adv = room.round; kalProcess(k.turn, "", true); }
+}
+const kSlots = (mask, big) => `<div class="kslots ${big ? "big" : ""}" dir="rtl">${mask.map(c => `<span class="ks ${c ? "on" : ""}">${c ? esc(c) : ""}</span>`).join("")}</div>`;
+const kScore = k => `<div class="kscore"><div class="kt r ${k.team === "r" && room.phase === "kq" ? "now" : ""}"><span>الأحمر</span><b>${ar(k.pts.r)}</b></div>
+  <span class="kvs">${ar(k.idx)} / ${ar(k.n)}</span><div class="kt b ${k.team === "b" && room.phase === "kq" ? "now" : ""}"><span>الأزرق</span><b>${ar(k.pts.b)}</b></div></div>`;
+const kName = (k, u) => k.names?.[u] || pname(u);
+function kFeed(k) {
+  return (k.feed || []).slice().reverse().map(f => `<div class="kf ${f.team}"><b dir="ltr">${at(kName(k, f.u))}</b> ${f.to ? "خلص وقته ⏰" : f.l ? `حط <span class="kl">${esc(f.l)}</span> ${f.ok ? "✅" : "❌"}` : `قال «${esc(f.w)}» ${f.ok ? "✅" : "❌"}`}</div>`).join("");
+}
+
 /* ================= شارك النتيجة (صورة) ================= */
 const appLink = () => location.origin + location.pathname.replace(/index\.html$/, "");
 const waLink = () => "https://wa.me/?text=" + encodeURIComponent(`تعال العب معنا ${GAMES[room?.game] || ""} في روق 🎉\nادخل من هنا: ${appLink()}?r=${roomCode}\nأو اكتب كود الغرفة: ${roomCode}`);
@@ -1323,6 +1441,10 @@ function shareData() {
   } else if (room.phase === "tres") {
     d.head = r.truth ? "طلعت صح ✅" : "طلعت كذبة ❌"; d.quote = room.tText; d.names = [pname(room.teller)];
     d.sub = r.right?.length ? `عرفها ${ar(r.right.length)} من ${ar((r.right?.length || 0) + (r.wrong?.length || 0))}` : "ما أحد عرفها 😏";
+  } else if (room.phase === "kend") {
+    const k = room.k, win = room.result?.win;
+    d.head = win ? `فاز الفريق ${kTeamName(win)} 🏆` : "تعادل 🤝"; d.names = win ? kMembers(k.teams, win).map(u => kName(k, u)) : [];
+    d.sub = `الأحمر ${ar(k.pts.r)} · الأزرق ${ar(k.pts.b)}`;
   } else if (room.phase === "dres") {
     d.names = [pname(room.drawer)]; d.sub = "الكلمة كانت: " + (r.word || "؟");
     d.head = "شوفوا وش رسم 🎨";
@@ -2939,6 +3061,7 @@ VIEWS.room = () => {
   if (host) { const want = !!room.public && room.phase === "lobby"; if (!!room.listed !== want) setRoom({ listed: want, ping: Date.now(), hostName: me.username }); }
   if (host && (room.phase === "wq" || room.phase === "tw")) { if (!subs.has("priv")) watchPriv(); } else if (subs.has("priv")) off("priv");
   if (host && room.phase === "dq") { if (!subs.has("dguess")) watchGuesses(); } else if (subs.has("dguess")) off("dguess");
+  if (host && room.phase === "kq") { if (!subs.has("kmoves")) watchKalMoves(); } else if (subs.has("kmoves")) off("kmoves");
   if (room.phase === "dq" || room.phase === "dres") { if (!subs.has("dcanvas")) watchCanvas(); } else if (subs.has("dcanvas")) off("dcanvas");
   const view = ROOM_VIEWS[room.phase] || ROOM_VIEWS.lobby;
   if (view() === "kept") return; // شاشة الرسم ما تنعاد عشان ما ينقطع الرسم
@@ -3010,13 +3133,18 @@ const ROOM_VIEWS = {
           <button class="chip" data-pub="1" aria-pressed="${!!room.public}">عامة 🌍</button></div>
           <p class="hint">${room.public ? "الغرفة تطلع لكل الناس في «غرف عامة»، وأي أحد يقدر يدخل." : "بس اللي معهم الكود أو الرابط يقدرون يدخلون."}</p></div>
         <div class="field"><span class="label">اللعبة</span><div class="chips">${Object.entries(GAMES).map(([k, t]) => `<button class="chip" data-game="${k}" aria-pressed="${room.game === k}" ${k === "uno" && n > 8 ? "disabled" : ""}>${t}</button>`).join("")}</div>${room.game === "uno" ? `<p class="hint">أونو من ٢ إلى ٨ لاعبين.</p>` : ""}${CATALOG.find(c => c.id === room.game)?.desc ? `<p class="hint">${CATALOG.find(c => c.id === room.game).desc}</p>` : ""}</div>
+        ${room.game === "kal" ? (() => { const tm = kTeamsNow(); return `
+        <div class="field"><span class="label">عدد الكلمات</span><div class="chips">${[10, 15, 20].map(v => `<button class="chip" data-kw="${v}" aria-pressed="${(room.kWords || 10) === v}">${ar(v)}</button>`).join("")}</div></div>
+        <div class="field"><span class="label">وقت كل دور</span><div class="chips">${[10, 15, 20, 30].map(v => `<button class="chip" data-ks="${v}" aria-pressed="${(room.kSecs || 15) === v}">${ar(v)} ثانية</button>`).join("")}</div></div>
+        <div class="field"><span class="label">الفريقين (اضغط على اللاعب عشان تنقله)</span><div class="kpick">
+          ${["r", "b"].map(t => `<div class="kcol ${t}"><b>${kTeamName(t)}</b>${ps.filter(u => tm[u] === t).map(u => `<button class="kp" data-kt="${esc(u)}" dir="ltr">${at(pname(u))}</button>`).join("") || `<span class="hint">فاضي</span>`}</div>`).join("")}</div></div>`; })() : ""}
         ${room.game === "imp" ? `
         <div class="field"><span class="label">الفئة</span><div class="chips">${["عشوائي", ...Object.keys(WORDS)].map(c => `<button class="chip" data-cat="${esc(c)}" aria-pressed="${room.cat === c}">${esc(c)}</button>`).join("")}</div></div>
         <div class="field"><span class="label">عدد الدخلاء</span><div class="chips">
           <button class="chip" data-imps="1" aria-pressed="${room.imps !== 2 || n < 7}">واحد</button>
           <button class="chip" data-imps="2" aria-pressed="${room.imps === 2 && n >= 7}" ${n < 7 ? "disabled" : ""}>اثنين</button></div>
           ${n < 7 ? `<p class="hint">دخيلين يحتاجون ٧ لاعبين أو أكثر.</p>` : ""}</div>` : ""}`
-      : `<p class="hint center">${room.public ? `<span class="tag">غرفة عامة 🌍</span><br>` : ""}اللعبة: <b>${GAMES[room.game]}</b>${room.game === "imp" ? ` · الفئة: <b>${esc(room.cat)}</b>` : ""}<br>ننتظر المضيف يبدأ.</p>`}
+      : `<p class="hint center">${room.public ? `<span class="tag">غرفة عامة 🌍</span><br>` : ""}اللعبة: <b>${GAMES[room.game]}</b>${room.game === "imp" ? ` · الفئة: <b>${esc(room.cat)}</b>` : ""}${room.game === "kal" ? ` · ${ar(room.kWords || 10)} كلمات · ${ar(room.kSecs || 15)} ثانية<br>فريقك: <b>${kTeamName(kTeamsNow()[me.uid])}</b>` : ""}<br>ننتظر المضيف يبدأ.</p>`}
       ${onlineFriends.length ? `<div class="field"><span class="label">أصحابك الأونلاين</span><div class="list">${onlineFriends.map(([u, f]) => `
         <div class="li"><i class="dot on"></i><span class="nm" dir="ltr">${at(f.username)}</span><button class="btn small" data-inv="${esc(u)}">اعزمه</button></div>`).join("")}</div></div>` : ""}
       ${hasScores ? `<div class="field"><span class="label">النقاط</span>${scoreBoard(ps)}</div>` : ""}
@@ -3033,8 +3161,11 @@ const ROOM_VIEWS = {
     onAll("[data-kick]", b => { if (!confirmTap(b, "متأكد؟")) return; kickPlayer(b.dataset.kick); });
     onAll("[data-pub]", b => { const pub = b.dataset.pub === "1"; setRoom({ public: pub, listed: pub, ping: Date.now(), hostName: me.username }); if (pub) toast("صارت غرفتك عامة 🌍"); });
     onAll("[data-cat]", b => setRoom({ cat: b.dataset.cat }));
+    onAll("[data-kw]", b => setRoom({ kWords: Number(b.dataset.kw) }));
+    onAll("[data-ks]", b => setRoom({ kSecs: Number(b.dataset.ks) }));
+    onAll("[data-kt]", b => { const tm = kTeamsNow(), u = b.dataset.kt; tm[u] = tm[u] === "r" ? "b" : "r"; setRoom({ kTeams: tm }); });
     onAll("[data-imps]", b => setRoom({ imps: Number(b.dataset.imps) }));
-    on("start", "click", () => ({ most: startMost, hhnj: startHhnj, uno: startUno, who: startWho, tf: startTf, draw: startDraw }[room.game] || startImp)());
+    on("start", "click", () => ({ most: startMost, hhnj: startHhnj, uno: startUno, who: startWho, tf: startTf, draw: startDraw, kal: startKal }[room.game] || startImp)());
   },
 
   reveal() {
@@ -3382,6 +3513,47 @@ const ROOM_VIEWS = {
     drawParts();
     if (!DRAWS.tick) DRAWS.tick = setInterval(drawTick, 300);
     drawTick();
+  },
+
+  kq() {
+    const k = room.k, mine = k.turn === me.uid, myTeam = k.teams?.[me.uid];
+    const key = room.round + ":" + k.turn;
+    if (mine && document.getElementById("kIn")?.dataset.key === key) return; // لا تمسح اللي يكتبه
+    V.innerHTML = `<section class="kal">${statusBar()}${kScore(k)}
+      ${kSlots(k.mask)}
+      <div class="kturn ${k.team}"><span>${mine ? "دورك! 🔥" : `دور ${at(kName(k, k.turn))}`} · الفريق ${kTeamName(k.team)}</span><span class="dleft" id="kLeft"></span></div>
+      <div class="timer"><i id="kBar"></i></div>
+      ${mine ? `<form class="kform" id="kF"><input class="txt" id="kIn" data-key="${esc(key)}" maxlength="20" dir="rtl" autocomplete="off" placeholder="حرف واحد، أو الكلمة كاملة" aria-label="حرفك أو الكلمة"><button class="btn">أرسل</button></form>
+        <p class="hint center">حرف صح = نقطة لكل مكان يطلع فيه. الكلمة كاملة صح = نقاط الحروف الباقية + ٣.</p>`
+        : `<p class="hint center">${myTeam === k.team ? "فريقك يلعب، ساعده بالشات 😉" : "انتظر دور فريقك…"}</p>`}
+      <div class="kfeed" aria-live="polite">${kFeed(k)}</div>
+      <div class="foot">${leaveBtn()}</div></section>`;
+    if (mine) { const inp = document.getElementById("kIn"); setTimeout(() => inp?.focus(), 50);
+      on("kF", "submit", e => { e.preventDefault(); const v = inp.value; if (!v.trim()) return; inp.disabled = true; sendKal(v); }); }
+    if (!KAL.tick) KAL.tick = setInterval(kalTick, 250);
+    kalTick();
+  },
+
+  kres() {
+    const k = room.k, r = room.result || {};
+    V.innerHTML = `<section>${statusBar()}${kScore(k)}
+      <div class="card prompt pop ${r.team}"><span class="eyebrow">الكلمة كانت</span>${kSlots([...(r.word || "")], true)}
+        <span class="hint">كمّلها ${at(kName(k, r.u))} من الفريق ${kTeamName(r.team)} 🎉</span></div>
+      <div class="kfeed">${kFeed(k)}</div>
+      <div class="foot">${isHost() ? `<button class="btn" id="kNext">${k.idx >= k.n ? "شوف النتيجة 🏆" : "الكلمة الجاية"}</button>` : `<p class="hint center">المضيف يبدأ الكلمة الجاية.</p>`}${leaveBtn()}</div></section>`;
+    on("kNext", "click", kalNext);
+  },
+
+  kend() {
+    const k = room.k, win = room.result?.win || "";
+    const team = t => `<div class="kteam ${t}"><b>الفريق ${kTeamName(t)}</b><span class="kbig">${ar(k.pts[t])}</span><span class="hint">${ar(k.won?.[t] || 0)} كلمات</span>
+      <div class="kmem">${kMembers(k.teams, t).map(u => `<span dir="ltr">${at(kName(k, u))}</span>`).join("")}</div></div>`;
+    V.innerHTML = `<section>${statusBar()}
+      <div class="card pop ${win}" style="min-height:120px"><span class="eyebrow">النتيجة</span><span class="big">${win ? `فاز ${kTeamName(win)} 🏆` : "تعادل 🤝"}</span></div>
+      <div class="kteams">${team("r")}${team("b")}</div>
+      <div class="foot">${shareBtn()}${isHost() ? `<button class="btn" id="kAgain">جولة جديدة</button><button class="btn ghost" id="lobby">رجوع للغرفة</button>` : `<p class="hint center">المضيف يقرر وش بعدها.</p>`}${leaveBtn()}</div></section>`;
+    on("kAgain", "click", startKal);
+    on("lobby", "click", () => setRoom({ phase: "lobby" }));
   },
 
   dres() {
