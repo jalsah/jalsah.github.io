@@ -1120,7 +1120,8 @@ async function openSummary(d) {
   el.id = "shareSheet"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "ملخص الجلسة");
   el.innerHTML = `<div class="sheet share-sheet"><b class="pf-name">ملخص الجلسة 📊</b>
     <div class="share-prev" id="shPrev"><div class="spinner" aria-label="نجهز الصورة"></div></div>
-    <button class="btn" id="shGo" disabled>شارك 📤</button>
+    <button class="btn" id="shGo" disabled>شارك الصورة 📤</button>
+    <button class="btn ghost" id="shLink">📎 انسخ رابط روق</button>
     <p class="hint" id="shHint">نجهز الصورة…</p>
     <button class="btn ghost" id="shX">إغلاق</button></div>`;
   document.body.appendChild(el);
@@ -1136,8 +1137,9 @@ async function openSummary(d) {
     const file = new File([blob], "rawq.jpg", { type: "image/jpeg" });
     const can = !!navigator.canShare?.({ files: [file] });
     const go = el.querySelector("#shGo"), hint = el.querySelector("#shHint");
-    hint.textContent = can ? "اضغط شارك واختر سناب شات 👻 ونزّلها ستوري، وخلّهم يشوفون مين الملك 👑" : "اضغط مطوّل على الصورة واحفظها، ونزّلها ستوري.";
-    if (can) { go.disabled = false; go.addEventListener("click", async () => { try { await navigator.share({ files: [file], text: `جلستنا في روق 🔥 العبوا معنا: ${me?.username && !me.guest ? refLink() : appLink()}` }); } catch (e) { if (e?.name !== "AbortError") toast("احفظ الصورة وشاركها"); } }); }
+    el.querySelector("#shLink")?.addEventListener("click", () => copyText(me?.username && !me.guest ? refLink() : appLink(), "انسخ الرابط، الصقه في السناب 📎"));
+    hint.textContent = can ? "اضغط «شارك الصورة» واختر سناب 👻 أو «حفظ الصورة». وبعدها في السناب اضغط 📎 والصق الرابط، عشان اللي يشوف ستوريك يدخل على طول" : "اضغط مطوّل على الصورة واحفظها، ونزّلها ستوري.";
+    if (can) { go.disabled = false; go.addEventListener("click", async () => { try { await navigator.share({ files: [file] }); } catch (e) { if (e?.name !== "AbortError") toast("احفظ الصورة وشاركها"); } }); }
     else go.remove();
   } catch (e) { console.error(e); el.querySelector("#shHint").textContent = "ما قدرنا نسوي الصورة"; }
 }
@@ -1739,7 +1741,8 @@ async function openShare() {
   el.id = "shareSheet"; el.className = "sheet-bg"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "شارك النتيجة");
   el.innerHTML = `<div class="sheet share-sheet"><b class="pf-name">شارك النتيجة 📸</b>
     <div class="share-prev" id="shPrev"><div class="spinner" aria-label="نجهز الصورة"></div></div>
-    <button class="btn" id="shGo" disabled>شارك 📤</button>
+    <button class="btn" id="shGo" disabled>شارك الصورة 📤</button>
+    <button class="btn ghost" id="shLink">📎 انسخ رابط روق</button>
     <p class="hint" id="shHint">نجهز الصورة…</p>
     <button class="btn ghost" id="shX">إغلاق</button></div>`;
   document.body.appendChild(el);
@@ -1755,11 +1758,12 @@ async function openShare() {
     const file = new File([blob], "jalsa.jpg", { type: "image/jpeg" });
     const can = !!navigator.canShare?.({ files: [file] });
     const go = el.querySelector("#shGo"), hint = el.querySelector("#shHint");
-    hint.textContent = can ? "نزّلها ستوري بالسناب أو الانستا، أو أرسلها للقروب." : "اضغط مطوّل على الصورة واحفظها، ونزّلها ستوري بالسناب أو الانستا.";
+    el.querySelector("#shLink")?.addEventListener("click", () => copyText(me?.username && !me.guest ? refLink() : appLink(), "انسخ الرابط، الصقه في السناب 📎"));
+    hint.textContent = can ? "اضغط «شارك الصورة» واختر سناب 👻 أو «حفظ الصورة». وبعدها في السناب اضغط 📎 والصق الرابط." : "اضغط مطوّل على الصورة واحفظها، ونزّلها ستوري بالسناب أو الانستا.";
     if (can) {
       go.disabled = false;
       go.addEventListener("click", async () => {
-        try { await navigator.share({ files: [file], text: `العبوا معنا روق 🎉 ${me?.username && !me.guest ? refLink() : appLink()}` }); }
+        try { await navigator.share({ files: [file] }); }
         catch (e) { if (e?.name !== "AbortError") toast("ما قدرنا نفتح المشاركة، احفظ الصورة"); }
       });
     } else go.remove();
