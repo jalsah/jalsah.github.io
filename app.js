@@ -8,7 +8,7 @@ import {
 import {
   getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot,
   collection, query, where, runTransaction, writeBatch, serverTimestamp, deleteField,
-  getCountFromServer, Timestamp, orderBy, limit, addDoc
+  getCountFromServer, Timestamp, orderBy, limit, addDoc, getAggregateFromServer, sum, arrayUnion
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getMessaging, getToken, isSupported as pushSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import { firebaseConfig, authUrl } from "./firebase-config.js?v=27";
@@ -1598,6 +1598,19 @@ async function loadStats() {
     adm.stats = { total: total.data().count, online: online.data().count, today: today.data().count, rooms: rooms.data().count,
       gOnline: gOnline ? gOnline.data().count : null, gToday: gToday ? gToday.data().count : null, at: new Date() };
     adm.banned = bans.docs.map(d => ({ uid: d.id, ...d.data() }));
+    // أرقام زيادة: ما توقف الباقي لو فشلت
+    const [played, cAll, cUsed, gsum] = await Promise.all([
+      getCountFromServer(query(collection(db, "users"), where("lastSeen", ">=", Timestamp.fromDate(start)))).catch(() => null),
+      getCountFromServer(collection(db, "codes")).catch(() => null),
+      getCountFromServer(query(collection(db, "codes"), where("by", "!=", null))).catch(() => null),
+      getAggregateFromServer(collection(db, "users"), Object.fromEntries(Object.keys(GAMES).map(g => [g, sum("stats.g_" + g)]))).catch(() => null)
+    ]);
+    Object.assign(adm.stats, {
+      played: played ? played.data().count : null,
+      cUsed: cUsed ? cUsed.data().count : null,
+      cLeft: cAll && cUsed ? cAll.data().count - cUsed.data().count : null,
+      games: gsum ? Object.keys(GAMES).map(g => ({ g, n: gsum.data()[g] || 0 })).sort((a, b) => b.n - a.n) : null
+    });
   } catch (e) { console.error(e); toast("ما قدرنا نجيب الأرقام"); }
   adm.loading = false; render(false);
 }
@@ -1625,6 +1638,80 @@ async function unbanUser(uid) {
     toast("انفك الحظر"); render(false);
   } catch (e) { console.error(e); toast("ما قدرنا نفك الحظر"); }
 }
+/* ---------- البحث عن لاعب وإدارته ---------- */
+async function findPlayer(raw) {
+  const key = raw.trim().replace(/^@/, "").toLowerCase();
+  if (!USER_RE.test(key)) return toast("اكتب يوزر صحيح");
+  adm.pLoading = true; render(false);
+  try {
+    const n = await getDoc(doc(db, "usernames", key));
+    if (!n.exists()) { adm.player = null; toast("ما لقينا هذا اليوزر"); }
+    else {
+      const uid = n.data().uid;
+      const [u, b] = await Promise.all([getDoc(doc(db, "users", uid)), getDoc(doc(db, "bans", uid)).catch(() => null)]);
+      adm.player = u.exists() ? { uid, ...u.data(), banned: !!b?.exists() } : null;
+      if (!adm.player) toast("الحساب محذوف");
+    }
+  } catch (e) { console.error(e); toast("ما قدرنا نجيب اللاعب"); }
+  adm.pLoading = false; render(false);
+}
+async function playerUpdate(upd, msg) {
+  const p = adm.player; if (!p) return;
+  try { await updateDoc(doc(db, "users", p.uid), upd); toast(msg); await findPlayer(p.username); }
+  catch (e) { console.error(e); toast("ما زبط"); }
+}
+function giveItem(id) {
+  const it = SHOP.find(x => x.id === id), p = adm.player; if (!it || !p) return;
+  const upd = {};
+  if (it.grants.length) upd.owned = arrayUnion(...it.grants);
+  if (it.days) upd.vipUntil = Math.max(Date.now(), p.vipUntil || 0) + it.days * 86400000;
+  playerUpdate(upd, `انعطى «${it.name}» لـ@${p.username} 🎁`);
+}
+const tsDate = t => { const d = t?.toDate ? t.toDate() : typeof t === "number" ? new Date(t) : null; return d ? d.toLocaleDateString("ar-SA", { day: "numeric", month: "short", year: "numeric" }) : "—"; };
+const tsAgo = t => { const ms = t?.toMillis ? t.toMillis() : 0; if (!ms) return "—"; const m = Math.round((Date.now() - ms) / 60000);
+  return m < 3 ? "أونلاين الحين" : m < 60 ? `قبل ${ar(m)} دقيقة` : m < 1440 ? `قبل ${ar(Math.round(m / 60))} ساعة` : `قبل ${ar(Math.round(m / 1440))} يوم`; };
+function playerCard(p) {
+  const vip = (p.vipUntil || 0) > Date.now(), muted = (p.mutedUntil || 0) > Date.now();
+  const items = (p.owned || []).map(id => SHOP.find(x => x.id === id)?.name || FRAMES[id] || id);
+  const row = (k, v) => `<div class="pk"><span>${k}</span><b>${v}</b></div>`;
+  return `<div class="pcard">
+    <div class="row-h"><div class="pc-who">${avatar(p.username, p.photo, 44)}<div><b dir="ltr">${at(p.username)}</b><span class="hint">${tsAgo(p.lastSeen)}</span></div></div>
+      ${p.banned ? `<span class="tag bad">محظور</span>` : muted ? `<span class="tag bad">مكتوم</span>` : vip ? `<span class="tag">VIP</span>` : ""}</div>
+    <div class="pkv">
+      ${row("المستوى", ar(lvlOf(p.xp)))}${row("الخبرة", ar(p.xp || 0))}${row("الجولات", ar(p.stats?.games || 0))}${row("السلسلة", ar(p.streak || 0) + " 🔥")}
+      ${row("سجّل", tsDate(p.createdAt))}${row("VIP", vip ? "لين " + tsDate(p.vipUntil) : "لا")}${row("التحذيرات", ar(p.warns || 0) + " / ٣")}${row("آخر كود", p.lastCode ? `<span dir="ltr">${esc(p.lastCode)}</span>` : "—")}
+    </div>
+    <div><span class="label">أغراضه</span><p class="lead">${items.length ? items.map(esc).join("، ") : "ما عنده شي"}</p></div>
+    <div class="row"><select class="txt" id="pGive" aria-label="الهدية">${SHOP.map(it => `<option value="${it.id}">${it.name}</option>`).join("")}</select><button class="btn small good" id="pGiveB">أعطه 🎁</button></div>
+    <div class="row wrap">
+      ${vip ? `<button class="btn small ghost" id="pNoVip">شيل VIP</button>` : ""}
+      ${muted || p.warns ? `<button class="btn small ghost" id="pUnmute">فك الكتم والتحذيرات</button>` : `<button class="btn small ghost" id="pMute">اكتمه ٢٤ ساعة</button>`}
+      ${p.banned ? `<button class="btn small ghost" id="pUnban">فك الحظر</button>` : STAFF(p.username) ? "" : `<button class="btn small danger" id="pBan">احظره</button>`}
+    </div></div>`;
+}
+
+/* ---------- إشعار لكل اللاعبين ---------- */
+async function broadcastPush(title, body) {
+  if (adm.bc?.busy) return;
+  adm.bc = { busy: true, sent: 0 }; render(false);
+  let cursor = null, rounds = 0;
+  try {
+    do {
+      const t = await auth.currentUser.getIdToken();
+      const r = await fetch(PUSH_URL, { method: "POST", headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" }, body: JSON.stringify({ kind: "all", title, body, cursor }) });
+      if (!r.ok) throw new Error("push " + r.status);
+      const j = await r.json(); adm.bc.sent += j.sent || 0; cursor = j.next;
+      const el = document.getElementById("bcProg"); if (el) el.textContent = `انرسل لـ ${ar(adm.bc.sent)} جهاز…`;
+    } while (cursor && ++rounds < 500);
+    toast(`انرسل الإشعار لـ ${ar(adm.bc.sent)} جهاز ✅`);
+    adm.bc = { busy: false, done: adm.bc.sent };
+  } catch (e) {
+    console.error(e); toast(String(e.message).includes("403") || String(e.message).includes(" 400") ? "السيرفر ما قبل، تأكد إنك حدّثت كود Cloudflare" : "ما كمل الإرسال، جرّب مرة ثانية");
+    adm.bc = { busy: false, done: adm.bc.sent };
+  }
+  render(false);
+}
+
 async function saveAnnounce(text) {
   try {
     if (!text.trim()) { await deleteDoc(doc(db, "config", "announce")); toast("انشال الإعلان"); return; }
@@ -1836,8 +1923,25 @@ VIEWS.admin = () => {
         ${tile(st?.rooms, "غرف مفتوحة")}
         ${tile(st?.gOnline ?? "—", "زوار بدون حساب الحين", "good")}
         ${tile(st?.gToday ?? "—", "زوار بدون حساب اليوم")}
+        ${tile(st?.played ?? "—", "دخلوا اليوم", "good")}
+        ${tile(st?.cUsed ?? "—", "أكواد انشحنت 💰")}
+        ${tile(st?.cLeft ?? "—", "أكواد ما انباعت")}
       </div>
+      ${st?.games ? (() => { const mx = Math.max(1, ...st.games.map(x => x.n)); return `<span class="label">أكثر الألعاب لعبًا</span><div class="gbars">${st.games.map(x =>
+        `<div class="gbar"><span>${esc(GAMES[x.g])}</span><i style="--w:${Math.round(x.n / mx * 100)}%"></i><b>${ar(x.n)}</b></div>`).join("")}</div>`; })() : ""}
       ${st ? `<p class="hint">آخر تحديث ${esc(st.at.toLocaleTimeString("ar-SA", { hour: "numeric", minute: "2-digit" }))}</p>` : ""}
+    </div>
+
+    <div class="field"><span class="label">🔎 ابحث عن لاعب</span>
+      <form class="addf" id="pFindF"><div class="uinput"><span>@</span><input id="pFind" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="يوزر اللاعب" aria-label="يوزر اللاعب" value="${esc(adm.player?.username || "")}"></div><button class="btn small">${adm.pLoading ? "…" : "ابحث"}</button></form>
+      ${adm.player ? playerCard(adm.player) : `<p class="hint">تشوف حسابه كامل، وتقدر تعطيه منتج أو VIP هدية، أو تصلّح مشكلة شراء، أو تكتمه وتحظره.</p>`}
+    </div>
+
+    <div class="field"><span class="label">🔔 إشعار لكل اللاعبين</span>
+      <input class="txt" id="bcTitle" maxlength="60" placeholder="العنوان: لعبة جديدة نزلت 🔥" value="${esc(adm.bcDraft?.t || "")}">
+      <textarea class="txt" id="bcBody" rows="2" maxlength="160" placeholder="الكلام: جربوا «كمّل الكلمة» مع شلتكم الحين!">${esc(adm.bcDraft?.b || "")}</textarea>
+      <button class="btn" id="bcSend" ${adm.bc?.busy ? "disabled" : ""}>${adm.bc?.busy ? "يرسل…" : "أرسل الإشعار"}</button>
+      <p class="hint" id="bcProg">${adm.bc?.busy ? `انرسل لـ ${ar(adm.bc.sent)} جهاز…` : adm.bc?.done != null ? `آخر إشعار وصل لـ ${ar(adm.bc.done)} جهاز.` : "يوصل لجوال كل اللي فعّلوا الإشعارات. لا تكثر منه عشان ما يقفلونها 😅"}</p>
     </div>
 
     <div class="field"><span class="label">إعلان لكل اللاعبين</span>
@@ -1892,6 +1996,21 @@ VIEWS.admin = () => {
     </div>
   </section>`;
   on("reload", "click", loadStats);
+  on("pFindF", "submit", e => { e.preventDefault(); findPlayer(document.getElementById("pFind").value); });
+  on("pGiveB", "click", e => { if (confirmTap(e.currentTarget, "متأكد؟")) giveItem(document.getElementById("pGive").value); });
+  on("pNoVip", "click", e => { if (confirmTap(e.currentTarget, "متأكد؟")) playerUpdate({ vipUntil: 0 }, "انشال VIP"); });
+  on("pMute", "click", e => { if (confirmTap(e.currentTarget, "متأكد؟")) playerUpdate({ mutedUntil: Date.now() + 86400000 }, "انكتم ٢٤ ساعة 🔇"); });
+  on("pUnmute", "click", () => playerUpdate({ warns: 0, mutedUntil: 0 }, "تصفّرت تحذيراته وانفك كتمه ✅"));
+  on("pBan", "click", async e => { if (!confirmTap(e.currentTarget, "متأكد؟")) return; await banUser(adm.player.username); findPlayer(adm.player.username); });
+  on("pUnban", "click", async () => { await unbanUser(adm.player.uid); findPlayer(adm.player.username); });
+  const bcSave = () => adm.bcDraft = { t: document.getElementById("bcTitle").value, b: document.getElementById("bcBody").value };
+  on("bcTitle", "input", bcSave); on("bcBody", "input", bcSave);
+  on("bcSend", "click", e => {
+    const t = document.getElementById("bcTitle").value.trim(), b = document.getElementById("bcBody").value.trim();
+    if (!t || !b) return toast("اكتب العنوان والكلام");
+    if (!confirmTap(e.currentTarget, "بيوصل لكل اللاعبين، أرسل؟")) return;
+    broadcastPush(t, b);
+  });
   if (!adm.repLoaded && !adm.repLoading) loadReports();
   on("repLoad", "click", loadReports);
   onAll("[data-repdel]", b => delReport(b.dataset.repdel));
