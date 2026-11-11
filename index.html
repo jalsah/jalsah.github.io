@@ -724,6 +724,13 @@ background:linear-gradient(120deg,#5c0a1e,#9e1838 45%,#5c0a1e);border:2px solid 
 .rg-ic{font-size:54px;line-height:1}
 .ref-link{width:100%;background:var(--bg);border:1px dashed var(--line);border-radius:14px;padding:10px 12px;font-size:13.5px;color:var(--mint);word-break:break-all}
 .ref-sheet .row{width:100%}
+.gpick{display:flex;gap:10px;overflow-x:auto;padding:4px 2px 8px;scroll-snap-type:x mandatory}
+.gp{position:relative;flex:none;width:84px;display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px;border-radius:18px;background:var(--bg);border:2px solid var(--line);color:var(--ink);font:inherit;font-size:12.5px;cursor:pointer;scroll-snap-align:start}
+.gp span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gp.on{border-color:var(--saffron);background:color-mix(in srgb,var(--saffron) 14%,var(--bg));box-shadow:0 0 0 3px color-mix(in srgb,var(--saffron) 25%,transparent)}
+.gp-ok{position:absolute;top:6px;inset-inline-end:6px;width:20px;height:20px;border-radius:50%;background:var(--saffron);color:var(--bg);font-style:normal;font-size:12px;font-weight:800;display:grid;place-items:center}
+.shopmini{display:flex;align-items:center;gap:12px;width:100%;text-align:start;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:12px 16px;color:var(--ink);font:inherit;cursor:pointer}
+.shopmini>span:first-child{font-size:24px}.shopmini .sm-t{flex:1;display:flex;flex-direction:column}.shopmini b{font-size:15px}.shopmini .sm-t span{color:var(--muted);font-size:13px}.shopmini .pb-go{color:var(--muted)}
 </style>
 </head>
 <body>
@@ -737,6 +744,6 @@ background:linear-gradient(120deg,#5c0a1e,#9e1838 45%,#5c0a1e);border:2px solid 
   <main id="view"><div class="spinner" aria-label="جاري التحميل"></div></main>
 </div>
 <noscript><section style="padding:24px"><h1>روق: ألعاب الجلسات مع أصحابك</h1><p>ألعاب الجلسات مع الشلة من جوالك: ارسم وخمّن، الدخيل، أونو، مين قالها، صح ولا خطأ، ومين أكثر واحد. أونلاين أو بجوال واحد، ومجانية.</p><p>شغّل الجافاسكربت عشان تلعب.</p></section></noscript>
-<script type="module" src="./app.js?v=50"></script>
+<script type="module" src="./app.js?v=51"></script>
 </body>
 </html>

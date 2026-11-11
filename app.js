@@ -390,11 +390,11 @@ async function refCheck() {
   }
 }
 function openInvite() {
-  const el = sheet(`<div class="ref-sheet"><span class="rg-ic" aria-hidden="true">🎁</span><b class="pf-name">ادعُ صاحبك وخذ VIP</b>
-    <p class="pf-bio">أرسل رابطك لصاحبك. إذا سجّل منه ولعب جولة وحدة، <b>تاخذون أنتم الثنين VIP أسبوع مجاني</b> 👑</p>
+  const el = sheet(`<div class="ref-sheet"><span class="rg-ic" aria-hidden="true">🎁</span><b class="pf-name">جيب ربعك لروق</b>
+    <p class="pf-bio">أرسل رابطك لربعك. كل واحد يسجّل منه ويلعب جولة وحدة، <b>تاخذون أنتم الثنين VIP أسبوع ببلاش</b> 👑</p>
     <div class="ref-link" dir="ltr">${esc(refLink())}</div>
     <div class="row"><button class="btn" id="refWa">أرسله واتساب</button><button class="btn ghost" id="refCopy">انسخ الرابط</button></div>
-    <p class="hint center">${ui.refCount ? `دعيت ${ar(ui.refCount)} ${ui.refCount > 1 ? "أصحاب" : "صاحب"} لين الحين 🔥` : "كل صاحب يسجّل = أسبوع VIP لك."} (لين ${ar(REF_MAX)} أسبوع)</p></div>`);
+    <p class="hint center">${ui.refCount ? `دعيت ${ar(ui.refCount)} ${ui.refCount > 1 ? "أصحاب" : "صاحب"} لين الحين 🔥` : "كل واحد يسجّل منك = أسبوع VIP لك."} (لين ${ar(REF_MAX)} أسبوع)</p></div>`);
   el.querySelector("#refCopy").addEventListener("click", () => copyText(refMsg(), "انسخ الرابط"));
   el.querySelector("#refWa").addEventListener("click", () => window.open("https://wa.me/?text=" + encodeURIComponent(refMsg()), "_blank"));
 }
@@ -2838,10 +2838,12 @@ VIEWS.shop = () => {
       <div class="row"><input class="txt" id="codeIn" dir="ltr" maxlength="14" placeholder="XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="الكود">
       <button class="btn small">فعّل</button></div>
     </form>
-    <details class="giftbox"><summary>🎁 أهدِ صديق</summary>
-      <p class="hint">اشترِ أي شي من المتجر، وبدل ما تفعّل الكود لنفسك أرسله هدية لواحد من أصحابك. توصله رسالة فيها زر «افتح الهدية».</p>
+    <details class="giftbox" ${ui.giftOpen ? "open" : ""}><summary>🎁 فاجئ أحد من ربعك بهدية</summary>
+      <p class="hint">اشترِ أي شي من المتجر، وبدل ما تفعّل الكود لنفسك أرسله هدية لأحد من ربعك. توصله رسالة فيها زر «افتح الهدية» 🎁</p>
       ${friends.size ? `<form id="giftF" class="giftf">
-        <select class="txt" id="giftTo" aria-label="لمين؟">${[...friends.entries()].map(([u, f]) => `<option value="${esc(u)}">@${esc(f.username)}</option>`).join("")}</select>
+        <span class="label">لمين الهدية؟</span>
+        <div class="gpick" role="radiogroup" aria-label="لمين الهدية؟">${[...friends.entries()].map(([u, f]) => `<button type="button" class="gp ${ui.giftTo === u ? "on" : ""}" data-gto="${esc(u)}" role="radio" aria-checked="${ui.giftTo === u}">
+          ${avF(prof(u) || f, 52)}<span dir="ltr">${esc(f.username)}</span>${ui.giftTo === u ? `<i class="gp-ok" aria-hidden="true">✓</i>` : ""}</button>`).join("")}</div>
         <input class="txt" id="giftCode" dir="ltr" maxlength="14" placeholder="XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="الكود">
         <button class="btn small">أرسل الهدية 🎁</button></form>` : `<p class="hint">ضيف أصحابك أول عشان تقدر تهديهم.</p>`}
     </details>
@@ -2860,10 +2862,13 @@ VIEWS.shop = () => {
   inp.addEventListener("input", () => { const v = fmtCode(inp.value); if (v !== inp.value) inp.value = v; });
   on("codeF", "submit", e => { e.preventDefault(); redeemCode(inp.value); });
   const gin = document.getElementById("giftCode");
+  V.querySelector(".giftbox")?.addEventListener("toggle", e => ui.giftOpen = e.currentTarget.open);
+  onAll("[data-gto]", b => { ui.giftTo = b.dataset.gto; const v = gin?.value; render(false); const g2 = document.getElementById("giftCode"); if (g2 && v) g2.value = v; });
   gin?.addEventListener("input", () => { const v = fmtCode(gin.value); if (v !== gin.value) gin.value = v; });
   on("giftF", "submit", async e => {
     e.preventDefault();
-    const code = fmtCode(gin.value), to = document.getElementById("giftTo").value;
+    const code = fmtCode(gin.value), to = ui.giftTo;
+    if (!to || !friends.has(to)) return toast("اختر لمين الهدية أول");
     if (code.length !== 14) return toast("اكتب الكود كامل");
     try {
       const c = await getDoc(doc(db, "codes", code));
@@ -2938,13 +2943,12 @@ VIEWS.home = () => {
       <button class="bigbtn create" id="create"><span class="bb-ic">${ICONS.create}</span><b>${roomCode ? "ارجع لغرفتك" : "غرفة جديدة"}</b><span>واعزم أصحابك</span></button>
       <button class="bigbtn join" id="joinBtn"><span class="bb-ic">${ICONS.join}</span><b>ادخل بكود</b><span>عندك كود غرفة؟</span></button>
     </div>
-    <button class="shopbtn" id="shopBtn"><span class="sb-ic" aria-hidden="true">🛍️</span><span class="pb-t"><b>متجر روق</b><span>أشكال حصرية واشتراك VIP</span></span><span class="pb-go">←</span></button>
-    <button class="shopbtn invbtn" id="invBtn"><span class="sb-ic" aria-hidden="true">🎁</span><span class="pb-t"><b>ادعُ صاحبك</b><span>وتاخذون أنتم الثنين VIP أسبوع مجاني</span></span><span class="pb-go">←</span></button>
     <button class="pubbtn" id="pubBtn"><span class="pb-ic">${ICONS.pub}</span><span class="pb-t"><b>غرف عامة</b><span>ادخل والعب مع ناس جدد</span></span><span class="pb-go">←</span></button>
     <form class="joinrow" id="joinF" ${ui.showJoin ? "" : "hidden"}>
       <input id="code" dir="ltr" maxlength="5" placeholder="K7M2P" autocomplete="off" autocapitalize="characters" aria-label="كود الغرفة">
       <button class="btn small">دخول</button>
     </form>
+    <button class="shopbtn invbtn" id="invBtn"><span class="sb-ic" aria-hidden="true">🎁</span><span class="pb-t"><b>جيب ربعك</b><span>كل واحد يسجّل منك = VIP أسبوع لكم 👑</span></span><span class="pb-go">←</span></button>
 
     ${onl.length ? `<div class="field"><span class="label">أونلاين الحين (${ar(onl.length)})</span>
       <div class="onl">${onl.map(([u, f]) => `<button class="onl-i" data-pf="${esc(u)}">${avatar(f.username, f.photo, 48)}<i class="dot on"></i><span dir="ltr">${esc(f.username)}</span></button>`).join("")}</div></div>` : ""}
@@ -2957,6 +2961,7 @@ VIEWS.home = () => {
       </button>`).join("")}</div></div>
 
     <button class="mode wide" id="local"><span class="glyph">${ICONS.local}</span><b>بجوال واحد</b><span>كل الألعاب على جوال واحد يتمرر بينكم.</span></button>
+    <button class="shopmini" id="shopBtn"><span aria-hidden="true">✨</span><span class="sm-t"><b>تميّز بشكلك</b><span>طاولات وإطارات وأوراق حصرية</span></span><span class="pb-go">←</span></button>
   </section>`;
   on("hProf", "click", () => go("profile"));
   on("instGo", "click", doInstall);
