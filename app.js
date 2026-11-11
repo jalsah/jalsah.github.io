@@ -12,7 +12,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getMessaging, getToken, isSupported as pushSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import { firebaseConfig, authUrl } from "./firebase-config.js?v=27";
-import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW, KALIMA } from "./content.js?v=29";
+import { WORDS, MOST, FIVE, LETTERS, HCATS, WHO, DRAW, KALIMA, DAILY } from "./content.js?v=30";
 import { ICONS } from "./icons.js?v=29";
 import { UCOLORS, buildDeck, canPlay, cardName, cardSVG, tableSVG, TABLES, BACKS, seatSpots, isWild, cColor, cVal } from "./uno.js?v=34";
 
@@ -227,7 +227,7 @@ const BACK = {
   local: () => me?.username ? "home" : (configured ? "auth" : "setup"),
   "l-players": "local", "l-imp": "local", "l-pass": "local", "l-play": "local",
   "l-most": "local", "l-five": "local", "l-scores": "local",
-  gjoin: "auth", "l-kal": "local", "l-kq": "l-kal", "l-draw": "local", "l-tf": "local", "l-who": "local"
+  gjoin: "auth", daily: () => me?.username && !me.guest ? "home" : "auth", "l-kal": "local", "l-kq": "l-kal", "l-draw": "local", "l-tf": "local", "l-who": "local"
 };
 function renderHeader() {
   let h = "";
@@ -2330,6 +2330,7 @@ VIEWS.auth = () => {
       <div class="or"><span>أو</span></div>
       <button class="btn ghost" id="local">العب بجوال واحد</button>
       <button class="btn ghost" id="gjGo">عندك كود غرفة؟ ادخل بدون حساب</button>
+      <button class="btn ghost" id="dGo">📅 كلمة اليوم</button>
       <p class="hint center">بدون حساب تقدر تدخل غرف ربعك أو تلعبون بجوال واحد. عشان تسوي غرف وتضيف أصحاب تحتاج حساب.</p>
       <p class="hint center legal-hint">بدخولك توافق على ${LEGAL_LINKS}، وتأكد إن عمرك ١٨ أو أكثر.</p>
     </div></section>`;
@@ -2338,6 +2339,7 @@ VIEWS.auth = () => {
   on("byEmail", "click", () => { ui.emailMode = "login"; go("email"); });
   on("local", "click", () => go("local"));
   on("gjGo", "click", () => go("gjoin"));
+  on("dGo", "click", () => go("daily"));
 };
 
 const GOOGLE_G = `<svg viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>`;
@@ -3057,6 +3059,7 @@ VIEWS.home = () => {
       <input id="code" dir="ltr" placeholder="K7M2P" autocomplete="off" autocapitalize="characters" aria-label="كود الغرفة">
       <button class="btn small">دخول</button>
     </form>
+    ${(() => { const n = dailyNo(), st = dState(n); return `<button class="dcard ${st.done ? "done" : ""}" id="dailyBtn"><span class="dc-ic" aria-hidden="true">📅</span><span class="pb-t"><b>كلمة اليوم #${ar(n)}</b><span>${st.done ? (st.won ? `حليتها بـ ${ar(st.g.length)} محاولات ✅ شارك نتيجتك` : "ما لحقت عليها 😢 بكرة كلمة جديدة") : "خمّن الكلمة قبل ربعك 🧠"}</span></span><span class="pb-go">←</span></button>`; })()}
     <button class="shopbtn invbtn" id="invBtn"><span class="sb-ic" aria-hidden="true">🎁</span><span class="pb-t"><b>جيب ربعك</b><span>كل واحد يسجّل منك = VIP أسبوع لكم 👑</span></span><span class="pb-go">←</span></button>
 
     ${onl.length ? `<div class="field"><span class="label">أونلاين الحين (${ar(onl.length)})</span>
@@ -3077,6 +3080,7 @@ VIEWS.home = () => {
   on("pushHide", "click", () => { store.set("pushHide", Date.now()); render(false); });
   on("pubBtn", "click", () => go("pub"));
   on("invBtn", "click", openInvite);
+  on("dailyBtn", "click", () => go("daily"));
   on("instHide", "click", () => { store.set("instHide", Date.now()); render(false); });
   on("create", "click", () => roomCode ? go("room") : createRoom());
   onAll("[data-game-card]", b => gameSheet(b.dataset.gameCard));
@@ -4396,6 +4400,75 @@ VIEWS["l-who"] = () => {
   }
 };
 
+
+/* ================= 📅 كلمة اليوم ================= */
+const DN = w => String(w).replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
+const D_START = Date.parse("2026-11-11");
+const dailyNo = () => Math.floor((Date.parse(dayKey(Date.now())) - D_START) / 864e5) + 1;
+const DAILY_ORDER = (() => { let a = 1234567; const rnd = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const o = DAILY.map((_, i) => i); for (let i = o.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [o[i], o[j]] = [o[j], o[i]]; } return o; })();
+const dailyWord = n => DAILY[DAILY_ORDER[(n - 1) % DAILY.length]];
+const D_KEYS = [["ض", "ص", "ث", "ق", "ف", "غ", "ع", "ه", "خ", "ح", "ج"], ["ش", "س", "ي", "ب", "ل", "ا", "ت", "ن", "م", "ك", "ط"], ["⏎", "ذ", "ر", "ز", "و", "د", "ظ", "⌫"]];
+function dScore(guess, answer) {
+  const g = [...guess], a = [...DN(answer)], res = Array(5).fill("x"), left = {};
+  g.forEach((c, i) => { if (c === a[i]) res[i] = "g"; else left[a[i]] = (left[a[i]] || 0) + 1; });
+  g.forEach((c, i) => { if (res[i] !== "g" && left[c]) { res[i] = "y"; left[c]--; } });
+  return res;
+}
+const dState = n => { const s = store.get("daily:" + n, null); return s && Array.isArray(s.g) ? s : { g: [], done: false, won: false }; };
+const dStats = () => store.get("dailyStats", { played: 0, wins: 0, streak: 0, best: 0, last: 0, dist: [0, 0, 0, 0, 0, 0] });
+function dFinish(n, won, tries) {
+  const st = dStats();
+  st.played++; if (won) { st.wins++; st.dist[tries - 1]++; st.streak = st.last === n - 1 ? st.streak + 1 : 1; st.best = Math.max(st.best, st.streak); } else st.streak = 0;
+  st.last = won ? n : st.last; store.set("dailyStats", st);
+  if (won && me?.uid && me.username && !me.guest) {
+    const s = { ...(me.stats || {}) }; s.games = (s.games || 0) + 1; s.g_daily = (s.g_daily || 0) + 1; const add = Math.max(10, 40 - tries * 5);
+    updateDoc(doc(db, "users", me.uid), { xp: (me.xp || 0) + add, xpAt: serverTimestamp(), stats: s }).then(() => { me.xp = (me.xp || 0) + add; me.stats = s; setTimeout(() => toast(`+${ar(add)} خبرة ⭐`), 1600); }).catch(e => console.error(e));
+  }
+}
+function dShareText(n, st) {
+  const ans = dailyWord(n), rows = st.g.map(g => "‎" + dScore(g, ans).map(r => r === "g" ? "🟩" : r === "y" ? "🟨" : "⬛").reverse().join(""));
+  return `روق · كلمة اليوم #${ar(n)}  ${st.won ? ar(st.g.length) : "✗"}/٦\n${rows.join("\n")}\n${appLink().replace(/^https?:\/\//, "")}`;
+}
+VIEWS.daily = () => {
+  const n = dailyNo(), ans = dailyWord(n), A = DN(ans), st = dState(n);
+  ui.dCur = ui.dDay === n ? (ui.dCur || "") : ""; ui.dDay = n;
+  const known = {}; st.g.forEach(g => dScore(g, ans).forEach((r, i) => { const c = g[i], rank = { g: 3, y: 2, x: 1 }; if (!known[c] || rank[r] > rank[known[c]]) known[c] = r; }));
+  const rows = Array.from({ length: 6 }, (_, r) => {
+    const g = st.g[r], cur = !g && r === st.g.length && !st.done ? [...ui.dCur] : null, sc = g ? dScore(g, ans) : null;
+    return `<div class="drow ${cur ? "cur" : ""}">${Array.from({ length: 5 }, (_, i) => { const c = g ? g[i] : cur?.[i] || "";
+      const anim = sc && ui.dAnim === r, pop = cur && i === cur.length - 1 && ui.dPop;
+      return `<span class="dt ${sc ? "d" + sc[i] + (anim ? " flip" : "") : c ? "full" + (pop ? " pop1" : "") : ""}" style="${anim ? `animation-delay:${i * 110}ms` : ""}">${esc(c)}</span>`; }).join("")}</div>`; }).join("");
+  ui.dAnim = -1; ui.dPop = false;
+  const S = dStats(), next = Date.parse(dayKey(Date.now())) + 864e5 - 3 * 3600e3 - Date.now();
+  V.innerHTML = `<section class="daily">
+    <div class="row-h"><div><h2>كلمة اليوم 📅</h2><p class="hint">#${ar(n)} · خمّن الكلمة بـ ٦ محاولات</p></div>${S.streak ? `<span class="sk-chip">🔥 ${ar(S.streak)}</span>` : ""}</div>
+    <div class="dgrid" dir="rtl">${rows}</div>
+    ${st.done ? `<div class="dend pop"><b>${st.won ? ["عبقري 🤯", "خطير 🔥", "كفو 👏", "حلو 😎", "نجحت 😅", "على الحافة 😮‍💨"][st.g.length - 1] : "ما لحقت 😢"}</b>
+        <span class="hint">الكلمة كانت</span><span class="dans">${esc(ans)}</span>
+        <div class="dstats"><span><b>${ar(S.played)}</b>لعبت</span><span><b>${ar(S.played ? Math.round(S.wins / S.played * 100) : 0)}٪</b>فزت</span><span><b>${ar(S.streak)}</b>السلسلة</span><span><b>${ar(S.best)}</b>أفضل سلسلة</span></div>
+        <button class="btn" id="dShare">شارك نتيجتك 📤</button><span class="hint" id="dNext">الكلمة الجاية بعد ${ar(Math.floor(next / 3600e3))} ساعة و${ar(Math.floor(next / 60000) % 60)} دقيقة</span></div>`
+      : `<div class="dkeys">${D_KEYS.map(r => `<div class="dkr">${r.map(k => `<button class="dk ${k.length > 1 || k === "⏎" || k === "⌫" ? "wide" : ""} ${known[k] ? "k" + known[k] : ""}" data-dk="${k}" aria-label="${k === "⏎" ? "أدخل" : k === "⌫" ? "امسح" : k}">${k === "⏎" ? "أدخل" : k}</button>`).join("")}</div>`).join("")}</div>
+        <p class="hint center">🟩 الحرف صح ومكانه صح · 🟨 الحرف موجود بمكان ثاني · ⬛ مو موجود. (ة = ه)</p>`}
+  </section>`;
+  const press = k => {
+    const s2 = dState(n); if (s2.done) return;
+    if (k === "⌫") ui.dCur = [...ui.dCur].slice(0, -1).join("");
+    else if (k === "⏎") {
+      if ([...ui.dCur].length < 5) { V.querySelector(".drow.cur")?.classList.add("shake"); setTimeout(() => V.querySelector(".drow.cur")?.classList.remove("shake"), 450); return toast("الكلمة ٥ حروف"); }
+      s2.g.push(ui.dCur); ui.dCur = ""; ui.dAnim = s2.g.length - 1;
+      if (ui.dCur === A || s2.g[s2.g.length - 1] === A) { s2.done = true; s2.won = true; }
+      else if (s2.g.length >= 6) { s2.done = true; }
+      store.set("daily:" + n, s2);
+      if (s2.done) dFinish(n, s2.won, s2.g.length);
+    } else if ([...ui.dCur].length < 5) { ui.dCur += k; ui.dPop = true; }
+    render(true);
+  };
+  onAll("[data-dk]", b => press(b.dataset.dk));
+  on("dShare", "click", async () => { const t = dShareText(n, dState(n)); try { if (navigator.share) await navigator.share({ text: t }); else copyText(t, "انسخت النتيجة"); } catch (e) { if (e?.name !== "AbortError") copyText(t, "انسخت النتيجة"); } });
+  if (!st.done) { document.onkeydown = e => { if (screen !== "daily") { document.onkeydown = null; return; } const k = e.key === "Backspace" ? "⌫" : e.key === "Enter" ? "⏎" : DN(e.key); if (k === "⌫" || k === "⏎" || D_KEYS.flat().includes(k)) { e.preventDefault(); press(k); } }; }
+};
+
 // ابقِ الشاشة شغالة أثناء اللعب لو الجهاز يسمح
 let wakeLock = null;
 document.addEventListener("click", async () => {
@@ -4424,7 +4497,7 @@ if (configured) {
   onSnapshot(doc(db, "config", "banner"), s => {
     promo = s.exists() ? s.data() : null; renderBanner(); if (screen === "admin") render(false);
   }, err);
-  const GUEST_OK = new Set(["auth", "email", "forgot", "local", "setup", "l-players", "l-imp", "l-pass", "l-play", "l-most", "l-five", "l-scores", "l-hhnj", "l-kal", "l-kq", "l-draw", "l-tf", "l-who", "gjoin"]);
+  const GUEST_OK = new Set(["auth", "email", "forgot", "local", "setup", "l-players", "l-imp", "l-pass", "l-play", "l-most", "l-five", "l-scores", "l-hhnj", "l-kal", "l-kq", "l-draw", "l-tf", "l-who", "gjoin", "daily"]);
   onAuthStateChanged(auth, async user => {
     if (user?.isAnonymous && me?.guest && me.uid === user.uid) return; // ضيف داخل غرفة، لا نقطع عليه
     stopGlobal(); stopGuest();

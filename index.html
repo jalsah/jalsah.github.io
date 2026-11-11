@@ -741,6 +741,30 @@ background:linear-gradient(120deg,#5c0a1e,#9e1838 45%,#5c0a1e);border:2px solid 
 .pill.shop.mini .ps-t{display:none}.hdr .pill.shop.mini{padding:3px 4px}
 .gj{gap:8px}.gj .gj-code{font-family:ui-monospace,Menlo,monospace;letter-spacing:.3em;text-align:center;font-size:22px;text-transform:uppercase}
 .gj .btn{margin-top:6px}
+.daily{gap:12px}
+.dgrid{display:flex;flex-direction:column;gap:6px;align-items:center;margin:4px 0}
+.drow{display:flex;gap:6px}.drow.shake{animation:dshake .4s}
+@keyframes dshake{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+.dt{width:min(15vw,58px);height:min(15vw,58px);display:grid;place-items:center;border:2px solid var(--line);border-radius:12px;font-family:var(--display);font-size:min(8vw,32px);color:var(--ink);background:var(--surface)}
+.dt.full{border-color:color-mix(in srgb,var(--ink) 45%,var(--line))}.dt.pop1{animation:kpop .15s}
+.dt.dg,.dt.dy,.dt.dx{border-color:transparent;color:#fff}.dt.flip{animation:dflip .5s both}
+.dt.dg{background:#3fae6a}.dt.dy{background:#d9a62e}.dt.dx{background:#3a3150;color:var(--muted)}
+@keyframes dflip{0%{transform:rotateX(90deg)}100%{transform:rotateX(0)}}
+.dkeys{display:flex;flex-direction:column;gap:6px;direction:rtl}
+.dkr{display:flex;gap:4px;justify-content:center}
+.dk{flex:1;min-width:0;max-width:40px;height:50px;border:0;border-radius:9px;background:color-mix(in srgb,var(--ink) 14%,var(--surface));color:var(--ink);font:inherit;font-size:19px;font-weight:700;cursor:pointer;padding:0}
+.dk.wide{max-width:64px;flex:1.6;font-size:14px}
+.dk.kg{background:#3fae6a;color:#fff}.dk.ky{background:#d9a62e;color:#fff}.dk.kx{background:#2a2340;color:#6c6185}
+.dk:active{transform:scale(.94)}
+.dend{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:16px}
+.dend>b{font-family:var(--display);font-weight:400;font-size:30px;color:var(--saffron)}
+.dans{font-family:var(--display);font-size:38px;color:var(--mint)}
+.dstats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:100%}
+.dstats span{display:flex;flex-direction:column;font-size:12px;color:var(--muted)}.dstats b{font-size:22px;color:var(--ink)}
+.dcard{display:flex;align-items:center;gap:14px;width:100%;text-align:start;background:linear-gradient(120deg,color-mix(in srgb,#3fae6a 30%,var(--surface)),color-mix(in srgb,#d9a62e 20%,var(--surface)));border:1px solid color-mix(in srgb,#3fae6a 50%,var(--line));border-radius:22px;padding:14px 16px;color:var(--ink);font:inherit;cursor:pointer}
+.dcard .dc-ic{width:60px;height:60px;flex:none;display:grid;place-items:center;font-size:32px;border-radius:16px;background:linear-gradient(145deg,#7fd99f,#2f8e55);box-shadow:0 6px 14px rgba(0,0,0,.35)}
+.dcard .pb-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.dcard b{font-family:var(--display);font-weight:400;font-size:24px}.dcard .pb-t span{color:var(--muted);font-size:13.5px}.dcard .pb-go{font-size:22px;color:#7fd99f}
+.dcard.done{opacity:.85}
 </style>
 </head>
 <body>
@@ -754,6 +778,6 @@ background:linear-gradient(120deg,#5c0a1e,#9e1838 45%,#5c0a1e);border:2px solid 
   <main id="view"><div class="spinner" aria-label="جاري التحميل"></div></main>
 </div>
 <noscript><section style="padding:24px"><h1>روق: ألعاب الجلسات مع أصحابك</h1><p>ألعاب الجلسات مع الشلة من جوالك: ارسم وخمّن، الدخيل، أونو، مين قالها، صح ولا خطأ، ومين أكثر واحد. أونلاين أو بجوال واحد، ومجانية.</p><p>شغّل الجافاسكربت عشان تلعب.</p></section></noscript>
-<script type="module" src="./app.js?v=59"></script>
+<script type="module" src="./app.js?v=60"></script>
 </body>
 </html>
